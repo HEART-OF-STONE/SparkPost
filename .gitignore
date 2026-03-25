@@ -1,0 +1,50 @@
+﻿# dependencies
+node_modules/
+
+# next build outputs
+.next/
+out/
+
+# general build outputs
+dist/
+build/
+coverage/
+
+# local uploads / generated files
+uploads/
+tmp/
+*.tmp
+
+# logs
+*.log
+logs/
+
+# env files
+.env
+.env.*
+!.env.example
+
+# auth / session / local secrets
+.auth-state.json
+*.pem
+*.key
+*.crt
+
+# database / local backups
+*.sqlite
+*.sqlite3
+*.db
+*.sql
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# editor / IDE
+.vscode/
+.idea/
+
+# test artifacts
+playwright-report/
+test-results/

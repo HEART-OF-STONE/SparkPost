@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  avatar    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  creditAccount          CreditAccount?
+  creditTransactions     CreditTransaction[]
+  generationTasks        GenerationTask[]
+
+  @@map("users")
+}
+
+model EmailVerificationCode {
+  id        String   @id @default(cuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+  @@map("email_verification_codes")
+}
+
+model CreditAccount {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  balance   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("credit_accounts")
+}
+
+model CreditTransaction {
+  id            String   @id @default(cuid())
+  userId        String
+  type          String
+  amount        Int
+  balanceAfter  Int
+  relatedTaskId String?
+  remark        String?
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("credit_transactions")
+}
+
+model GenerationTask {
+  id            String           @id @default(cuid())
+  userId        String
+  taskType      String
+  status        String
+  prompt        String
+  inputImageUrl String?
+  model         String?
+  costCredits   Int
+  errorMessage  String?
+  createdAt     DateTime         @default(now())
+  completedAt   DateTime?
+
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assets GeneratedAsset[]
+
+  @@index([userId, createdAt])
+  @@map("generation_tasks")
+}
+
+model GeneratedAsset {
+  id        String   @id @default(cuid())
+  taskId     String
+  assetType  String
+  fileUrl    String
+  width      Int?
+  height     Int?
+  createdAt  DateTime @default(now())
+
+  task GenerationTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("generated_assets")
+}
