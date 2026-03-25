@@ -55,8 +55,35 @@ export function validateVerifyCodeInput(input: unknown) {
 }
 
 export async function issueVerificationCode(email: string) {
-  const code = generateVerificationCode();
   const now = new Date();
+  const latestCode = await prisma.emailVerificationCode.findFirst({
+    where: {
+      email,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    select: {
+      createdAt: true,
+    },
+  });
+
+  if (latestCode) {
+    const millisecondsSinceLastCode = now.getTime() - latestCode.createdAt.getTime();
+    const cooldownMilliseconds = authConfig.codeCooldownSeconds * 1000;
+
+    if (millisecondsSinceLastCode < cooldownMilliseconds) {
+      return {
+        ok: false as const,
+        reason: "cooldown",
+        retryAfterSeconds: Math.ceil(
+          (cooldownMilliseconds - millisecondsSinceLastCode) / 1000,
+        ),
+      };
+    }
+  }
+
+  const code = generateVerificationCode();
   const expiresAt = new Date(now.getTime() + authConfig.codeTtlMinutes * 60 * 1000);
 
   await prisma.emailVerificationCode.create({
@@ -68,6 +95,7 @@ export async function issueVerificationCode(email: string) {
   });
 
   return {
+    ok: true as const,
     expiresAt,
     ...(shouldExposeDebugCode() ? { debugCode: code } : {}),
   };

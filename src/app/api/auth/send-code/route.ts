@@ -12,6 +12,21 @@ export async function POST(request: Request) {
 
   const result = await issueVerificationCode(input.email);
 
+  if (!result.ok) {
+    return NextResponse.json(
+      {
+        error: "Please wait before requesting another verification code.",
+        retryAfterSeconds: result.retryAfterSeconds,
+      },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(result.retryAfterSeconds),
+        },
+      },
+    );
+  }
+
   return NextResponse.json({
     ok: true,
     email: input.email,
