@@ -1,41 +1,101 @@
 import { NextResponse } from "next/server";
 
 import { authConfig } from "@/lib/auth/config";
+import { isDatabaseUnavailableError } from "@/lib/auth/errors";
+import { readJsonBody } from "@/lib/auth/request";
 import { createSessionToken, getSessionCookieOptions } from "@/lib/auth/session";
 import { validateVerifyCodeInput, verifyCodeAndProvisionUser } from "@/lib/auth/service";
+import {
+  checkVerifyCodeThrottle,
+  clearVerifyCodeThrottle,
+  getVerifyCodeThrottleKey,
+  recordVerifyCodeFailure,
+} from "@/lib/auth/verification-throttle";
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => null);
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) {
+    return NextResponse.json({ error: bodyResult.error }, { status: 400 });
+  }
+
+  const body = bodyResult.body;
   const input = validateVerifyCodeInput(body);
 
   if (!input.ok) {
     return NextResponse.json({ error: input.error }, { status: 400 });
   }
 
-  const result = await verifyCodeAndProvisionUser(input.email, input.code);
-
-  if (!result.ok) {
-    const errorMessage =
-      result.reason === "expired"
-        ? "Verification code has expired."
-        : result.reason === "used"
-          ? "Verification code has already been used."
-          : "Invalid verification code.";
-
-    return NextResponse.json({ error: errorMessage }, { status: 400 });
+  const throttleKey = getVerifyCodeThrottleKey(input.email, request);
+  const throttledBeforeCheck = checkVerifyCodeThrottle(throttleKey);
+  if (!throttledBeforeCheck.ok) {
+    return NextResponse.json(
+      {
+        error: "Too many verification attempts. Please wait before trying again.",
+        retryAfterSeconds: throttledBeforeCheck.retryAfterSeconds,
+      },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(throttledBeforeCheck.retryAfterSeconds),
+        },
+      },
+    );
   }
 
-  const response = NextResponse.json({
-    ok: true,
-    isNewUser: result.isNewUser,
-    user: result.user,
-  });
+  try {
+    const result = await verifyCodeAndProvisionUser(input.email, input.code);
 
-  response.cookies.set(
-    authConfig.sessionCookieName,
-    createSessionToken(result.user.id, result.user.email),
-    getSessionCookieOptions(),
-  );
+    if (!result.ok) {
+      const throttledAfterFailure = recordVerifyCodeFailure(throttleKey);
+      if (!throttledAfterFailure.ok) {
+        return NextResponse.json(
+          {
+            error: "Too many verification attempts. Please wait before trying again.",
+            retryAfterSeconds: throttledAfterFailure.retryAfterSeconds,
+          },
+          {
+            status: 429,
+            headers: {
+              "Retry-After": String(throttledAfterFailure.retryAfterSeconds),
+            },
+          },
+        );
+      }
 
-  return response;
+      const errorMessage =
+        result.reason === "expired"
+          ? "Verification code has expired."
+          : result.reason === "used"
+            ? "Verification code has already been used."
+            : "Invalid verification code.";
+
+      return NextResponse.json({ error: errorMessage }, { status: 400 });
+    }
+
+    const response = NextResponse.json({
+      ok: true,
+      isNewUser: result.isNewUser,
+      user: result.user,
+    });
+
+    response.cookies.set(
+      authConfig.sessionCookieName,
+      createSessionToken(result.user.id, result.user.email),
+      getSessionCookieOptions(),
+    );
+
+    clearVerifyCodeThrottle(throttleKey);
+
+    return response;
+  } catch (error) {
+    if (isDatabaseUnavailableError(error)) {
+      return NextResponse.json(
+        { error: "Authentication service is temporarily unavailable." },
+        { status: 503 },
+      );
+    }
+
+    console.error("Failed to verify code.", error);
+    return NextResponse.json({ error: "Unexpected server error." }, { status: 500 });
+  }
 }
