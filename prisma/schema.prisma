@@ -29,7 +29,9 @@ model EmailVerificationCode {
   id           String   @id @default(cuid())
   email        String
   codeHash     String
+  attemptCount Int      @default(0)
   expiresAt    DateTime
+  lockedUntil  DateTime?
   usedAt       DateTime?
   usedByUserId String?
   createdAt    DateTime @default(now())

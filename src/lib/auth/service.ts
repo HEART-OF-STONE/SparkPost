@@ -102,11 +102,11 @@ export async function issueVerificationCode(email: string) {
 }
 
 export async function verifyCodeAndProvisionUser(email: string, code: string) {
+  const now = new Date();
   const codeHash = hashVerificationCode(email, code);
   const verificationCode = await prisma.emailVerificationCode.findFirst({
     where: {
       email,
-      codeHash,
     },
     orderBy: {
       createdAt: "desc",
@@ -121,8 +121,77 @@ export async function verifyCodeAndProvisionUser(email: string, code: string) {
     return { ok: false as const, reason: "used" };
   }
 
-  if (verificationCode.expiresAt <= new Date()) {
+  if (verificationCode.expiresAt <= now) {
     return { ok: false as const, reason: "expired" };
+  }
+
+  if (verificationCode.lockedUntil && verificationCode.lockedUntil > now) {
+    return {
+      ok: false as const,
+      reason: "locked",
+      retryAfterSeconds: Math.max(
+        1,
+        Math.ceil((verificationCode.lockedUntil.getTime() - now.getTime()) / 1000),
+      ),
+    };
+  }
+
+  if (verificationCode.codeHash !== codeHash) {
+    return prisma.$transaction(async (tx) => {
+      const currentCode = await tx.emailVerificationCode.findUnique({
+        where: {
+          id: verificationCode.id,
+        },
+      });
+
+      if (!currentCode) {
+        return { ok: false as const, reason: "invalid" };
+      }
+
+      const currentNow = new Date();
+      if (currentCode.usedAt) {
+        return { ok: false as const, reason: "used" };
+      }
+
+      if (currentCode.expiresAt <= currentNow) {
+        return { ok: false as const, reason: "expired" };
+      }
+
+      if (currentCode.lockedUntil && currentCode.lockedUntil > currentNow) {
+        return {
+          ok: false as const,
+          reason: "locked",
+          retryAfterSeconds: Math.max(
+            1,
+            Math.ceil((currentCode.lockedUntil.getTime() - currentNow.getTime()) / 1000),
+          ),
+        };
+      }
+
+      const nextAttemptCount = currentCode.attemptCount + 1;
+      const shouldLockCode = nextAttemptCount >= authConfig.verifyCodeMaxAttempts;
+      const lockedUntil = shouldLockCode
+        ? new Date(currentNow.getTime() + authConfig.verifyCodeLockoutSeconds * 1000)
+        : null;
+
+      await tx.emailVerificationCode.update({
+        where: { id: currentCode.id },
+        data: {
+          attemptCount: nextAttemptCount,
+          lockedUntil,
+        },
+      });
+
+      if (shouldLockCode) {
+        return {
+          ok: false as const,
+          reason: "locked",
+          retryAfterSeconds: authConfig.verifyCodeLockoutSeconds,
+        };
+      }
+
+      return { ok: false as const, reason: "invalid" };
+    });
   }
 
   return prisma.$transaction(async (tx) => {
@@ -131,6 +200,7 @@ export async function verifyCodeAndProvisionUser(email: string, code: string) {
       where: {
         id: verificationCode.id,
         usedAt: null,
+        OR: [{ lockedUntil: null }, { lockedUntil: { lte: timestamp } }],
       },
       data: {
         usedAt: timestamp,
@@ -138,7 +208,34 @@ export async function verifyCodeAndProvisionUser(email: string, code: string) {
     });
 
     if (markUsedResult.count !== 1) {
-      return { ok: false as const, reason: "used" };
+      const latestCodeState = await tx.emailVerificationCode.findUnique({
+        where: { id: verificationCode.id },
+      });
+
+      if (!latestCodeState) {
+        return { ok: false as const, reason: "invalid" };
+      }
+
+      if (latestCodeState.usedAt) {
+        return { ok: false as const, reason: "used" };
+      }
+
+      if (latestCodeState.expiresAt <= timestamp) {
+        return { ok: false as const, reason: "expired" };
+      }
+
+      if (latestCodeState.lockedUntil && latestCodeState.lockedUntil > timestamp) {
+        return {
+          ok: false as const,
+          reason: "locked",
+          retryAfterSeconds: Math.max(
+            1,
+            Math.ceil((latestCodeState.lockedUntil.getTime() - timestamp.getTime()) / 1000),
+          ),
+        };
+      }
+
+      return { ok: false as const, reason: "invalid" };
     }
 
     let user = await tx.user.findUnique({

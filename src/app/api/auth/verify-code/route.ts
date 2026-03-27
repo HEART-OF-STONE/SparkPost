@@ -46,6 +46,21 @@ export async function POST(request: Request) {
     const result = await verifyCodeAndProvisionUser(input.email, input.code);
 
     if (!result.ok) {
+      if (result.reason === "locked") {
+        return NextResponse.json(
+          {
+            error: "Too many verification attempts. Please wait before trying again.",
+            retryAfterSeconds: result.retryAfterSeconds,
+          },
+          {
+            status: 429,
+            headers: {
+              "Retry-After": String(result.retryAfterSeconds),
+            },
+          },
+        );
+      }
+
       const throttledAfterFailure = recordVerifyCodeFailure(throttleKey);
       if (!throttledAfterFailure.ok) {
         return NextResponse.json(

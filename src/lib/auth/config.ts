@@ -1,5 +1,7 @@
 const DEFAULT_CODE_TTL_MINUTES = 10;
 const DEFAULT_CODE_COOLDOWN_SECONDS = 60;
+const DEFAULT_VERIFY_CODE_MAX_ATTEMPTS = 5;
+const DEFAULT_VERIFY_CODE_LOCKOUT_SECONDS = 15 * 60;
 const DEFAULT_SESSION_TTL_DAYS = 7;
 const DEFAULT_SIGNUP_BONUS_CREDITS = 20;
 
@@ -8,6 +10,12 @@ export const authConfig = {
   codeTtlMinutes: parseInt(process.env.AUTH_CODE_TTL_MINUTES ?? "", 10) || DEFAULT_CODE_TTL_MINUTES,
   codeCooldownSeconds:
     parseInt(process.env.AUTH_CODE_COOLDOWN_SECONDS ?? "", 10) || DEFAULT_CODE_COOLDOWN_SECONDS,
+  verifyCodeMaxAttempts:
+    parseInt(process.env.AUTH_VERIFY_CODE_MAX_ATTEMPTS ?? "", 10) ||
+    DEFAULT_VERIFY_CODE_MAX_ATTEMPTS,
+  verifyCodeLockoutSeconds:
+    parseInt(process.env.AUTH_VERIFY_CODE_LOCKOUT_SECONDS ?? "", 10) ||
+    DEFAULT_VERIFY_CODE_LOCKOUT_SECONDS,
   sessionTtlDays:
     parseInt(process.env.AUTH_SESSION_TTL_DAYS ?? "", 10) || DEFAULT_SESSION_TTL_DAYS,
   signupBonusCredits:
