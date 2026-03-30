@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { authConfig } from "@/lib/auth/config";
+import { isDatabaseUnavailableError } from "@/lib/auth/errors";
 import { getAuthenticatedUser } from "@/lib/auth/user";
 
 function getCookieValue(cookieHeader: string | null, name: string) {
@@ -22,11 +23,19 @@ export async function GET(request: Request) {
     request.headers.get("cookie"),
     authConfig.sessionCookieName,
   );
-  const user = await getAuthenticatedUser(sessionToken);
 
-  if (!user) {
-    return NextResponse.json({ user: null }, { status: 401 });
+  try {
+    const user = await getAuthenticatedUser(sessionToken);
+    return NextResponse.json({ user });
+  } catch (error) {
+    if (isDatabaseUnavailableError(error)) {
+      return NextResponse.json(
+        { error: "Authentication service is temporarily unavailable." },
+        { status: 503 },
+      );
+    }
+
+    console.error("Failed to resolve authenticated user.", error);
+    return NextResponse.json({ error: "Unexpected server error." }, { status: 500 });
   }
-
-  return NextResponse.json({ user });
 }

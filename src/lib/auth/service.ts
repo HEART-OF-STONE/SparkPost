@@ -17,8 +17,15 @@ function generateVerificationCode() {
   return String(randomInt(min, max));
 }
 
+function getVerificationCodePattern() {
+  return new RegExp(`^\\d{${authConfig.codeLength}}$`);
+}
+
 export function validateSendCodeInput(input: unknown) {
-  const email = typeof input === "object" && input && "email" in input ? input.email : undefined;
+  const email =
+    typeof input === "object" && input !== null && !Array.isArray(input) && "email" in input
+      ? input.email
+      : undefined;
 
   if (typeof email !== "string") {
     return { ok: false as const, error: "Email is required." };
@@ -33,8 +40,14 @@ export function validateSendCodeInput(input: unknown) {
 }
 
 export function validateVerifyCodeInput(input: unknown) {
-  const email = typeof input === "object" && input && "email" in input ? input.email : undefined;
-  const code = typeof input === "object" && input && "code" in input ? input.code : undefined;
+  const email =
+    typeof input === "object" && input !== null && !Array.isArray(input) && "email" in input
+      ? input.email
+      : undefined;
+  const code =
+    typeof input === "object" && input !== null && !Array.isArray(input) && "code" in input
+      ? input.code
+      : undefined;
 
   if (typeof email !== "string" || typeof code !== "string") {
     return { ok: false as const, error: "Email and code are required." };
@@ -47,8 +60,11 @@ export function validateVerifyCodeInput(input: unknown) {
     return { ok: false as const, error: "Invalid email address." };
   }
 
-  if (!/^\d{6}$/.test(normalizedCode)) {
-    return { ok: false as const, error: "Verification code must be 6 digits." };
+  if (!getVerificationCodePattern().test(normalizedCode)) {
+    return {
+      ok: false as const,
+      error: `Verification code must be ${authConfig.codeLength} digits.`,
+    };
   }
 
   return { ok: true as const, email: normalizedEmail, code: normalizedCode };

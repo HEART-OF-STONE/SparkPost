@@ -6,13 +6,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:auth": "node scripts/run-auth-api-tests.cjs",
+    "test:auth:db": "node scripts/run-auth-db-smoke.cjs",
+    "test:image": "node scripts/run-image-api-tests.cjs"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.2",
     "next": "16.2.1",
     "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "@prisma/client": "^6.19.2"
+    "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
