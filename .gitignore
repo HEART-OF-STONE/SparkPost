@@ -49,3 +49,6 @@ Thumbs.db
 # test artifacts
 playwright-report/
 test-results/
+
+# TypeScript incremental build cache
+*.tsbuildinfo

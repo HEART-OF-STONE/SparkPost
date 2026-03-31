@@ -1,5 +1,6 @@
-"use client";
+﻿"use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 type AuthUser = {
@@ -20,6 +21,25 @@ type MeResponse = {
   user: AuthUser | null;
 };
 
+type ImageTaskResult = {
+  id: string;
+  status: string;
+  prompt: string;
+  model: string;
+  costCredits: number;
+  remainingCredits: number;
+  assets: Array<{
+    id: string;
+    fileUrl: string;
+    width: number | null;
+    height: number | null;
+  }>;
+};
+
+type GenerateImageResponse =
+  | { ok: true; task: ImageTaskResult }
+  | { error: string };
+
 function formatTimeLeft(seconds: number) {
   if (seconds <= 0) {
     return "0s";
@@ -35,6 +55,10 @@ function formatTimeLeft(seconds: number) {
   return remainder > 0 ? `${minutes}m ${remainder}s` : `${minutes}m`;
 }
 
+function getPrimaryImageUrl(task: ImageTaskResult | null) {
+  return task?.assets[0]?.fileUrl ?? null;
+}
+
 export default function Home() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -45,7 +69,14 @@ export default function Home() {
   const [cooldownEndsAt, setCooldownEndsAt] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [prompt, setPrompt] = useState(
+    "A cinematic futuristic product scene with glowing edges, reflective glass, and dramatic studio lighting.",
+  );
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [generationTask, setGenerationTask] = useState<ImageTaskResult | null>(null);
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const codeInputRef = useRef<HTMLInputElement>(null);
+  const promptInputRef = useRef<HTMLTextAreaElement>(null);
 
   const cooldownActive = useMemo(() => {
     return cooldownEndsAt !== null && timeLeft > 0;
@@ -116,6 +147,12 @@ export default function Home() {
     return () => window.clearInterval(interval);
   }, [cooldownEndsAt]);
 
+  useEffect(() => {
+    if (user && promptInputRef.current) {
+      promptInputRef.current.focus();
+    }
+  }, [user]);
+
   async function refreshSession() {
     const response = await fetch("/api/me", { cache: "no-store" });
     if (!response.ok) {
@@ -167,12 +204,19 @@ export default function Home() {
         if (response.status === 503) {
           setNotice({
             type: "error",
-            text: typeof data?.error === "string" ? data.error : "服务暂时不可用，请稍后再试。",
+            text:
+              typeof data?.error === "string"
+                ? data.error
+                : "Service temporarily unavailable. Please try again later.",
           });
           return;
         }
 
-        throw new Error(typeof data?.error === "string" ? data.error : "Unable to send verification code.");
+        throw new Error(
+          typeof data?.error === "string"
+            ? data.error
+            : "Unable to send verification code.",
+        );
       }
 
       const expiresAt = typeof data?.expiresAt === "string" ? data.expiresAt : null;
@@ -242,12 +286,17 @@ export default function Home() {
         if (response.status === 503) {
           setNotice({
             type: "error",
-            text: typeof data?.error === "string" ? data.error : "服务暂时不可用，请稍后再试。",
+            text:
+              typeof data?.error === "string"
+                ? data.error
+                : "Service temporarily unavailable. Please try again later.",
           });
           return;
         }
 
-        throw new Error(typeof data?.error === "string" ? data.error : "Unable to verify code.");
+        throw new Error(
+          typeof data?.error === "string" ? data.error : "Unable to verify code.",
+        );
       }
 
       const nextUser = data?.user;
@@ -259,9 +308,10 @@ export default function Home() {
         setCooldownEndsAt(null);
         setNotice({
           type: "success",
-          text: data?.isNewUser === true
-            ? "Account created and signed in successfully."
-            : "Signed in successfully.",
+          text:
+            data?.isNewUser === true
+              ? "Account created and signed in successfully."
+              : "Signed in successfully.",
         });
       } else {
         await refreshSession();
@@ -290,6 +340,8 @@ export default function Home() {
 
       setUser(null);
       setCode("");
+      setGenerationTask(null);
+      setGeneratedImageUrl(null);
       await refreshSession();
       setNotice({
         type: "info",
@@ -303,14 +355,84 @@ export default function Home() {
     }
   }
 
+  async function handleGenerateImage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setNotice(null);
+
+    if (!prompt.trim()) {
+      setNotice({ type: "error", text: "Enter a prompt first." });
+      return;
+    }
+
+    setIsGeneratingImage(true);
+    setGeneratedImageUrl(null);
+    setGenerationTask(null);
+
+    try {
+      const response = await fetch("/api/generate/image", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ prompt }),
+      });
+
+      const data = (await response.json().catch(() => null)) as GenerateImageResponse | null;
+
+      if (!response.ok) {
+        const errorText =
+          data && "error" in data && typeof data.error === "string"
+            ? data.error
+            : "Unable to generate image.";
+        setNotice({ type: "error", text: errorText });
+        return;
+      }
+
+      if (!data || !("ok" in data) || data.ok !== true) {
+        setNotice({ type: "error", text: "Image generation returned an unexpected payload." });
+        return;
+      }
+
+      setGenerationTask(data.task);
+      setGeneratedImageUrl(getPrimaryImageUrl(data.task));
+      setNotice({
+        type: "success",
+        text: `Image generated successfully. ${data.task.assets.length} asset(s) created.`,
+      });
+      setUser((current) =>
+        current
+          ? {
+              ...current,
+              creditBalance: data.task.remainingCredits,
+            }
+          : current,
+      );
+    } catch (error) {
+      setNotice({
+        type: "error",
+        text: error instanceof Error ? error.message : "Unable to generate image.",
+      });
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  }
+
   const sendCodeDisabled = isSendingCode || cooldownActive || !email.trim();
   const verifyCodeDisabled = isVerifyingCode || !email.trim() || !code.trim();
+  const generateDisabled = isGeneratingImage || !prompt.trim() || !user;
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_#1f2937_0%,_#0f172a_34%,_#020617_100%)] px-4 py-6 text-slate-100 sm:px-6 lg:px-10">
-      <div className="mx-auto grid min-h-[calc(100vh-3rem)] w-full max-w-6xl items-center gap-8 lg:grid-cols-[1.15fr_0.85fr]">
-        <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/8 p-8 shadow-2xl shadow-slate-950/40 backdrop-blur md:p-10">
-          <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(56,189,248,0.14),transparent_38%,rgba(34,197,94,0.12)_100%)]" />
+    <main className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.20)_0%,_rgba(15,23,42,1)_35%,_rgba(2,6,23,1)_100%)] px-4 py-6 text-slate-100 sm:px-6 lg:px-10">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute left-[-8rem] top-[-6rem] h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl" />
+        <div className="absolute right-[-6rem] top-[12rem] h-80 w-80 rounded-full bg-emerald-400/10 blur-3xl" />
+        <div className="absolute bottom-[-7rem] left-[18%] h-72 w-72 rounded-full bg-sky-500/10 blur-3xl" />
+      </div>
+
+      <div className="relative mx-auto grid min-h-[calc(100vh-3rem)] w-full max-w-7xl items-center gap-6 lg:grid-cols-[0.92fr_1.08fr]">
+        <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/8 p-8 shadow-2xl shadow-slate-950/40 backdrop-blur-xl md:p-10">
+          <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(56,189,248,0.14),transparent_38%,rgba(34,197,94,0.10)_100%)]" />
           <div className="relative space-y-8">
             <div className="space-y-4">
               <span className="inline-flex rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">
@@ -318,11 +440,11 @@ export default function Home() {
               </span>
               <div className="space-y-3">
                 <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                  Email login for the SparkPost MVP.
+                  Login, then create an image in one flow.
                 </h1>
                 <p className="max-w-2xl text-base leading-7 text-slate-300">
-                  Request a verification code, confirm it here, and land in the
-                  authenticated workspace with your current credit balance.
+                  Keep the auth and generation steps in one place: sign in, write a prompt,
+                  generate, and review the result without leaving the page.
                 </p>
               </div>
             </div>
@@ -334,11 +456,11 @@ export default function Home() {
               </div>
               <div className="rounded-2xl border border-white/10 bg-slate-950/30 p-4">
                 <div className="text-sm text-slate-400">Step 2</div>
-                <div className="mt-2 font-medium text-white">Send code</div>
+                <div className="mt-2 font-medium text-white">Sign in</div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-slate-950/30 p-4">
                 <div className="text-sm text-slate-400">Step 3</div>
-                <div className="mt-2 font-medium text-white">Verify and enter</div>
+                <div className="mt-2 font-medium text-white">Generate image</div>
               </div>
             </div>
 
@@ -366,10 +488,7 @@ export default function Home() {
                     {user.email}
                   </div>
                   <div className="mt-2 text-sm text-emerald-100/80">
-                    Credits available:{" "}
-                    <span className="font-semibold text-white">
-                      {user.creditBalance}
-                    </span>
+                    Credits available: <span className="font-semibold text-white">{user.creditBalance}</span>
                   </div>
                 </div>
                 <button
@@ -384,12 +503,9 @@ export default function Home() {
               <div className="space-y-4 rounded-[1.5rem] border border-white/10 bg-slate-950/35 p-6">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <h2 className="text-lg font-semibold text-white">
-                      Authentication
-                    </h2>
+                    <h2 className="text-lg font-semibold text-white">Authentication</h2>
                     <p className="mt-1 text-sm text-slate-400">
-                      Send a code first, then verify it to create or reopen a
-                      session.
+                      Send a code first, then verify it to create or reopen a session.
                     </p>
                   </div>
                   {cooldownActive ? (
@@ -455,8 +571,8 @@ export default function Home() {
                       {isVerifyingCode ? "Verifying..." : "Verify code"}
                     </button>
                     <p className="text-sm text-slate-400">
-                      We will create your account on first sign in and load your
-                      current balance automatically.
+                      We will create your account on first sign in and load your current
+                      balance automatically.
                     </p>
                   </div>
                 </form>
@@ -465,48 +581,229 @@ export default function Home() {
           </div>
         </section>
 
-        <aside className="space-y-4 rounded-[2rem] border border-white/10 bg-slate-950/50 p-6 shadow-xl shadow-slate-950/30 backdrop-blur md:p-8">
-          <div className="space-y-2">
-            <div className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
-              Current session
+        <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950/55 shadow-2xl shadow-slate-950/40 backdrop-blur-xl">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.14),transparent_35%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))]" />
+          <div className="relative grid gap-6 p-6 md:p-8">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <div className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
+                  Generation studio
+                </div>
+                <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                  Create a single image from a prompt.
+                </h2>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+                  This panel talks to the existing `/api/generate/image` backend route and
+                  stays aligned with the current authenticated session.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Mode</div>
+                  <div className="mt-1 text-sm font-medium text-white">Text to image</div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Status</div>
+                  <div className="mt-1 text-sm font-medium text-white">
+                    {isLoadingSession ? "Checking..." : user ? "Ready" : "Sign in first"}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="text-2xl font-semibold text-white">
-              {isLoadingSession ? "Checking login state..." : user ? "Authenticated" : "Signed out"}
-            </div>
-          </div>
 
-          <div className="space-y-3 text-sm leading-6 text-slate-300">
-            <p>
-              This page uses the existing auth endpoints directly. It requests a
-              code, verifies it, then reloads the session from <code>/api/me</code>.
-            </p>
-            <p>
-              Cooldown support is built in for resend throttling, so repeated
-              requests stay aligned with the backend&apos;s <code>429</code> response.
-            </p>
-          </div>
+            {user ? (
+              <>
+                <form onSubmit={handleGenerateImage} className="grid gap-4">
+                  <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-4 shadow-inner shadow-black/20">
+                    <label className="block">
+                      <span className="mb-3 block text-sm font-medium text-slate-200">
+                        Prompt
+                      </span>
+                      <textarea
+                        ref={promptInputRef}
+                        rows={6}
+                        value={prompt}
+                        onChange={(event) => setPrompt(event.target.value)}
+                        placeholder="A cinematic product shot of a futuristic AI workspace, reflective glass, teal accents, dramatic rim light..."
+                        className="min-h-36 w-full resize-none rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-4 text-sm leading-6 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/50 focus:bg-slate-950"
+                      />
+                    </label>
 
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-            <div className="font-medium text-white">Backend contract used</div>
-            <ul className="mt-3 space-y-2">
-              <li>
-                <code>POST /api/auth/send-code</code> returns <code>429</code> with{" "}
-                <code>retryAfterSeconds</code>.
-              </li>
-              <li>
-                <code>POST /api/auth/verify-code</code> returns a user payload on
-                success.
-              </li>
-              <li>
-                <code>GET /api/me</code> returns <code>200</code> with{" "}
-                <code>{"{ user: null }"}</code> when signed out.
-              </li>
-              <li>
-                <code>POST /api/auth/logout</code> clears the session cookie.
-              </li>
-            </ul>
+                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-wrap gap-2 text-xs text-slate-400">
+                        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                          Authenticated flow
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                          Real backend route
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                          Credits-aware
+                        </span>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={generateDisabled}
+                        className="inline-flex h-12 items-center justify-center rounded-full bg-gradient-to-r from-cyan-300 via-sky-300 to-emerald-300 px-6 font-semibold text-slate-950 shadow-[0_0_30px_rgba(56,189,248,0.25)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:from-slate-600 disabled:via-slate-600 disabled:to-slate-600 disabled:text-slate-300 disabled:shadow-none"
+                      >
+                        {isGeneratingImage ? "Generating..." : "Generate image"}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+
+                <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+                  <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-white">Result preview</div>
+                        <div className="text-xs text-slate-400">
+                          {generationTask
+                            ? `Task ${generationTask.id} · ${generationTask.status}`
+                            : "No image generated yet"}
+                        </div>
+                      </div>
+                      <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-100">
+                        {user.creditBalance} credits left
+                      </div>
+                    </div>
+
+                    <div className="mt-4 overflow-hidden rounded-[1.25rem] border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))]">
+                      <div className="relative aspect-[4/3] w-full overflow-hidden">
+                        {generatedImageUrl ? (
+                          <Image
+                            src={generatedImageUrl}
+                            alt={generationTask?.prompt ?? "Generated image"}
+                            fill
+                            unoptimized
+                            className="object-cover"
+                            sizes="(max-width: 1024px) 100vw, 60vw"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center">
+                            <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.24em] text-slate-400">
+                              Waiting for output
+                            </div>
+                            <p className="max-w-sm text-sm leading-6 text-slate-400">
+                              The generated image will appear here once the backend returns
+                              a `fileUrl`.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {generationTask ? (
+                      <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/50 p-4 text-sm text-slate-300">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.16em] text-slate-500">
+                              Task ID
+                            </div>
+                            <div className="mt-1 font-mono text-xs text-white">{generationTask.id}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.16em] text-slate-500">
+                              Model
+                            </div>
+                            <div className="mt-1 text-white">{generationTask.model}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.16em] text-slate-500">
+                              Cost
+                            </div>
+                            <div className="mt-1 text-white">{generationTask.costCredits} credits</div>
+                          </div>
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.16em] text-slate-500">
+                              Status
+                            </div>
+                            <div className="mt-1 text-white">{generationTask.status}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="grid gap-4">
+                    <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-4">
+                      <div className="text-sm font-semibold text-white">Generation notes</div>
+                      <div className="mt-3 space-y-3 text-sm leading-6 text-slate-300">
+                        <p>
+                          Use a single prompt for now. This first pass intentionally stays in the
+                          synchronous path so we can keep the UI and backend contract tight.
+                        </p>
+                        <p>
+                          If the provider key is missing or the backend is unavailable, the error
+                          will show above without breaking the page.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-4">
+                      <div className="text-sm font-semibold text-white">Backend contract used</div>
+                      <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300">
+                        <li>
+                          <code>POST /api/generate/image</code> accepts <code>{"{ prompt }"}</code>
+                        </li>
+                        <li>
+                          Success returns <code>task</code> with <code>id</code>, <code>status</code>, and <code>assets[0].fileUrl</code>
+                        </li>
+                        <li>
+                          Missing image provider config returns <code>503</code> with <code>{"{ error }"}</code>
+                        </li>
+                        <li>
+                          Not enough credits returns <code>402</code>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-[1.02fr_0.98fr]">
+                <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-5">
+                  <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    Locked preview
+                  </div>
+                  <h3 className="mt-3 text-2xl font-semibold tracking-tight text-white">
+                    Sign in to unlock the generation studio.
+                  </h3>
+                  <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">
+                    The image-generation workspace appears after authentication so the page
+                    stays focused on one flow: login, prompt, generate, review.
+                  </p>
+
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                      <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Step 1</div>
+                      <div className="mt-2 text-sm font-medium text-white">Request a code</div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                      <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Step 2</div>
+                      <div className="mt-2 text-sm font-medium text-white">Verify sign in</div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                      <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Step 3</div>
+                      <div className="mt-2 text-sm font-medium text-white">Generate image</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[1.5rem] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.88),rgba(2,6,23,0.94))] p-5">
+                  <div className="rounded-[1.25rem] border border-dashed border-cyan-400/20 bg-cyan-400/5 p-5">
+                    <div className="text-sm font-medium text-cyan-100">Generation studio locked</div>
+                    <p className="mt-2 text-sm leading-6 text-slate-300">
+                      After login, the prompt editor and image preview will appear here.
+                      The page already keeps the contract aligned with <code className="text-slate-100">POST /api/generate/image</code>.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        </aside>
+        </section>
       </div>
     </main>
   );
