@@ -94,6 +94,9 @@ type Copy = {
   workspaceEyebrow: string;
   workspaceTitle: string;
   workspaceBody: string;
+  workspaceNotesTitle: string;
+  workspaceNote1: string;
+  workspaceNote2: string;
   canvasTitle: string;
   canvasEmptyTitle: string;
   canvasEmptyBody: string;
@@ -134,48 +137,48 @@ const copy: Record<Locale, Copy> = {
   zh: {
     brand: "SparkPost",
     heroBadge: "SparkPost AI 已上线",
-    heroTitle: "将想象力转化为\n惊艳的视觉资产。",
-    heroBody: "一个建立在顶级多模态模型之上的专业工作台。探索、构建并渲染高保真数字视觉内容，同时保留克制、顺滑而清晰的交互。",
-    heroPrimary: "开始体验",
-    heroSecondary: "查看功能",
-    feature1Title: "Gemini Intelligence",
-    feature1Body: "结合 Gemini 风格的提示词组织方式，让普通描述更快进入专业输出语境。",
-    feature2Title: "Seamless Workflow",
-    feature2Body: "从落地页到工作台保持连续操作路径，不让登录打断思路。",
-    feature3Title: "Real-time Sync",
-    feature3Body: "认证、生成、错误和积分变化都会在同一套界面里清晰反馈。",
-    playgroundTitle: "体验工作台",
-    playgroundBody: "先输入灵感，再在真正点击生成时触发登录。登录后会尽量保留你刚才的 Prompt 并继续动作。",
-    promptLabel: "PROMPT",
-    promptPlaceholder: "例如：一张电影感未来产品场景，发光边缘、玻璃材质、戏剧化布光、深色背景。",
-    renderNow: "立即生成",
+    heroTitle: "将想象力转化为\n现象级视觉资产。",
+    heroBody: "构建于顶级多模态大模型之上的专业工作台。利用极简的交互语言，以工业级的控制力探索、构建并渲染属于你的高保真数字艺术。",
+    heroPrimary: "开始免费体验",
+    heroSecondary: "了解功能特性",
+    feature1Title: "Gemini 智能引擎",
+    feature1Body: "内置由 Google Gemini 驱动的提示词扩写与灵感生成中枢，让简单的短语瞬间丰满为专业级咒语。",
+    feature2Title: "实时无缝工作流",
+    feature2Body: "告别冗长的跳转。极客级的纯键盘友好界面，支持在任意状态下热切换，保持心流不被打断。",
+    feature3Title: "毫秒级状态同步",
+    feature3Body: "所见即所得的消耗指示器与底座状态监控，企业级的可靠性保障每一次渲染任务都使命必达。",
+    playgroundTitle: "即刻体验工作台",
+    playgroundBody: "在下方直接输入你的灵感，无需登录即可预览生图界面的专业级交互感受。",
+    promptLabel: "Prompt (提示词)",
+    promptPlaceholder: "例如：一张电影级的产品特写KV，半透明玻璃材质，深灰色背景，柔和的青色环境光，8k分辨率，辛烷渲染器...",
+    renderNow: "立即渲染",
     rendering: "生成中...",
     promptHint: "当前优先接入真实的单图生成链路。Prompt 会在登录前后保留。",
     t2iMode: "文生图",
     i2iMode: "图生图",
     uploadReference: "参考图",
     uploadHint: "点击或拖拽上传参考图",
-    inspire: "给我灵感",
-    enhance: "增强 Prompt",
+    inspire: "✨ 给我灵感",
+    enhance: "✨ 智能扩写",
     comingSoon: "即将支持",
-    authTitle: "验证身份后继续刚才的生成",
-    authBody: "通过邮箱验证码进入完整工作台。当前 Prompt 不会丢失，登录完成后会自动继续你刚刚触发的动作。",
+    authTitle: "验证以解锁渲染",
+    authBody: "你的灵感已保存。完成极速邮箱验证后，渲染引擎将立即自动启动。",
     authHint: "开发环境下如果后端返回 debug code，会自动填入验证码输入框。",
-    sendCode: "发送验证码",
+    sendCode: "获取安全码",
     sendingCode: "发送中...",
-    verify: "验证并进入工作台",
+    verify: "验证并渲染",
     verifying: "验证中...",
-    email: "邮箱",
-    code: "验证码",
-    signIn: "登录",
+    email: "工作邮箱",
+    code: "6位安全码",
+    signIn: "登录账号",
     signOut: "退出登录",
     close: "关闭",
     account: "账户",
     credits: "积分",
     provider: "服务",
     status: "状态",
-    providerAvailable: "服务可用",
-    providerUnavailable: "服务不可用",
+    providerAvailable: "集群可用",
+    providerUnavailable: "不可用",
     providerUnknown: "待确认",
     ready: "已就绪",
     checking: "检查中",
@@ -185,20 +188,23 @@ const copy: Record<Locale, Copy> = {
     resultEmpty: "暂无结果",
     resultSuccess: "生成成功",
     resultError: "生成失败",
-    workspaceEyebrow: "GENERATION STUDIO",
-    workspaceTitle: "进入真正的生成工作台。",
-    workspaceBody: "登录后主界面会聚焦 Prompt、生成动作、结果画布和任务信息，不再把登录区长期放在主体位置。",
-    canvasTitle: "结果画布",
-    canvasEmptyTitle: "等待指令",
-    canvasEmptyBody: "提交 Prompt 后，生成结果会显示在这里，同时更新任务状态、模型和积分消耗。",
+    workspaceEyebrow: "SparkPost Studio",
+    workspaceTitle: "工作台",
+    workspaceBody: "主界面聚焦 prompt、生成动作、结果预览和任务信息。",
+    workspaceNotesTitle: "说明",
+    workspaceNote1: "专注于效率，去除冗余视觉干扰。",
+    workspaceNote2: "若 Provider 异常，系统将在此暴露错误详情。",
+    canvasTitle: "画布",
+    canvasEmptyTitle: "等待引擎指令",
+    canvasEmptyBody: "提交 prompt 后，生成结果将在此画布中渲染。",
     propertiesTitle: "任务属性",
-    taskId: "任务 ID",
-    model: "模型",
-    cost: "消耗",
+    taskId: "Task ID",
+    model: "底层模型",
+    cost: "算力消耗",
     createdAt: "创建时间",
     completedAt: "完成时间",
-    runtimeTitle: "运行状态",
-    continueHint: "未登录时点击生成会弹出登录模块，登录成功后会尽量继续原动作。",
+    runtimeTitle: "系统状态",
+    continueHint: "未登录时点击渲染会弹出登录模块，验证成功后会继续原动作。",
     sessionLoadFailed: "无法加载当前会话状态。",
     sessionRefreshFailed: "无法刷新当前会话状态。",
     enterEmail: "请先输入邮箱。",
@@ -227,19 +233,19 @@ const copy: Record<Locale, Copy> = {
     brand: "SparkPost",
     heroBadge: "SparkPost AI is now live",
     heroTitle: "Turn imagination into\nphenomenal visual assets.",
-    heroBody: "A professional workspace built on top-tier multimodal AI. Explore, construct, and render high-fidelity digital art with industrial-grade control and restrained interaction.",
+    heroBody: "A professional workspace built on top-tier multimodal AI. Explore, construct, and render high-fidelity digital art with industrial-grade control and minimalist interaction.",
     heroPrimary: "Start Free Trial",
     heroSecondary: "Explore Features",
     feature1Title: "Gemini Intelligence",
-    feature1Body: "A Gemini-style prompt layer helps simple ideas become production-ready visual direction faster.",
+    feature1Body: "Powered by Google Gemini for prompt enhancement and inspiration. Turn simple phrases into professional-grade incantations instantly.",
     feature2Title: "Seamless Workflow",
-    feature2Body: "Move from landing to studio without losing context, prompt state, or intent.",
+    feature2Body: "Say goodbye to clunky jumps. A pure, keyboard-friendly interface supporting hot-switching in any state to keep your flow unbroken.",
     feature3Title: "Real-time Sync",
-    feature3Body: "Auth, generation, provider status, and credit changes stay readable inside one flow.",
+    feature3Body: "WYSIWYG credit indicators and cluster status monitoring. Enterprise-grade reliability ensures every render job is delivered.",
     playgroundTitle: "Experience the Studio",
-    playgroundBody: "Enter your idea first. The app asks for sign-in only when generation really begins, then continues with the same prompt.",
-    promptLabel: "PROMPT",
-    promptPlaceholder: "e.g. A cinematic futuristic product scene with glowing edges, reflective glass, and dramatic studio lighting.",
+    playgroundBody: "Enter your inspiration below to preview the professional interaction of our generation studio without logging in.",
+    promptLabel: "Prompt",
+    promptPlaceholder: "e.g., A cinematic close-up of a high-tech product, translucent glass, dark gray background, soft cyan ambient light, 8k, Octane render...",
     renderNow: "Render Now",
     rendering: "Rendering...",
     promptHint: "The first backend path is wired for real text-to-image generation. Your prompt stays intact across sign-in.",
@@ -247,18 +253,18 @@ const copy: Record<Locale, Copy> = {
     i2iMode: "Image to Image",
     uploadReference: "Reference Image",
     uploadHint: "Click or drag to upload",
-    inspire: "Inspire Me",
-    enhance: "Enhance",
+    inspire: "✨ Inspire Me",
+    enhance: "✨ Enhance",
     comingSoon: "Coming soon",
-    authTitle: "Verify identity, then continue the generation you already started",
-    authBody: "Use email verification to enter the full workspace. The current prompt is preserved so the action can continue right after sign-in.",
+    authTitle: "Verify to unlock render",
+    authBody: "Your inspiration is saved. The render engine will start automatically after a quick email verification.",
     authHint: "In development, the debug code is autofilled here when the backend returns it.",
     sendCode: "Get Code",
     sendingCode: "Sending...",
-    verify: "Verify & Enter Studio",
+    verify: "Verify & Render",
     verifying: "Verifying...",
     email: "Work Email",
-    code: "Verification Code",
+    code: "6-digit Code",
     signIn: "Sign In",
     signOut: "Log Out",
     close: "Close",
@@ -266,30 +272,33 @@ const copy: Record<Locale, Copy> = {
     credits: "Credits",
     provider: "Provider",
     status: "Status",
-    providerAvailable: "Provider available",
-    providerUnavailable: "Provider unavailable",
-    providerUnknown: "Provider unknown",
+    providerAvailable: "Cluster Online",
+    providerUnavailable: "Unavailable",
+    providerUnknown: "Unknown",
     ready: "Ready",
     checking: "Checking",
     authRequired: "Auth required",
     signedIn: "Authenticated",
-    signedOut: "Signed out",
-    resultEmpty: "No result yet",
+    signedOut: "Unauthenticated",
+    resultEmpty: "Empty",
     resultSuccess: "Success",
     resultError: "Error",
-    workspaceEyebrow: "GENERATION STUDIO",
-    workspaceTitle: "Land directly inside the real generation workspace.",
-    workspaceBody: "Once signed in, the interface prioritizes prompt composition, generation, the output canvas, and task details instead of a permanent auth panel.",
+    workspaceEyebrow: "SparkPost Studio",
+    workspaceTitle: "Studio",
+    workspaceBody: "Focused purely on composition, generation, and task details.",
+    workspaceNotesTitle: "Notes",
+    workspaceNote1: "Optimized for efficiency, removing visual noise.",
+    workspaceNote2: "Provider issues will be surfaced here clearly.",
     canvasTitle: "Canvas",
     canvasEmptyTitle: "Awaiting Instructions",
-    canvasEmptyBody: "Submit a prompt and the latest result appears here with updated task state, model info, and credit usage.",
+    canvasEmptyBody: "Submit a prompt to render the output on this canvas.",
     propertiesTitle: "Properties",
     taskId: "Task ID",
     model: "Base Model",
     cost: "Compute Cost",
     createdAt: "Created",
     completedAt: "Completed",
-    runtimeTitle: "Runtime status",
+    runtimeTitle: "System Status",
     continueHint: "When signed out, the render CTA opens the auth module and continues after verification.",
     sessionLoadFailed: "Unable to load the current session.",
     sessionRefreshFailed: "Unable to refresh the current session.",
@@ -669,27 +678,34 @@ export default function Home() {
   ];
 
   const featureCards = [
-    { title: t.feature1Title, body: t.feature1Body, icon: <BrainIcon />, tint: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20" },
-    { title: t.feature2Title, body: t.feature2Body, icon: <SparklesIcon />, tint: "text-violet-400 bg-violet-500/10 border-violet-500/20" },
-    { title: t.feature3Title, body: t.feature3Body, icon: <ShieldIcon />, tint: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
+    { title: t.feature1Title, body: t.feature1Body, icon: <BrainIcon />, tint: isDark ? "text-cyan-400 bg-cyan-500/10 border-cyan-500/20" : "text-cyan-600 bg-cyan-50 border-cyan-100" },
+    { title: t.feature2Title, body: t.feature2Body, icon: <SparklesIcon />, tint: isDark ? "text-violet-400 bg-violet-500/10 border-violet-500/20" : "text-violet-600 bg-violet-50 border-violet-100" },
+    { title: t.feature3Title, body: t.feature3Body, icon: <ShieldIcon />, tint: isDark ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" : "text-emerald-600 bg-emerald-50 border-emerald-100" },
   ];
 
   const renderSurface = generatedImageUrl && !previewLoadFailed ? (
     <div className={`relative h-full min-h-[320px] w-full overflow-hidden rounded-[1.5rem] border ${isDark ? "border-white/10 bg-black/50 shadow-[0_20px_80px_rgba(0,0,0,0.35)]" : "border-gray-200 bg-white shadow-[0_20px_80px_rgba(148,163,184,0.22)]"}`}>
       <Image src={generatedImageUrl} alt="Generated preview" fill unoptimized className="object-contain" onError={() => setPreviewLoadFailed(true)} />
     </div>
+  ) : isGeneratingImage ? (
+    <div className={`flex h-full min-h-[320px] w-full flex-col items-center justify-center rounded-[1.5rem] border px-6 text-center ${isDark ? "border-white/10 bg-[#0b0f16]/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]" : "border-gray-200 bg-white/80 shadow-xl backdrop-blur-md"}`}>
+      <div className={`mb-4 flex h-16 w-16 items-center justify-center rounded-full border ${isDark ? "border-white/10 bg-[#0A0A0A]" : "border-gray-200 bg-white shadow-xl"}`}>
+        <div className={`h-6 w-6 rounded-full border-2 animate-spin ${isDark ? "border-cyan-500/30 border-t-cyan-500" : "border-cyan-500/20 border-t-cyan-500"}`} />
+      </div>
+      <div className={`text-base font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>{t.rendering}</div>
+      <p className={`mt-3 max-w-[220px] text-xs leading-6 ${isDark ? "text-slate-400" : "text-gray-500"}`}>{t.workspaceBody}</p>
+    </div>
   ) : (
     <div className={`flex h-full min-h-[320px] w-full flex-col items-center justify-center rounded-[1.5rem] border px-6 text-center ${isDark ? "border-white/10 bg-[#0b0f16]/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]" : "border-gray-200 bg-white/80 shadow-xl backdrop-blur-md"}`}>
-      <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-full border ${isDark ? "border-white/10 bg-white/[0.04]" : "border-gray-200 bg-gray-50"}`}><div className={`h-2.5 w-2.5 rounded-full animate-pulse ${isDark ? "bg-white/20" : "bg-gray-400"}`} /></div>
-      <div className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>{t.canvasEmptyTitle}</div>
-      <p className={`mt-3 max-w-sm text-xs leading-6 ${isDark ? "text-slate-400" : "text-gray-500"}`}>{previewLoadFailed ? t.imagePreviewUnavailable : t.canvasEmptyBody}</p>
+      <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-full border ${isDark ? "border-white/10 bg-[#111]" : "border-gray-200 bg-gray-50"}`}><div className={`h-2.5 w-2.5 rounded-full animate-pulse ${isDark ? "bg-white/20" : "bg-gray-400"}`} /></div>
+      <div className={`text-base font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>{t.canvasEmptyTitle}</div>
+      <p className={`mt-2 text-center text-xs leading-relaxed ${isDark ? "text-[#666]" : "text-gray-500"}`}>{previewLoadFailed ? t.imagePreviewUnavailable : t.canvasEmptyBody}</p>
     </div>
   );
 
   return (
-    <div>
+    <div className={isDark ? "dark" : ""}>
       <main className={`min-h-screen selection:bg-cyan-500/30 ${isDark ? "bg-[#000] text-[#EDEDED]" : "bg-gray-50 text-gray-900"}`}>
-        <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_14%_18%,rgba(11,94,104,0.10),transparent_22%),radial-gradient(circle_at_78%_16%,rgba(102,44,138,0.08),transparent_18%),linear-gradient(180deg,#f8fafc_0%,#eef2f7_48%,#f8fafc_100%)] dark:bg-[radial-gradient(circle_at_14%_18%,rgba(11,94,104,0.18),transparent_22%),radial-gradient(circle_at_78%_16%,rgba(102,44,138,0.14),transparent_18%),linear-gradient(180deg,#020304_0%,#03060a_48%,#020304_100%)]" />
 
         <header className={`sticky top-0 z-50 flex h-16 shrink-0 items-center justify-between border-b px-6 backdrop-blur-md transition-colors duration-300 ${isDark ? "border-white/10 bg-black/50" : "border-gray-200 bg-white/70"}`}>
           <div className="flex items-center gap-3 group cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
@@ -764,41 +780,42 @@ export default function Home() {
 
         {!user ? (
           <div className="pb-24">
-            <section className="px-5 pt-20 sm:px-8 lg:pt-24">
-              <div className="mx-auto flex max-w-[1440px] flex-col items-center text-center">
+            <section className="relative min-h-[85vh] justify-center overflow-hidden px-5 pt-24 pb-16 sm:px-8">
+              <div className={`pointer-events-none absolute left-1/2 top-1/2 h-[600px] w-[800px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-[120px] ${isDark ? "bg-cyan-500/20" : "bg-cyan-400/10"}`} />
+              <div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center text-center">
                 <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${isDark ? "border-cyan-500/20 bg-cyan-500/10 text-cyan-300" : "border-cyan-500/20 bg-cyan-50 text-cyan-600"}`}><span className={`h-2 w-2 rounded-full animate-pulse ${isDark ? "bg-cyan-400" : "bg-cyan-500"}`} />{t.heroBadge}</div>
-                <h1 className={`mt-10 max-w-5xl whitespace-pre-line bg-gradient-to-b bg-clip-text text-5xl font-semibold leading-[0.96] tracking-tight text-transparent sm:text-6xl lg:text-8xl ${isDark ? "from-white to-white/60" : "from-gray-900 to-gray-500"}`}>{t.heroTitle}</h1>
-                <p className={`mt-8 max-w-3xl text-base leading-8 sm:text-xl ${isDark ? "text-slate-300" : "text-gray-600"}`}>{t.heroBody}</p>
+                <h1 className={`mt-10 max-w-5xl whitespace-pre-line bg-gradient-to-b bg-clip-text text-5xl font-bold leading-[1.1] tracking-tighter text-transparent md:text-7xl ${isDark ? "from-white to-white/60" : "from-gray-900 to-gray-500"}`}>{t.heroTitle}</h1>
+                <p className={`mt-6 max-w-2xl text-lg leading-relaxed sm:text-xl ${isDark ? "text-[#888]" : "text-gray-600"}`}>{t.heroBody}</p>
                 <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
                   <button type="button" onClick={() => playgroundRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} className={`inline-flex items-center gap-2 rounded-full px-6 py-3.5 text-sm font-semibold transition duration-200 hover:-translate-y-0.5 ${isDark ? "bg-white text-black hover:bg-slate-200" : "bg-gray-900 text-white hover:bg-black"}`}>{t.heroPrimary}<PlayIcon /></button>
-                  <button type="button" onClick={() => document.getElementById("feature-strip")?.scrollIntoView({ behavior: "smooth", block: "start" })} className={`rounded-full border px-6 py-3.5 text-sm font-medium transition ${isDark ? "border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/[0.08] hover:text-white" : "border-gray-200 bg-white text-gray-900 hover:bg-gray-50"}`}>{t.heroSecondary}</button>
+                  <button type="button" onClick={() => window.scrollTo({ top: 800, behavior: "smooth" })} className={`rounded-full border px-6 py-3.5 text-sm font-medium transition ${isDark ? "border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/[0.08] hover:text-white" : "border-gray-200 bg-white text-gray-900 hover:bg-gray-50"}`}>{t.heroSecondary}</button>
                 </div>
-                <div className="w-full max-w-[1320px]"><VisualHero isDark={isDark} /></div>
+                <div className="w-full max-w-6xl"><VisualHero isDark={isDark} /></div>
               </div>
             </section>
 
-            <section id="feature-strip" className={`mx-auto mt-12 max-w-[1320px] border-t px-5 pt-12 sm:px-8 ${isDark ? "border-white/5" : "border-gray-200"}`}><div className="grid gap-6 md:grid-cols-3">
+            <section id="feature-strip" className={`mx-auto max-w-6xl border-t px-5 py-24 ${isDark ? "border-white/5" : "border-gray-200"}`}><div className="grid gap-6 md:grid-cols-3">
               {featureCards.map((card) => (
-                <article key={card.title} className={`rounded-[1.5rem] border p-7 transition-colors ${isDark ? "border-white/6 bg-[#0a0a0a] shadow-[0_16px_40px_rgba(0,0,0,0.28)]" : "border-gray-200 bg-white shadow-sm"}`}>
-                  <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${card.tint}`}>{card.icon}</div>
-                  <h2 className={`mt-6 text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>{card.title}</h2>
-                  <p className={`mt-3 text-sm leading-7 ${isDark ? "text-slate-400" : "text-gray-600"}`}>{card.body}</p>
+                <article key={card.title} className={`group rounded-[1.5rem] border p-8 transition-colors ${isDark ? "border-white/5 bg-[#0A0A0A] shadow-none hover:border-cyan-500/30" : "border-gray-200 bg-white shadow-sm hover:border-cyan-500/30"}`}>
+                  <div className={`flex h-12 w-12 items-center justify-center rounded-xl border transition-transform group-hover:scale-110 ${card.tint}`}>{card.icon}</div>
+                  <h2 className={`mt-6 text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>{card.title}</h2>
+                  <p className={`mt-3 text-sm leading-relaxed ${isDark ? "text-[#888]" : "text-gray-600"}`}>{card.body}</p>
                 </article>
               ))}
               </div>
             </section>
 
-            <section ref={playgroundRef} className="mx-auto mt-24 max-w-[1320px] px-5 sm:px-8">
-              <div className="text-center">
-                <h2 className={`text-3xl font-semibold tracking-tight sm:text-4xl ${isDark ? "text-white" : "text-gray-900"}`}>{t.playgroundTitle}</h2>
-                <p className={`mx-auto mt-4 max-w-2xl text-sm leading-7 ${isDark ? "text-slate-400" : "text-gray-600"}`}>{t.playgroundBody}</p>
+            <section ref={playgroundRef} className="mx-auto max-w-6xl px-5 py-24 sm:px-8">
+              <div className="mb-12 text-center">
+                <h2 className={`text-3xl font-bold tracking-tight ${isDark ? "text-white" : "text-gray-900"}`}>{t.playgroundTitle}</h2>
+                <p className={`mx-auto mt-4 max-w-xl text-sm ${isDark ? "text-[#888]" : "text-gray-600"}`}>{t.playgroundBody}</p>
               </div>
 
-              <div className={`mt-12 overflow-hidden rounded-[2rem] border md:grid md:grid-cols-[380px_1fr] ${isDark ? "border-white/10 bg-[#060709] shadow-[0_24px_90px_rgba(0,0,0,0.42)]" : "border-gray-200 bg-white shadow-xl"}`}>
-                <div className={`border-b p-6 md:border-b-0 md:border-r ${isDark ? "border-white/10 bg-[#090909]" : "border-gray-200 bg-gray-50"}`}>
-                  <div className={`flex rounded-xl border p-1 ${isDark ? "border-white/5 bg-[#111]" : "border-gray-200 bg-white shadow-sm"}`}>
-                    <button type="button" onClick={() => setMode("t2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "t2i" ? "bg-gray-100 text-gray-900 shadow-sm dark:bg-[#1f1f1f] dark:text-white" : "text-gray-500 hover:text-gray-900 dark:text-slate-500 dark:hover:text-white"}`}><SparklesIcon />{t.t2iMode}</button>
-                    <button type="button" onClick={() => setMode("i2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "i2i" ? "bg-gray-100 text-gray-900 shadow-sm dark:bg-[#1f1f1f] dark:text-white" : "text-gray-500 hover:text-gray-900 dark:text-slate-500 dark:hover:text-white"}`}><ImageIcon />{t.i2iMode}</button>
+              <div className={`overflow-hidden rounded-[2rem] border shadow-xl md:flex md:min-h-[450px] ${isDark ? "border-white/10 bg-[#0A0A0A]" : "border-gray-200 bg-white"}`}>
+                <div className={`w-full border-b p-6 md:w-[380px] md:border-b-0 md:border-r ${isDark ? "border-white/10 bg-[#050505]" : "border-gray-200 bg-gray-50"}`}>
+                  <div className={`mb-5 flex rounded-xl border p-1 ${isDark ? "border-white/5 bg-[#111]" : "border-gray-200 bg-white shadow-sm"}`}>
+                    <button type="button" onClick={() => setMode("t2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "t2i" ? (isDark ? "bg-[#1f1f1f] text-white shadow-sm" : "bg-gray-100 text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><SparklesIcon />{t.t2iMode}</button>
+                    <button type="button" onClick={() => setMode("i2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "i2i" ? (isDark ? "bg-[#1f1f1f] text-white shadow-sm" : "bg-gray-100 text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><ImageIcon />{t.i2iMode}</button>
                   </div>
 
                   {mode === "i2i" ? (
@@ -820,45 +837,53 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <textarea id="landing-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} className={`mt-3 min-h-[160px] w-full resize-none rounded-xl border p-4 text-sm leading-7 outline-none transition ${isDark ? "border-white/5 bg-black/40 text-white placeholder:text-slate-500 focus:border-white/15" : "border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 focus:border-gray-400"}` placeholder={t.promptPlaceholder} />
+                  <textarea id="landing-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} className={`mt-3 min-h-[140px] w-full flex-1 resize-none rounded-xl border p-4 text-sm outline-none transition ${isDark ? "border-white/5 bg-black/40 text-white placeholder:text-[#444] focus:border-white/20" : "border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 focus:border-gray-400"}`} placeholder={t.promptPlaceholder} />
 
                   <div className={`mt-5 space-y-4 border-t pt-5 ${isDark ? "border-white/5" : "border-gray-200"}`}>
                     {generationNotice ? <NoticeBanner notice={generationNotice} /> : null}
                     {authNotice && showLoginPanel ? <NoticeBanner notice={authNotice} /> : null}
-                    <button type="button" onClick={startRenderIntent} disabled={!canRender} className={`w-full rounded-xl px-4 py-3.5 text-sm font-semibold transition duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? "bg-white text-black hover:bg-slate-200" : "bg-gray-900 text-white hover:bg-black"}`}>{isGeneratingImage ? t.rendering : t.renderNow}</button>
-                    <p className={`text-[11px] leading-6 ${isDark ? "text-slate-500" : "text-gray-500"}`}>{t.promptHint}</p>
+                    <button type="button" onClick={startRenderIntent} disabled={!canRender} className={`w-full rounded-xl px-4 py-3.5 text-sm font-semibold transition duration-200 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? "bg-white text-black hover:bg-slate-200" : "bg-gray-900 text-white hover:bg-black"}`}>{isGeneratingImage ? t.rendering : t.renderNow}</button>
+                    <p className={`text-center text-[11px] leading-relaxed ${isDark ? "text-[#666]" : "text-gray-500"}`}>{locale === "zh" ? "免登录即可输入 Prompt。在执行核心渲染时，我们将无缝保存你的进度并引导完成验证。" : "Enter your prompt without logging in. We will seamlessly save your progress and prompt you to verify when you execute the core render."}</p>
                     {(mode === "i2i" || hasReference) ? <div className="rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-xs leading-6 text-amber-100">{t.i2iNotice}</div> : null}
                   </div>
                 </div>
 
-                <div className={`bg-[background-size:24px_24px] p-6 md:p-8 ${isDark ? "bg-[#000] bg-[radial-gradient(#1f2328_1px,transparent_1px)]" : "bg-gray-50 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)]"}`}>
-                  {renderSurface}
+                <div className={`relative flex flex-1 items-center justify-center bg-[background-size:24px_24px] p-6 transition-colors duration-300 ${isDark ? "bg-[#000] bg-[radial-gradient(#222_1px,transparent_1px)]" : "bg-gray-50 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)]"}`}>
+                  <div className="w-full max-w-sm">{renderSurface}</div>
                 </div>
               </div>
             </section>
           </div>
         ) : (
           <div className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col px-5 py-8 sm:px-8 lg:flex-row lg:gap-6 lg:py-10">
-            <aside className="w-full shrink-0 rounded-[2rem] border border-white/10 bg-[#08090c] lg:w-[380px]">
+            <aside className={`w-full shrink-0 rounded-[2rem] border lg:w-[380px] ${isDark ? "border-white/10 bg-[#08090c] shadow-[0_24px_90px_rgba(0,0,0,0.42)]" : "border-gray-200 bg-white shadow-xl"}`}>
               <div className="flex h-full flex-col gap-6 p-6">
                 <div>
-                  <div className="text-[11px] uppercase tracking-[0.3em] text-cyan-200/80">{t.workspaceEyebrow}</div>
-                  <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">{t.workspaceTitle}</h1>
-                  <p className="mt-4 text-sm leading-7 text-slate-400">{t.workspaceBody}</p>
+                  <div className={`text-[11px] uppercase tracking-[0.3em] ${isDark ? "text-cyan-200/80" : "text-cyan-600"}`}>{t.workspaceEyebrow}</div>
+                  <h1 className={`mt-4 text-3xl font-semibold tracking-tight ${isDark ? "text-white" : "text-gray-900"}`}>{t.workspaceTitle}</h1>
+                  <p className={`mt-4 text-sm leading-7 ${isDark ? "text-slate-400" : "text-gray-600"}`}>{t.workspaceBody}</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   {statusCards.map((card) => (
-                    <div key={card.label} className="rounded-xl border border-white/8 bg-white/[0.03] px-4 py-3.5">
-                      <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">{card.label}</div>
-                      <div className="mt-2 text-sm font-medium text-white">{card.value}</div>
+                    <div key={card.label} className={`rounded-xl border px-4 py-3.5 ${isDark ? "border-white/8 bg-white/[0.03]" : "border-gray-200 bg-gray-50"}`}>
+                      <div className={`text-[10px] uppercase tracking-[0.22em] ${isDark ? "text-slate-500" : "text-gray-500"}`}>{card.label}</div>
+                      <div className={`mt-2 text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>{card.value}</div>
                     </div>
                   ))}
                 </div>
 
+                <div className={`rounded-[1.5rem] border p-5 ${isDark ? "border-white/10 bg-white/[0.04]" : "border-gray-200 bg-white"}`}>
+                  <div className={`text-[11px] uppercase tracking-[0.24em] ${isDark ? "text-slate-500" : "text-gray-500"}`}>{t.workspaceNotesTitle}</div>
+                  <ul className={`mt-3 space-y-3 text-sm leading-7 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                    <li>{t.workspaceNote1}</li>
+                    <li>{t.workspaceNote2}</li>
+                  </ul>
+                </div>
+
                 <div className={`flex rounded-xl border p-1 ${isDark ? "border-white/5 bg-[#111]" : "border-gray-200 bg-white shadow-sm"}`}>
-                  <button type="button" onClick={() => setMode("t2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "t2i" ? "bg-gray-100 text-gray-900 shadow-sm dark:bg-[#1f1f1f] dark:text-white" : "text-gray-500 hover:text-gray-900 dark:text-slate-500 dark:hover:text-white"}`}><SparklesIcon />{t.t2iMode}</button>
-                  <button type="button" onClick={() => setMode("i2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "i2i" ? "bg-gray-100 text-gray-900 shadow-sm dark:bg-[#1f1f1f] dark:text-white" : "text-gray-500 hover:text-gray-900 dark:text-slate-500 dark:hover:text-white"}`}><ImageIcon />{t.i2iMode}</button>
+                  <button type="button" onClick={() => setMode("t2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "t2i" ? (isDark ? "bg-[#1f1f1f] text-white shadow-sm" : "bg-gray-100 text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><SparklesIcon />{t.t2iMode}</button>
+                  <button type="button" onClick={() => setMode("i2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "i2i" ? (isDark ? "bg-[#1f1f1f] text-white shadow-sm" : "bg-gray-100 text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><ImageIcon />{t.i2iMode}</button>
                 </div>
 
                 {mode === "i2i" ? (
@@ -873,55 +898,55 @@ export default function Home() {
                 ) : null}
 
                 <div className="flex items-end justify-between gap-3">
-                  <label htmlFor="workspace-prompt" className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{t.promptLabel}</label>
+                  <label htmlFor="workspace-prompt" className={`text-[11px] font-semibold uppercase tracking-[0.24em] ${isDark ? "text-slate-500" : "text-gray-500"}`}>{t.promptLabel}</label>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => handleSoon("inspire")} className={`rounded-md border px-2.5 py-1.5 text-[10px] transition ${isDark ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>{t.inspire}</button>
                     <button type="button" onClick={() => handleSoon("enhance")} className={`rounded-md border px-2.5 py-1.5 text-[10px] transition ${isDark ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>{t.enhance}</button>
                   </div>
                 </div>
 
-                <textarea ref={promptRef} id="workspace-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} className="min-h-[190px] w-full resize-none rounded-xl border border-white/5 bg-black/40 p-4 text-sm leading-7 text-white outline-none transition focus:border-white/15 placeholder:text-slate-500" placeholder={t.promptPlaceholder} />
+                <textarea ref={promptRef} id="workspace-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} className={`min-h-[190px] w-full resize-none rounded-xl border p-4 text-sm leading-7 outline-none transition ${isDark ? "border-white/5 bg-black/40 text-white placeholder:text-slate-500 focus:border-white/15" : "border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 focus:border-gray-400"}`} placeholder={t.promptPlaceholder} />
 
                 {authNotice ? <NoticeBanner notice={authNotice} /> : null}
                 {generationNotice ? <NoticeBanner notice={generationNotice} /> : null}
-                {mode === "i2i" ? <div className="rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-xs leading-6 text-amber-100">{t.i2iNotice}</div> : null}
+                {mode === "i2i" ? <div className={`rounded-xl border px-3 py-2 text-xs leading-6 ${isDark ? "border-amber-500/20 bg-amber-500/8 text-amber-100" : "border-amber-200 bg-amber-50 text-amber-700"}`}>{t.i2iNotice}</div> : null}
 
-                <div className="mt-auto space-y-4 border-t border-white/8 pt-5">
-                  <button type="button" onClick={() => void generateImage()} disabled={!canRender} className="w-full rounded-xl bg-gray-900 px-4 py-3.5 text-sm font-semibold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-black disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-slate-200">{isGeneratingImage ? t.rendering : t.renderNow}</button>
-                  <p className="text-[11px] leading-6 text-gray-500 dark:text-slate-500">{t.continueHint}</p>
+                <div className={`mt-auto space-y-4 border-t pt-5 ${isDark ? "border-white/8" : "border-gray-200"}`}>
+                  <button type="button" onClick={() => void generateImage()} disabled={!canRender} className={`w-full rounded-xl px-4 py-3.5 text-sm font-semibold transition duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? "bg-white text-black hover:bg-slate-200" : "bg-gray-900 text-white hover:bg-black"}`}>{isGeneratingImage ? t.rendering : t.renderNow}</button>
+                  <p className={`text-[11px] leading-6 ${isDark ? "text-slate-500" : "text-gray-500"}`}>{t.continueHint}</p>
                 </div>
               </div>
             </aside>
 
-            <section className="mt-6 flex-1 overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_52%_16%,rgba(255,247,214,0.12),transparent_16%),radial-gradient(circle_at_50%_28%,rgba(168,85,247,0.16),transparent_28%),linear-gradient(155deg,rgba(9,10,12,0.96),rgba(6,8,12,0.98)_52%,rgba(7,16,24,0.98))] shadow-[0_28px_110px_rgba(0,0,0,0.48)] lg:mt-0">
-              <div className="border-b border-white/10 px-6 py-4 text-[11px] uppercase tracking-[0.28em] text-slate-500">{t.canvasTitle}</div>
+            <section className={`mt-6 flex-1 overflow-hidden rounded-[2rem] border lg:mt-0 ${isDark ? "border-white/10 bg-[radial-gradient(circle_at_52%_16%,rgba(255,247,214,0.12),transparent_16%),radial-gradient(circle_at_50%_28%,rgba(168,85,247,0.16),transparent_28%),linear-gradient(155deg,rgba(9,10,12,0.96),rgba(6,8,12,0.98)_52%,rgba(7,16,24,0.98))] shadow-[0_28px_110px_rgba(0,0,0,0.48)]" : "border-gray-200 bg-[radial-gradient(circle_at_52%_16%,rgba(255,247,214,0.34),transparent_16%),radial-gradient(circle_at_50%_28%,rgba(168,85,247,0.10),transparent_28%),linear-gradient(180deg,#ffffff_0%,#f8fafc_52%,#eef2f7_100%)] shadow-xl"}`}>
+              <div className={`border-b px-6 py-4 text-[11px] uppercase tracking-[0.28em] ${isDark ? "border-white/10 text-slate-500" : "border-gray-200 text-gray-500"}`}>{t.canvasTitle}</div>
               <div className="grid gap-6 p-6 xl:grid-cols-[1.25fr_0.75fr] xl:p-8">
                 <div className="space-y-5">
                   <div className="grid gap-5 md:grid-cols-[1.1fr_0.9fr]">
-                    <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-5">
-                      <div className="text-[11px] uppercase tracking-[0.24em] text-slate-500">{t.promptLabel}</div>
-                      <div className="mt-4 text-sm leading-7 text-slate-200">{prompt}</div>
+                    <div className={`rounded-[1.5rem] border p-5 ${isDark ? "border-white/10 bg-white/[0.04]" : "border-gray-200 bg-white"}`}>
+                      <div className={`text-[11px] uppercase tracking-[0.24em] ${isDark ? "text-slate-500" : "text-gray-500"}`}>{t.promptLabel}</div>
+                      <div className={`mt-4 text-sm leading-7 ${isDark ? "text-slate-200" : "text-gray-700"}`}>{prompt}</div>
                     </div>
-                    <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-5">
-                      <div className="text-[11px] uppercase tracking-[0.24em] text-slate-500">{t.runtimeTitle}</div>
-                      <div className="mt-4 space-y-3 text-sm text-slate-300">
-                        <div className="flex items-center justify-between gap-4"><span className="text-slate-500">{t.provider}</span><span className="text-right text-white">{systemStatus === "available" ? t.providerAvailable : systemStatus === "unavailable" ? t.providerUnavailable : t.providerUnknown}</span></div>
-                        <div className="flex items-center justify-between gap-4"><span className="text-slate-500">{t.status}</span><span className="text-right text-white">{isGeneratingImage ? t.rendering : t.ready}</span></div>
-                        <div className="flex items-center justify-between gap-4"><span className="text-slate-500">{t.credits}</span><span className="text-right text-white">{user?.creditBalance ?? "-"}</span></div>
+                    <div className={`rounded-[1.5rem] border p-5 ${isDark ? "border-white/10 bg-white/[0.04]" : "border-gray-200 bg-white"}`}>
+                      <div className={`text-[11px] uppercase tracking-[0.24em] ${isDark ? "text-slate-500" : "text-gray-500"}`}>{t.runtimeTitle}</div>
+                      <div className={`mt-4 space-y-3 text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                        <div className="flex items-center justify-between gap-4"><span className={isDark ? "text-slate-500" : "text-gray-500"}>{t.provider}</span><span className={isDark ? "text-right text-white" : "text-right text-gray-900"}>{systemStatus === "available" ? t.providerAvailable : systemStatus === "unavailable" ? t.providerUnavailable : t.providerUnknown}</span></div>
+                        <div className="flex items-center justify-between gap-4"><span className={isDark ? "text-slate-500" : "text-gray-500"}>{t.status}</span><span className={isDark ? "text-right text-white" : "text-right text-gray-900"}>{isGeneratingImage ? t.rendering : t.ready}</span></div>
+                        <div className="flex items-center justify-between gap-4"><span className={isDark ? "text-slate-500" : "text-gray-500"}>{t.credits}</span><span className={isDark ? "text-right text-white" : "text-right text-gray-900"}>{user?.creditBalance ?? "-"}</span></div>
                       </div>
                     </div>
                   </div>
-                  <div className="h-[460px]">{renderSurface}</div>
+                  <div className="h-[460px] rounded-[1.5rem]">{renderSurface}</div>
                 </div>
 
-                <aside className="rounded-[1.5rem] border border-white/10 bg-[#0a0f16]/82 p-5 shadow-[0_16px_70px_rgba(0,0,0,0.36)]">
-                  <div className="text-[11px] uppercase tracking-[0.24em] text-slate-500">{t.propertiesTitle}</div>
-                  <div className="mt-5 space-y-4 text-sm text-slate-300">
-                    <div className="flex items-center justify-between gap-4"><span className="text-slate-500">{t.taskId}</span><span className="max-w-[12rem] truncate text-right text-white">{generationTask?.id ?? "-"}</span></div>
-                    <div className="flex items-center justify-between gap-4"><span className="text-slate-500">{t.model}</span><span className="text-right text-white">{generationTask?.model ?? "-"}</span></div>
-                    <div className="flex items-center justify-between gap-4"><span className="text-slate-500">{t.cost}</span><span className="text-right text-white">{generationTask ? generationTask.costCredits : currentCost}</span></div>
-                    <div className="flex items-center justify-between gap-4"><span className="text-slate-500">{t.createdAt}</span><span className="text-right text-white">{formatDate(generationTask?.createdAt ?? null, locale)}</span></div>
-                    <div className="flex items-center justify-between gap-4"><span className="text-slate-500">{t.completedAt}</span><span className="text-right text-white">{formatDate(generationTask?.completedAt ?? null, locale)}</span></div>
+                <aside className={`rounded-[1.5rem] border p-5 ${isDark ? "border-white/10 bg-[#0a0f16]/82 shadow-[0_16px_70px_rgba(0,0,0,0.36)]" : "border-gray-200 bg-white shadow-sm"}`}>
+                  <div className={`text-[11px] uppercase tracking-[0.24em] ${isDark ? "text-slate-500" : "text-gray-500"}`}>{t.propertiesTitle}</div>
+                  <div className={`mt-5 space-y-4 text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    <div className="flex items-center justify-between gap-4"><span className={isDark ? "text-slate-500" : "text-gray-500"}>{t.taskId}</span><span className={`max-w-[12rem] truncate text-right ${isDark ? "text-white" : "text-gray-900"}`}>{generationTask?.id ?? "-"}</span></div>
+                    <div className="flex items-center justify-between gap-4"><span className={isDark ? "text-slate-500" : "text-gray-500"}>{t.model}</span><span className={isDark ? "text-right text-white" : "text-right text-gray-900"}>{generationTask?.model ?? "-"}</span></div>
+                    <div className="flex items-center justify-between gap-4"><span className={isDark ? "text-slate-500" : "text-gray-500"}>{t.cost}</span><span className={isDark ? "text-right text-white" : "text-right text-gray-900"}>{generationTask ? generationTask.costCredits : currentCost}</span></div>
+                    <div className="flex items-center justify-between gap-4"><span className={isDark ? "text-slate-500" : "text-gray-500"}>{t.createdAt}</span><span className={isDark ? "text-right text-white" : "text-right text-gray-900"}>{formatDate(generationTask?.createdAt ?? null, locale)}</span></div>
+                    <div className="flex items-center justify-between gap-4"><span className={isDark ? "text-slate-500" : "text-gray-500"}>{t.completedAt}</span><span className={isDark ? "text-right text-white" : "text-right text-gray-900"}>{formatDate(generationTask?.completedAt ?? null, locale)}</span></div>
                   </div>
                 </aside>
               </div>
