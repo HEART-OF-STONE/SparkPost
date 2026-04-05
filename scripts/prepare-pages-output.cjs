@@ -23,7 +23,7 @@ if (!fs.existsSync(assetsDir)) {
 fs.rmSync(pagesDir, { recursive: true, force: true });
 fs.mkdirSync(pagesDir, { recursive: true });
 
-copyDirContents(assetsDir, pagesDir);
+copyTree(assetsDir, pagesDir);
 copyOpenNextRuntime(openNextDir, path.join(pagesDir, ".open-next"));
 
 fs.writeFileSync(
@@ -48,28 +48,14 @@ function copyOpenNextRuntime(sourceDir, destinationDir) {
 
     const sourcePath = path.join(sourceDir, entry.name);
     const destinationPath = path.join(destinationDir, entry.name);
-
-    if (entry.isDirectory()) {
-      copyDirContents(sourcePath, destinationPath);
-      continue;
-    }
-
-    fs.copyFileSync(sourcePath, destinationPath);
+    copyTree(sourcePath, destinationPath);
   }
 }
 
-function copyDirContents(sourceDir, destinationDir) {
-  fs.mkdirSync(destinationDir, { recursive: true });
-
-  for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
-    const sourcePath = path.join(sourceDir, entry.name);
-    const destinationPath = path.join(destinationDir, entry.name);
-
-    if (entry.isDirectory()) {
-      copyDirContents(sourcePath, destinationPath);
-      continue;
-    }
-
-    fs.copyFileSync(sourcePath, destinationPath);
-  }
+function copyTree(sourcePath, destinationPath) {
+  fs.cpSync(sourcePath, destinationPath, {
+    recursive: true,
+    dereference: true,
+    force: true,
+  });
 }
