@@ -10,9 +10,9 @@
                     "test:auth":  "node scripts/run-auth-api-tests.cjs",
                     "test:auth:db":  "node scripts/run-auth-db-smoke.cjs",
                     "test:image":  "node scripts/run-image-api-tests.cjs",
-                    "cf:build":  "node ./node_modules/@opennextjs/cloudflare/dist/cli/index.js build",
-                    "cf:preview":  "node ./node_modules/@opennextjs/cloudflare/dist/cli/index.js preview",
-                    "cf:deploy":  "node ./node_modules/@opennextjs/cloudflare/dist/cli/index.js deploy"
+                    "cf:build":  "node ./node_modules/@opennextjs/cloudflare/dist/cli/index.js build \u0026\u0026 node scripts/prepare-pages-output.cjs",
+                    "cf:preview":  "node ./node_modules/@opennextjs/cloudflare/dist/cli/index.js preview --config wrangler.worker.jsonc",
+                    "cf:deploy":  "node ./node_modules/@opennextjs/cloudflare/dist/cli/index.js deploy --config wrangler.worker.jsonc"
                 },
     "dependencies":  {
                          "@prisma/client":  "^6.19.2",
