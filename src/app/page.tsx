@@ -576,7 +576,7 @@ export default function Home() {
     }
     setIsSendingCode(true);
     try {
-      const response = await fetch("/api/auth/send-code", {
+      const response = await fetchApi("/api/auth/send-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
@@ -623,7 +623,7 @@ export default function Home() {
     }
     setIsVerifyingCode(true);
     try {
-      const response = await fetch("/api/auth/verify-code", {
+      const response = await fetchApi("/api/auth/verify-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, code }),
@@ -662,7 +662,7 @@ export default function Home() {
     setAuthNotice(null);
     setGenerationNotice(null);
     try {
-      const response = await fetch("/api/auth/logout", { method: "POST" });
+      const response = await fetchApi("/api/auth/logout", { method: "POST" });
       if (!response.ok) throw new Error(t.logoutFailed);
       setUser(null);
       setCode("");
