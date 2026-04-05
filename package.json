@@ -12,7 +12,11 @@
                     "test:image":  "node scripts/run-image-api-tests.cjs",
                     "cf:build":  "npm run build \u0026\u0026 node scripts/prepare-pages-output.cjs",
                     "cf:preview":  "node ./node_modules/@opennextjs/cloudflare/dist/cli/index.js preview --config wrangler.worker.jsonc",
-                    "cf:deploy":  "node ./node_modules/@opennextjs/cloudflare/dist/cli/index.js deploy --config wrangler.worker.jsonc"
+                    "cf:deploy":  "node ./node_modules/@opennextjs/cloudflare/dist/cli/index.js deploy --config wrangler.worker.jsonc",
+                    "workers:dev":  "wrangler dev --config workers/api/wrangler.jsonc",
+                    "workers:deploy":  "wrangler deploy --config workers/api/wrangler.jsonc",
+                    "d1:migrate:local":  "wrangler d1 migrations apply sparkpost --config workers/api/wrangler.jsonc --local",
+                    "d1:migrate:remote":  "wrangler d1 migrations apply sparkpost --config workers/api/wrangler.jsonc --remote"
                 },
     "dependencies":  {
                          "@prisma/client":  "^6.19.2",

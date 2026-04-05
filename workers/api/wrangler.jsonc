@@ -1,0 +1,23 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "sparkpost-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-05",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "SPARKPOST_DB",
+      "database_name": "sparkpost",
+      "database_id": "REPLACE_WITH_REAL_D1_DATABASE_ID"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "SPARKPOST_R2",
+      "bucket_name": "sparkpost-assets"
+    }
+  ]
+}
