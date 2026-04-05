@@ -810,6 +810,69 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
   },
   {
     method: "POST",
+    pathname: "/api/auth/dev-login",
+    handler: async (request, env) => {
+      if (!shouldExposeDebugCode(env)) {
+        return json({ error: "Not found." }, { status: 404 });
+      }
+
+      const bodyResult = await parseJsonBody(request);
+      if (!bodyResult.ok) return json({ error: bodyResult.error }, { status: 400 });
+      const input = validateSendCodeInput(bodyResult.body);
+      if (!input.ok) return json({ error: input.error }, { status: 400 });
+
+      if (!env.SPARKPOST_DB) {
+        return json({ error: "Authentication service is temporarily unavailable." }, { status: 503 });
+      }
+
+      const user = await env.SPARKPOST_DB.prepare(
+        `SELECT
+           users.id,
+           users.email,
+           users.created_at AS createdAt,
+           users.email_verified_at AS emailVerifiedAt,
+           users.last_login_at AS lastLoginAt,
+           COALESCE(credit_accounts.balance, 0) AS creditBalance
+         FROM users
+         LEFT JOIN credit_accounts ON credit_accounts.user_id = users.id
+         WHERE users.email = ?
+         LIMIT 1`,
+      ).bind(input.email).first<AuthenticatedUserRow>();
+
+      if (!user) {
+        return json(
+          { error: "Developer login account does not exist. Create it in the database first." },
+          { status: 404 },
+        );
+      }
+
+      const timestamp = new Date().toISOString();
+      const emailVerifiedAt = user.emailVerifiedAt ?? timestamp;
+
+      await env.SPARKPOST_DB.prepare(
+        `UPDATE users
+         SET email_verified_at = ?, last_login_at = ?, updated_at = ?
+         WHERE id = ?`,
+      ).bind(emailVerifiedAt, timestamp, timestamp, user.id).run();
+
+      const response = json({
+        ok: true,
+        isNewUser: false,
+        user: {
+          id: user.id,
+          email: user.email,
+          createdAt: user.createdAt,
+          emailVerifiedAt,
+          lastLoginAt: timestamp,
+          creditBalance: user.creditBalance ?? 0,
+        },
+      });
+      response.headers.set("Set-Cookie", await buildSessionCookie(user.id, user.email, env));
+      return response;
+    },
+  },
+  {
+    method: "POST",
     pathname: "/api/auth/send-code",
     handler: async (request, env) => {
       const bodyResult = await parseJsonBody(request);

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { proxyToWorkersRequest } from "@/lib/api/server";
+
 import { authConfig } from "@/lib/auth/config";
 import { isDatabaseUnavailableError } from "@/lib/auth/errors";
 import { readJsonBody } from "@/lib/auth/request";
@@ -13,6 +15,11 @@ import {
 } from "@/lib/auth/verification-throttle";
 
 export async function POST(request: Request) {
+  const proxiedResponse = await proxyToWorkersRequest(request);
+  if (proxiedResponse) {
+    return proxiedResponse;
+  }
+
   const bodyResult = await readJsonBody(request);
   if (!bodyResult.ok) {
     return NextResponse.json({ error: bodyResult.error }, { status: 400 });

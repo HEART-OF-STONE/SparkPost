@@ -53,8 +53,8 @@ function createFakeDb(state: FakeState) {
           return {
             async first<T>() {
               if (sql.includes("FROM users") && sql.includes("LEFT JOIN credit_accounts")) {
-                const userId = values[0];
-                if (userId !== state.user.id) return null;
+                const lookupValue = values[0];
+                if (lookupValue !== state.user.id && lookupValue !== state.user.email) return null;
                 return state.user as T;
               }
 
@@ -94,6 +94,12 @@ function createFakeDb(state: FakeState) {
 
               if (sql.includes("INSERT INTO generated_assets")) {
                 state.generatedAssetUrl = String(values[2]);
+                return { meta: { changes: 1 } };
+              }
+
+              if (sql.includes("UPDATE users") && sql.includes("email_verified_at")) {
+                state.user.emailVerifiedAt = String(values[0]);
+                state.user.lastLoginAt = String(values[1]);
                 return { meta: { changes: 1 } };
               }
 
@@ -283,6 +289,51 @@ test("POST /api/generate/image stores asset in R2 and returns Worker asset URL",
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("POST /api/auth/dev-login returns session for seeded user", async () => {
+  const worker = await loadWorker();
+  const state: FakeState = {
+    user: {
+      id: "user-1",
+      email: "demo@example.com",
+      createdAt: new Date().toISOString(),
+      emailVerifiedAt: null,
+      lastLoginAt: null,
+      creditBalance: 20,
+    },
+    creditBalance: 20,
+    generatedTask: null,
+    generatedAssetUrl: null,
+  };
+
+  const response = await worker.fetch(
+    new Request("https://sparkpost.test/api/auth/dev-login", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ email: "demo@example.com" }),
+    }),
+    {
+      SPARKPOST_DB: createFakeDb(state),
+      SESSION_SECRET: "workers-smoke-secret",
+      DEV_AUTH_DEBUG_CODE: "true",
+    },
+  );
+
+  const result = await readJsonResponse<{
+    ok: boolean;
+    isNewUser: boolean;
+    user: { email: string; creditBalance: number };
+  }>(response);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, true);
+  assert.equal(result.body.isNewUser, false);
+  assert.equal(result.body.user.email, "demo@example.com");
+  assert.equal(result.body.user.creditBalance, 20);
+  assert.match(response.headers.get("set-cookie") ?? "", /sparkpost_session=/);
 });
 
 test("GET /api/assets/* returns stored image bytes from R2", async () => {

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { proxyToWorkersRequest } from "@/lib/api/server";
+
 import { isDatabaseUnavailableError } from "@/lib/auth/errors";
 import { normalizeEmail, isValidEmail } from "@/lib/auth/email";
 import { readJsonBody } from "@/lib/auth/request";
@@ -12,6 +14,11 @@ function isDevLoginEnabled() {
 }
 
 export async function POST(request: Request) {
+  const proxiedResponse = await proxyToWorkersRequest(request);
+  if (proxiedResponse) {
+    return proxiedResponse;
+  }
+
   if (!isDevLoginEnabled()) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
