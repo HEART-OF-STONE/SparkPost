@@ -13,3 +13,15 @@ export const fetchApi = (path: string, init: RequestInit = {}) => {
     ...init,
   });
 };
+
+export const resolveApiAssetUrl = (url: string | null | undefined) => {
+  if (!url) {
+    return null;
+  }
+
+  if (/^https?:\/\//i.test(url) || url.startsWith("data:")) {
+    return url;
+  }
+
+  return buildApiUrl(url);
+};

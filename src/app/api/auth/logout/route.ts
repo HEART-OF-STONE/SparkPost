@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { proxyToWorkersRequest } from "@/lib/api/server";
+
 import { authConfig } from "@/lib/auth/config";
 
 export async function POST() {

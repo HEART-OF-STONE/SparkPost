@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { proxyToWorkersRequest } from "@/lib/api/server";
+
 import { authConfig } from "@/lib/auth/config";
 import { isDatabaseUnavailableError } from "@/lib/auth/errors";
 import { readJsonBody } from "@/lib/auth/request";
@@ -28,6 +30,11 @@ function getCookieValue(cookieHeader: string | null, name: string) {
 }
 
 export async function POST(request: Request) {
+  const proxiedResponse = await proxyToWorkersRequest(request);
+  if (proxiedResponse) {
+    return proxiedResponse;
+  }
+
   try {
     const bodyResult = await readJsonBody(request);
     if (!bodyResult.ok) {

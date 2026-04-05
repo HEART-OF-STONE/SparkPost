@@ -1,0 +1,357 @@
+﻿/* eslint-disable @typescript-eslint/no-require-imports */
+import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
+
+declare const test: (name: string, fn: () => Promise<void> | void) => void;
+declare const readJsonResponse: <T = unknown>(
+  response: Response,
+) => Promise<{ status: number; headers: Headers; body: T }>;
+
+type D1RunResult = { meta?: { changes?: number } };
+
+type GeneratedTask = {
+  id: string;
+  status: string;
+  prompt: string;
+  createdAt: string;
+  completedAt: string | null;
+  model: string | null;
+  costCredits: number;
+};
+
+type FakeState = {
+  user: {
+    id: string;
+    email: string;
+    createdAt: string;
+    emailVerifiedAt: string | null;
+    lastLoginAt: string | null;
+    creditBalance: number;
+  };
+  creditBalance: number;
+  generatedTask: GeneratedTask | null;
+  generatedAssetUrl: string | null;
+};
+
+function createSessionToken(userId: string, email: string, secret: string) {
+  const payload = {
+    userId,
+    email,
+    issuedAt: 1_700_000_000_000,
+    expiresAt: 4_000_000_000_000,
+  };
+  const encodedPayload = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  const signature = createHmac("sha256", secret).update(encodedPayload).digest("base64url");
+  return `${encodedPayload}.${signature}`;
+}
+
+function createFakeDb(state: FakeState) {
+  return {
+    prepare(sql: string) {
+      return {
+        bind(...values: unknown[]) {
+          return {
+            async first<T>() {
+              if (sql.includes("FROM users") && sql.includes("LEFT JOIN credit_accounts")) {
+                const lookupValue = values[0];
+                if (lookupValue !== state.user.id && lookupValue !== state.user.email) return null;
+                return state.user as T;
+              }
+
+              if (sql.includes("SELECT balance FROM credit_accounts WHERE user_id = ? LIMIT 1")) {
+                return { balance: state.creditBalance } as T;
+              }
+
+              if (sql.includes("FROM generation_tasks WHERE id = ? LIMIT 1")) {
+                return state.generatedTask as T;
+              }
+
+              return null;
+            },
+            async run(): Promise<D1RunResult> {
+              if (sql.includes("INSERT INTO generation_tasks")) {
+                state.generatedTask = {
+                  id: String(values[0]),
+                  status: "running",
+                  prompt: String(values[2]),
+                  model: String(values[3]),
+                  costCredits: Number(values[4]),
+                  createdAt: String(values[5]),
+                  completedAt: null,
+                };
+                return { meta: { changes: 1 } };
+              }
+
+              if (sql.includes("UPDATE credit_accounts SET balance = ?")) {
+                state.creditBalance = Number(values[0]);
+                state.user.creditBalance = state.creditBalance;
+                return { meta: { changes: 1 } };
+              }
+
+              if (sql.includes("INSERT INTO credit_transactions")) {
+                return { meta: { changes: 1 } };
+              }
+
+              if (sql.includes("INSERT INTO generated_assets")) {
+                state.generatedAssetUrl = String(values[2]);
+                return { meta: { changes: 1 } };
+              }
+
+              if (sql.includes("UPDATE users") && sql.includes("email_verified_at")) {
+                state.user.emailVerifiedAt = String(values[0]);
+                state.user.lastLoginAt = String(values[1]);
+                return { meta: { changes: 1 } };
+              }
+
+              if (sql.includes("UPDATE generation_tasks SET status = 'succeeded'")) {
+                if (state.generatedTask) {
+                  state.generatedTask.status = "succeeded";
+                  state.generatedTask.model = String(values[0]);
+                  state.generatedTask.completedAt = String(values[1]);
+                }
+                return { meta: { changes: 1 } };
+              }
+
+              if (sql.includes("UPDATE generation_tasks SET status = 'failed'")) {
+                if (state.generatedTask) {
+                  state.generatedTask.status = "failed";
+                  state.generatedTask.completedAt = String(values[1]);
+                }
+                return { meta: { changes: 1 } };
+              }
+
+              return { meta: { changes: 0 } };
+            },
+          };
+        },
+      };
+    },
+  };
+}
+
+function createFakeR2() {
+  const store = new Map<string, { bytes: Uint8Array; contentType: string }>();
+
+  return {
+    store,
+    bucket: {
+      async put(key: string, value: ArrayBuffer | ArrayBufferView | ReadableStream | Blob | string, options?: { httpMetadata?: { contentType?: string } }) {
+        const contentType = options?.httpMetadata?.contentType ?? "application/octet-stream";
+        let bytes: Uint8Array;
+
+        if (typeof value === "string") {
+          bytes = new TextEncoder().encode(value);
+        } else if (value instanceof Uint8Array) {
+          bytes = value;
+        } else if (ArrayBuffer.isView(value)) {
+          bytes = new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength));
+        } else if (value instanceof ArrayBuffer) {
+          bytes = new Uint8Array(value);
+        } else {
+          throw new Error("Unsupported R2 put value in smoke test.");
+        }
+
+        store.set(key, { bytes, contentType });
+      },
+      async get(key: string) {
+        const entry = store.get(key);
+        if (!entry) return null;
+
+        return {
+          body: new ReadableStream({
+            start(controller) {
+              controller.enqueue(entry.bytes);
+              controller.close();
+            },
+          }),
+          httpMetadata: {
+            contentType: entry.contentType,
+          },
+          writeHttpMetadata(headers: Headers) {
+            headers.set("content-type", entry.contentType);
+          },
+        };
+      },
+    },
+  };
+}
+
+async function loadWorker() {
+  const mod = await import("../workers/api/src/index");
+  return mod.default;
+}
+
+test("GET /api/health reports D1 and R2 availability", async () => {
+  const worker = await loadWorker();
+  const response = await worker.fetch(new Request("https://sparkpost.test/api/health"), {
+    SPARKPOST_DB: createFakeDb({
+      user: {
+        id: "user-1",
+        email: "demo@example.com",
+        createdAt: new Date().toISOString(),
+        emailVerifiedAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+        creditBalance: 20,
+      },
+      creditBalance: 20,
+      generatedTask: null,
+      generatedAssetUrl: null,
+    }),
+    SPARKPOST_R2: createFakeR2().bucket,
+  });
+  const result = await readJsonResponse<{ ok: boolean; database: string; objectStorage: string }>(response);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, true);
+  assert.equal(result.body.database, "configured");
+  assert.equal(result.body.objectStorage, "configured");
+});
+
+test("POST /api/generate/image stores asset in R2 and returns Worker asset URL", async () => {
+  const worker = await loadWorker();
+  const state: FakeState = {
+    user: {
+      id: "user-1",
+      email: "demo@example.com",
+      createdAt: new Date().toISOString(),
+      emailVerifiedAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+      creditBalance: 20,
+    },
+    creditBalance: 20,
+    generatedTask: null,
+    generatedAssetUrl: null,
+  };
+  const fakeR2 = createFakeR2();
+  const secret = "workers-smoke-secret";
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url === "https://api.openai.com/v1/images/generations") {
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              b64_json: Buffer.from("fake-image-binary", "utf8").toString("base64"),
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }
+
+    throw new Error(`Unexpected fetch in smoke test: ${url}`);
+  };
+
+  try {
+    const session = createSessionToken(state.user.id, state.user.email, secret);
+    const response = await worker.fetch(
+      new Request("https://sparkpost.test/api/generate/image", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `sparkpost_session=${session}`,
+        },
+        body: JSON.stringify({ prompt: "a glass greenhouse on mars" }),
+      }),
+      {
+        SPARKPOST_DB: createFakeDb(state),
+        SPARKPOST_R2: fakeR2.bucket,
+        SESSION_SECRET: secret,
+        IMAGE_BACKEND: "official",
+        IMAGE_MODEL: "dall-e-3",
+        IMAGE_API_KEY: "test-key",
+        IMAGE_BASE_URL: "https://api.openai.com/v1",
+        TEXT_TO_IMAGE_COST: "10",
+      },
+    );
+
+    const result = await readJsonResponse<{
+      ok: boolean;
+      task: {
+        status: string;
+        remainingCredits: number;
+        assets: Array<{ fileUrl: string }>;
+      };
+    }>(response);
+
+    assert.equal(result.status, 200);
+    assert.equal(result.body.ok, true);
+    assert.equal(result.body.task.status, "succeeded");
+    assert.equal(result.body.task.remainingCredits, 10);
+    assert.match(result.body.task.assets[0]?.fileUrl ?? "", /^https:\/\/sparkpost\.test\/api\/assets\/generated\//);
+    assert.equal(fakeR2.store.size, 1);
+    assert.equal(state.generatedAssetUrl, result.body.task.assets[0]?.fileUrl ?? null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("POST /api/auth/dev-login returns session for seeded user", async () => {
+  const worker = await loadWorker();
+  const state: FakeState = {
+    user: {
+      id: "user-1",
+      email: "demo@example.com",
+      createdAt: new Date().toISOString(),
+      emailVerifiedAt: null,
+      lastLoginAt: null,
+      creditBalance: 20,
+    },
+    creditBalance: 20,
+    generatedTask: null,
+    generatedAssetUrl: null,
+  };
+
+  const response = await worker.fetch(
+    new Request("https://sparkpost.test/api/auth/dev-login", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ email: "demo@example.com" }),
+    }),
+    {
+      SPARKPOST_DB: createFakeDb(state),
+      SESSION_SECRET: "workers-smoke-secret",
+      DEV_AUTH_DEBUG_CODE: "true",
+    },
+  );
+
+  const result = await readJsonResponse<{
+    ok: boolean;
+    isNewUser: boolean;
+    user: { email: string; creditBalance: number };
+  }>(response);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, true);
+  assert.equal(result.body.isNewUser, false);
+  assert.equal(result.body.user.email, "demo@example.com");
+  assert.equal(result.body.user.creditBalance, 20);
+  assert.match(response.headers.get("set-cookie") ?? "", /sparkpost_session=/);
+});
+
+test("GET /api/assets/* returns stored image bytes from R2", async () => {
+  const worker = await loadWorker();
+  const fakeR2 = createFakeR2();
+  const key = "generated/user-1/task-1/asset-1.png";
+  await fakeR2.bucket.put(key, new TextEncoder().encode("binary-image"), {
+    httpMetadata: { contentType: "image/png" },
+  });
+
+  const response = await worker.fetch(
+    new Request(`https://sparkpost.test/api/assets/${key}`),
+    {
+      SPARKPOST_R2: fakeR2.bucket,
+    },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "image/png");
+  assert.equal(await response.text(), "binary-image");
+});

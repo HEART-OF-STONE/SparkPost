@@ -9,7 +9,7 @@
   },
   "vars": {
     "IMAGE_BACKEND": "official",
-    "IMAGE_MODEL": "gemini-3.1-flash-image-openai"
+    "IMAGE_MODEL": "dall-e-3"
   },
   "d1_databases": [
     {
