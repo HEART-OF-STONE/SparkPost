@@ -1,7 +1,9 @@
-﻿"use client";
+"use client";
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+
+import { fetchApi } from "@/lib/api/client";
 
 type Locale = "zh" | "en";
 type Notice = { type: "success" | "error" | "info"; text: string };
@@ -438,7 +440,7 @@ export default function Home() {
     const controller = new AbortController();
     async function loadGenerateStatus() {
       try {
-        const response = await fetch("/api/generate/status", { cache: "no-store", signal: controller.signal });
+        const response = await fetchApi("/api/generate/status", { cache: "no-store", signal: controller.signal });
         if (!response.ok) return;
         const data = (await response.json()) as { status?: SystemStatus };
         if (!controller.signal.aborted && (data.status === "available" || data.status === "unavailable" || data.status === "unknown")) {
@@ -459,7 +461,7 @@ export default function Home() {
     const controller = new AbortController();
     async function loadSession() {
       try {
-        const response = await fetch("/api/me", { cache: "no-store", signal: controller.signal });
+        const response = await fetchApi("/api/me", { cache: "no-store", signal: controller.signal });
         if (!response.ok) throw new Error(t.sessionLoadFailed);
         const data = (await response.json()) as MeResponse;
         setUser(data.user);
@@ -506,7 +508,7 @@ export default function Home() {
   }, []);
 
   const refreshSession = useCallback(async () => {
-    const response = await fetch("/api/me", { cache: "no-store" });
+    const response = await fetchApi("/api/me", { cache: "no-store" });
     if (!response.ok) throw new Error(t.sessionRefreshFailed);
     const data = (await response.json()) as MeResponse;
     setUser(data.user);

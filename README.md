@@ -22,6 +22,7 @@ SparkPost 是一个积分驱动的 AI 内容生成网站。当前这个分支已
 - Workers API 配置：[workers/api/wrangler.jsonc](./workers/api/wrangler.jsonc)
 - D1 初始 schema：[workers/api/migrations/0001_initial.sql](./workers/api/migrations/0001_initial.sql)
 - Workers API skeleton：[workers/api/src/index.ts](./workers/api/src/index.ts)
+- 前端 Workers API helper：[src/lib/api/client.ts](./src/lib/api/client.ts)
 
 ## 本地开发
 
@@ -55,6 +56,7 @@ npm run d1:migrate:remote
 其中：
 - `/api/me` 已接入 session cookie 解析、HMAC 校验和 D1 用户查询
 - `/api/generate/status` 已对齐现有图片后端可用性判断
+- 首页前端已经支持通过 `NEXT_PUBLIC_WORKERS_API_BASE_URL` 改为请求独立 Workers API
 - 登录发码、验证码校验和生图提交仍待继续迁移
 
 ## Workers 运行时需要的配置
@@ -67,6 +69,9 @@ npm run d1:migrate:remote
 - `SESSION_SECRET`
 - `IMAGE_API_KEY`
 
+前端若要直接调用独立 Workers API，还需在 Pages 或本地环境补充：
+- `NEXT_PUBLIC_WORKERS_API_BASE_URL`
+
 仍需替换或绑定：
 - `SPARKPOST_DB` 对应真实 D1 数据库
 - `SPARKPOST_R2` 对应真实 R2 bucket
@@ -74,7 +79,7 @@ npm run d1:migrate:remote
 ## 推荐的下一步顺序
 
 1. 保持 Pages 静态首页继续稳定在线
-2. 将前端对 `/api/me` 和 `/api/generate/status` 的调用改为指向 Workers API
+2. 为 Pages 环境补充 `NEXT_PUBLIC_WORKERS_API_BASE_URL` 并指向独立 Workers API
 3. 把验证码登录迁到 Workers + D1
 4. 把生图任务与资产元数据迁到 Workers + D1
 5. 最后将 `uploads/` 替换为 R2

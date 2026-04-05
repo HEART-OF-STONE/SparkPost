@@ -40,6 +40,32 @@ const DEFAULT_IMAGE_BACKEND = "official";
 const DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image-openai";
 const SESSION_COOKIE_NAME = "sparkpost_session";
 
+const getCorsHeaders = (request: Request) => {
+  const origin = request.headers.get("origin");
+
+  return {
+    "access-control-allow-origin": origin ?? "*",
+    "access-control-allow-credentials": origin ? "true" : "false",
+    "access-control-allow-methods": "GET,POST,OPTIONS",
+    "access-control-allow-headers": "Content-Type",
+    vary: "Origin",
+  };
+};
+
+const withCors = (request: Request, response: Response) => {
+  const headers = new Headers(response.headers);
+
+  for (const [key, value] of Object.entries(getCorsHeaders(request))) {
+    headers.set(key, value);
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+};
+
 const json = (body: JsonRecord, init: ResponseInit = {}) =>
   new Response(JSON.stringify(body, null, 2), {
     ...init,
@@ -269,21 +295,28 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    if (request.method === "OPTIONS") {
+      return withCors(request, new Response(null, { status: 204 }));
+    }
+
     const url = new URL(request.url);
     const match = routes.find(
       (route) => route.method === request.method && route.pathname === url.pathname,
     );
 
     if (match) {
-      return match.handler(request, env, url);
+      return withCors(request, await match.handler(request, env, url));
     }
 
-    return json(
-      {
-        ok: false,
-        error: "Route not found.",
-      },
-      { status: 404 },
+    return withCors(
+      request,
+      json(
+        {
+          ok: false,
+          error: "Route not found.",
+        },
+        { status: 404 },
+      ),
     );
   },
 };
