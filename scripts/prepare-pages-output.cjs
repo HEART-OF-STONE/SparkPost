@@ -25,6 +25,7 @@ fs.mkdirSync(pagesDir, { recursive: true });
 
 copyTree(assetsDir, pagesDir);
 copyOpenNextRuntime(openNextDir, path.join(pagesDir, ".open-next"));
+removeBundledEnvFiles(path.join(pagesDir, ".open-next"));
 
 fs.writeFileSync(
   wrappedWorkerEntry,
@@ -58,4 +59,23 @@ function copyTree(sourcePath, destinationPath) {
     dereference: true,
     force: true,
   });
+}
+
+function removeBundledEnvFiles(directoryPath) {
+  if (!fs.existsSync(directoryPath)) {
+    return;
+  }
+
+  for (const entry of fs.readdirSync(directoryPath, { withFileTypes: true })) {
+    const entryPath = path.join(directoryPath, entry.name);
+
+    if (entry.isDirectory()) {
+      removeBundledEnvFiles(entryPath);
+      continue;
+    }
+
+    if (entry.isFile() && entry.name === ".env") {
+      fs.rmSync(entryPath, { force: true });
+    }
+  }
 }

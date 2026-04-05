@@ -11,8 +11,24 @@ export class DatabaseUnavailableError extends Error {
   }
 }
 
-function hasDatabaseUrl() {
-  return Boolean(process.env.DATABASE_URL?.trim());
+function getDatabaseUrl() {
+  return process.env.DATABASE_URL?.trim() ?? "";
+}
+
+function hasUsableDatabaseUrl() {
+  const databaseUrl = getDatabaseUrl();
+
+  if (!databaseUrl) {
+    return false;
+  }
+
+  try {
+    const url = new URL(databaseUrl);
+    const hostname = url.hostname.toLowerCase();
+    return hostname !== "127.0.0.1" && hostname !== "localhost" && hostname !== "::1";
+  } catch {
+    return false;
+  }
 }
 
 function createPrismaClient() {
@@ -22,7 +38,7 @@ function createPrismaClient() {
 }
 
 function getPrismaClient() {
-  if (!hasDatabaseUrl()) {
+  if (!hasUsableDatabaseUrl()) {
     return createUnavailablePrismaProxy();
   }
 
