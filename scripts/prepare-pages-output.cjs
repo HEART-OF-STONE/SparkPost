@@ -30,13 +30,13 @@ removeBundledEnvFiles(path.join(pagesDir, ".open-next"));
 fs.writeFileSync(
   wrappedWorkerEntry,
   [
-    'import worker from "./.open-next/worker.js";',
     'export * from "./.open-next/worker.js";',
     '',
     'export default {',
     '  async fetch(request, env, ctx) {',
     '    try {',
-    '      return await worker.fetch(request, env, ctx);',
+    '      const mod = await import("./.open-next/worker.js");',
+    '      return await mod.default.fetch(request, env, ctx);',
     '    } catch (error) {',
     '      const name = error instanceof Error && error.name ? error.name : "Error";',
     '      const message = error instanceof Error && error.message ? error.message : String(error);',
