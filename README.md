@@ -43,15 +43,40 @@ npm run d1:migrate:remote
 
 说明：
 - `cf:build` 当前用于生成 Pages 静态首页输出
-- `workers:dev` / `workers:deploy` 面向独立 Workers API skeleton
-- D1 schema 当前只完成首版落地，尚未把现有 Next.js route handlers 正式迁入 Workers
+- `workers:dev` / `workers:deploy` 面向独立 Workers API
+- `d1:migrate:*` 当前用于推进 Cloudflare 原生数据层
+
+## 当前已迁入 Workers 的接口
+
+- `GET /api/health`
+- `GET /api/me`
+- `GET /api/generate/status`
+
+其中：
+- `/api/me` 已接入 session cookie 解析、HMAC 校验和 D1 用户查询
+- `/api/generate/status` 已对齐现有图片后端可用性判断
+- 登录发码、验证码校验和生图提交仍待继续迁移
+
+## Workers 运行时需要的配置
+
+默认变量已经写在 [workers/api/wrangler.jsonc](./workers/api/wrangler.jsonc)：
+- `IMAGE_BACKEND=official`
+- `IMAGE_MODEL=gemini-3.1-flash-image-openai`
+
+仍需通过 Wrangler secret 或 Cloudflare 后台补充：
+- `SESSION_SECRET`
+- `IMAGE_API_KEY`
+
+仍需替换或绑定：
+- `SPARKPOST_DB` 对应真实 D1 数据库
+- `SPARKPOST_R2` 对应真实 R2 bucket
 
 ## 推荐的下一步顺序
 
 1. 保持 Pages 静态首页继续稳定在线
-2. 先将 `/api/me` 和 `/api/generate/status` 从 Next route handlers 迁到 Workers
-3. 再把验证码登录迁到 Workers + D1
-4. 接着把生图任务与资产元数据迁到 Workers + D1
+2. 将前端对 `/api/me` 和 `/api/generate/status` 的调用改为指向 Workers API
+3. 把验证码登录迁到 Workers + D1
+4. 把生图任务与资产元数据迁到 Workers + D1
 5. 最后将 `uploads/` 替换为 R2
 
 ## 注意事项

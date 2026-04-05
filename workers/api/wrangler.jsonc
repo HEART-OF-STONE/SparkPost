@@ -7,6 +7,10 @@
   "observability": {
     "enabled": true
   },
+  "vars": {
+    "IMAGE_BACKEND": "official",
+    "IMAGE_MODEL": "gemini-3.1-flash-image-openai"
+  },
   "d1_databases": [
     {
       "binding": "SPARKPOST_DB",
