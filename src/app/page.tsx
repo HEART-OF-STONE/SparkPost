@@ -530,7 +530,7 @@ export default function Home() {
     setGenerationTask(null);
     setPreviewLoadFailed(false);
     try {
-      const response = await fetch("/api/generate/image", {
+      const response = await fetchApi("/api/generate/image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
