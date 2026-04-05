@@ -136,51 +136,51 @@ type Copy = {
 const copy: Record<Locale, Copy> = {
   zh: {
     brand: "SparkPost",
-    heroBadge: "SparkPost AI 已上线",
+    heroBadge: "SparkPost AI 现已上线",
     heroTitle: "将想象力转化为\n现象级视觉资产。",
-    heroBody: "构建于顶级多模态大模型之上的专业工作台。利用极简的交互语言，以工业级的控制力探索、构建并渲染属于你的高保真数字艺术。",
+    heroBody: "构建于顶级多模态大模型之上的专业工作台。利用极简交互语言，以工业级控制力探索、构建并渲染高保真数字艺术。",
     heroPrimary: "开始免费体验",
     heroSecondary: "了解功能特性",
     feature1Title: "Gemini 智能引擎",
-    feature1Body: "内置由 Google Gemini 驱动的提示词扩写与灵感生成中枢，让简单的短语瞬间丰满为专业级咒语。",
+    feature1Body: "内置 Gemini 驱动的提示词扩写与灵感生成能力，让简单短语更快进入专业级创作流程。",
     feature2Title: "实时无缝工作流",
-    feature2Body: "告别冗长的跳转。极客级的纯键盘友好界面，支持在任意状态下热切换，保持心流不被打断。",
+    feature2Body: "告别冗长跳转。使用纯净、键盘友好的界面在任意状态下切换操作，维持持续创作节奏。",
     feature3Title: "毫秒级状态同步",
-    feature3Body: "所见即所得的消耗指示器与底座状态监控，企业级的可靠性保障每一次渲染任务都使命必达。",
+    feature3Body: "所见即所得的积分提示与状态同步，帮助你在生成前清楚掌握当前可用性。",
     playgroundTitle: "即刻体验工作台",
-    playgroundBody: "在下方直接输入你的灵感，无需登录即可预览生图界面的专业级交互感受。",
-    promptLabel: "Prompt (提示词)",
-    promptPlaceholder: "例如：一张电影级的产品特写KV，半透明玻璃材质，深灰色背景，柔和的青色环境光，8k分辨率，辛烷渲染器...",
+    playgroundBody: "在下方直接输入你的灵感，无需登录即可预览生图工作台的交互结构。",
+    promptLabel: "PROMPT（提示词）",
+    promptPlaceholder: "例如：一张电影级的高科技产品特写，半透明玻璃材质，深灰背景，青蓝色环境光，8K，Octane Render。",
     renderNow: "立即渲染",
     rendering: "生成中...",
-    promptHint: "当前优先接入真实的单图生成链路。Prompt 会在登录前后保留。",
+    promptHint: "当前优先接入真实文生图链路。登录前后会保留你的提示词。",
     t2iMode: "文生图",
     i2iMode: "图生图",
     uploadReference: "参考图",
-    uploadHint: "点击或拖拽上传参考图",
+    uploadHint: "点击或拖拽上传",
     inspire: "✨ 给我灵感",
     enhance: "✨ 智能扩写",
     comingSoon: "即将支持",
-    authTitle: "验证以解锁渲染",
-    authBody: "你的灵感已保存。完成极速邮箱验证后，渲染引擎将立即自动启动。",
-    authHint: "开发环境下如果后端返回 debug code，会自动填入验证码输入框。",
+    authTitle: "验证后继续渲染",
+    authBody: "你的灵感已暂存。完成一次快速邮箱验证后，系统会继续当前操作。",
+    authHint: "开发环境下如果后端返回 debug code，这里会自动填入。",
     sendCode: "获取安全码",
     sendingCode: "发送中...",
-    verify: "验证并渲染",
+    verify: "验证并进入",
     verifying: "验证中...",
-    email: "工作邮箱",
-    code: "6位安全码",
-    signIn: "登录账号",
+    email: "邮箱",
+    code: "6 位验证码",
+    signIn: "登录",
     signOut: "退出登录",
     close: "关闭",
     account: "账户",
     credits: "积分",
-    provider: "服务",
+    provider: "模型服务",
     status: "状态",
-    providerAvailable: "集群可用",
+    providerAvailable: "Nano Banana 2",
     providerUnavailable: "不可用",
-    providerUnknown: "待确认",
-    ready: "已就绪",
+    providerUnknown: "Nano Banana 2",
+    ready: "可用",
     checking: "检查中",
     authRequired: "需要登录",
     signedIn: "已登录",
@@ -190,13 +190,13 @@ const copy: Record<Locale, Copy> = {
     resultError: "生成失败",
     workspaceEyebrow: "SparkPost Studio",
     workspaceTitle: "工作台",
-    workspaceBody: "主界面聚焦 prompt、生成动作、结果预览和任务信息。",
+    workspaceBody: "主界面聚焦 Prompt、生成、结果预览与任务信息。",
     workspaceNotesTitle: "说明",
-    workspaceNote1: "专注于效率，去除冗余视觉干扰。",
-    workspaceNote2: "若 Provider 异常，系统将在此暴露错误详情。",
+    workspaceNote1: "专注效率，减少无关视觉干扰。",
+    workspaceNote2: "若模型服务异常，系统会在这里明确暴露错误详情。",
     canvasTitle: "画布",
     canvasEmptyTitle: "等待引擎指令",
-    canvasEmptyBody: "提交 prompt 后，生成结果将在此画布中渲染。",
+    canvasEmptyBody: "提交 Prompt 后，生成结果将在此画布中呈现。",
     propertiesTitle: "任务属性",
     taskId: "Task ID",
     model: "底层模型",
@@ -204,30 +204,30 @@ const copy: Record<Locale, Copy> = {
     createdAt: "创建时间",
     completedAt: "完成时间",
     runtimeTitle: "系统状态",
-    continueHint: "未登录时点击渲染会弹出登录模块，验证成功后会继续原动作。",
+    continueHint: "未登录时点击渲染会弹出登录模块，验证成功后继续当前动作。",
     sessionLoadFailed: "无法加载当前会话状态。",
     sessionRefreshFailed: "无法刷新当前会话状态。",
     enterEmail: "请先输入邮箱。",
     enterPrompt: "请先输入 Prompt。",
-    enterSameEmail: "请输入接收验证码的同一个邮箱。",
+    enterSameEmail: "请输入接收验证码的同一邮箱。",
     enterCode: "请输入验证码。",
-    sentCode: "验证码已发送到 {email}。{expires}{debug}",
+    sentCode: "验证码已发送到 {email}.{expires}{debug}",
     requestTooFast: "请求过快，请在 {time} 后重试。",
-    verifyTooFast: "验证请求受限，请在 {time} 后重试。",
-    signedInNewNotice: "账户已创建，欢迎进入 SparkPost 工作台。",
+    verifyTooFast: "验证受限，请在 {time} 后重试。",
+    signedInNewNotice: "账户已创建，欢迎进入 SparkPost。",
     signedInExistingNotice: "登录成功，欢迎回到 SparkPost。",
     signedOutNotice: "你已退出 SparkPost。",
-    loginToContinue: "请先登录。我们会保留你刚才输入的 Prompt。",
+    loginToContinue: "请先登录。系统会保留你刚才输入的 Prompt。",
     generateSuccess: "生成完成，已创建 {count} 个资源。",
     unexpectedPayload: "接口返回了未预期的数据结构。",
     imagePreviewUnavailable: "资源已生成，但当前页面无法直接预览返回路径。",
-    sendCodeFailed: "验证码发送失败。",
-    verifyCodeFailed: "验证码校验失败。",
+    sendCodeFailed: "发送验证码失败。",
+    verifyCodeFailed: "校验验证码失败。",
     logoutFailed: "退出登录失败。",
     generateFailed: "图片生成失败。",
-    i2iNotice: "图生图界面已保留，但当前首条后端链路只接入文生图。",
-    inspireNotice: "灵感增强按钮暂时保留视觉位置，后续会接入真实能力。",
-    enhanceNotice: "Prompt 增强按钮暂时保留视觉位置，后续会接入真实能力。",
+    i2iNotice: "图生图区域暂时保留视觉位，当前真实链路优先支持文生图。",
+    inspireNotice: "灵感按钮暂时保留视觉入口，后续再接入真实能力。",
+    enhanceNotice: "扩写按钮暂时保留视觉入口，后续再接入真实能力。",
   },
   en: {
     brand: "SparkPost",
@@ -237,18 +237,18 @@ const copy: Record<Locale, Copy> = {
     heroPrimary: "Start Free Trial",
     heroSecondary: "Explore Features",
     feature1Title: "Gemini Intelligence",
-    feature1Body: "Powered by Google Gemini for prompt enhancement and inspiration. Turn simple phrases into professional-grade incantations instantly.",
+    feature1Body: "Powered by Gemini for prompt enhancement and inspiration. Turn simple phrases into production-ready creative input.",
     feature2Title: "Seamless Workflow",
-    feature2Body: "Say goodbye to clunky jumps. A pure, keyboard-friendly interface supporting hot-switching in any state to keep your flow unbroken.",
+    feature2Body: "A pure, keyboard-friendly interface that supports context switching in any state without breaking flow.",
     feature3Title: "Real-time Sync",
-    feature3Body: "WYSIWYG credit indicators and cluster status monitoring. Enterprise-grade reliability ensures every render job is delivered.",
+    feature3Body: "WYSIWYG credits and runtime status help you understand whether the generation path is currently usable.",
     playgroundTitle: "Experience the Studio",
-    playgroundBody: "Enter your inspiration below to preview the professional interaction of our generation studio without logging in.",
-    promptLabel: "Prompt",
-    promptPlaceholder: "e.g., A cinematic close-up of a high-tech product, translucent glass, dark gray background, soft cyan ambient light, 8k, Octane render...",
+    playgroundBody: "Enter your inspiration below to preview the generation workspace without signing in.",
+    promptLabel: "PROMPT",
+    promptPlaceholder: "e.g., A cinematic close-up of a high-tech product, translucent glass, dark gray background, soft cyan ambient light, 8k, Octane render.",
     renderNow: "Render Now",
     rendering: "Rendering...",
-    promptHint: "The first backend path is wired for real text-to-image generation. Your prompt stays intact across sign-in.",
+    promptHint: "The current vertical slice is real text-to-image. Your prompt stays intact across sign-in.",
     t2iMode: "Text to Image",
     i2iMode: "Image to Image",
     uploadReference: "Reference Image",
@@ -256,42 +256,42 @@ const copy: Record<Locale, Copy> = {
     inspire: "✨ Inspire Me",
     enhance: "✨ Enhance",
     comingSoon: "Coming soon",
-    authTitle: "Verify to unlock render",
-    authBody: "Your inspiration is saved. The render engine will start automatically after a quick email verification.",
+    authTitle: "Verify to continue",
+    authBody: "Your prompt is preserved. After a quick email verification, the pending action continues automatically.",
     authHint: "In development, the debug code is autofilled here when the backend returns it.",
     sendCode: "Get Code",
     sendingCode: "Sending...",
-    verify: "Verify & Render",
+    verify: "Verify & Continue",
     verifying: "Verifying...",
-    email: "Work Email",
+    email: "Email",
     code: "6-digit Code",
     signIn: "Sign In",
     signOut: "Log Out",
     close: "Close",
     account: "Account",
     credits: "Credits",
-    provider: "Provider",
+    provider: "Model Service",
     status: "Status",
-    providerAvailable: "Cluster Online",
+    providerAvailable: "Nano Banana 2",
     providerUnavailable: "Unavailable",
-    providerUnknown: "Unknown",
-    ready: "Ready",
+    providerUnknown: "Nano Banana 2",
+    ready: "Available",
     checking: "Checking",
     authRequired: "Auth required",
-    signedIn: "Authenticated",
-    signedOut: "Unauthenticated",
+    signedIn: "Signed in",
+    signedOut: "Signed out",
     resultEmpty: "Empty",
     resultSuccess: "Success",
     resultError: "Error",
     workspaceEyebrow: "SparkPost Studio",
-    workspaceTitle: "Studio",
-    workspaceBody: "Focused purely on composition, generation, and task details.",
+    workspaceTitle: "Workspace",
+    workspaceBody: "The interface stays focused on prompt input, generation, preview, and task data.",
     workspaceNotesTitle: "Notes",
-    workspaceNote1: "Optimized for efficiency, removing visual noise.",
-    workspaceNote2: "Provider issues will be surfaced here clearly.",
+    workspaceNote1: "Optimized for efficiency with minimal visual noise.",
+    workspaceNote2: "Provider issues are surfaced here clearly.",
     canvasTitle: "Canvas",
     canvasEmptyTitle: "Awaiting Instructions",
-    canvasEmptyBody: "Submit a prompt to render the output on this canvas.",
+    canvasEmptyBody: "Submit a prompt and the generated result will render on this canvas.",
     propertiesTitle: "Properties",
     taskId: "Task ID",
     model: "Base Model",
@@ -320,18 +320,31 @@ const copy: Record<Locale, Copy> = {
     verifyCodeFailed: "Unable to verify the code.",
     logoutFailed: "Unable to log out.",
     generateFailed: "Unable to generate image.",
-    i2iNotice: "The image-to-image panel is preserved visually, but the first backend slice currently supports text-to-image only.",
+    i2iNotice: "The image-to-image panel is visually preserved, but the current real backend path supports text-to-image only.",
     inspireNotice: "This inspiration control keeps its visual position for now and will be wired later.",
     enhanceNotice: "This enhancement control keeps its visual position for now and will be wired later.",
   },
 };
-
 const timeLeftText = (seconds: number) =>
   seconds <= 0 ? "0s" : seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60 || ""}`.trim();
 const formatDate = (value: string | null, locale: Locale) =>
   value ? new Date(value).toLocaleString(locale === "zh" ? "zh-CN" : "en-US", { hour12: false }) : "-";
 const formatTemplate = (template: string, values: Record<string, string | number>) => template.replace(/\{(\w+)\}/g, (_, key: string) => String(values[key] ?? ""));
 const primaryImageUrl = (task: ImageTaskResult | null) => task?.assets[0]?.fileUrl ?? null;
+const DEFAULT_IMAGE_MODEL_ID = "gemini-3.1-flash-image-openai";
+const MODEL_DISPLAY_NAMES: Record<string, string> = {
+  "gemini-3.1-flash-image-openai": "Nano Banana 2",
+  "gemini-3.1-image-openai": "Nano Banana 2",
+  "gemini-3.1-image": "Nano Banana 2",
+  "dall-e-3": "DALL-E 3",
+  dalle3: "DALL-E 3",
+};
+
+const getDisplayImageModel = (model: string | null | undefined) => {
+  const normalized = (model ?? DEFAULT_IMAGE_MODEL_ID).trim().toLowerCase();
+  return MODEL_DISPLAY_NAMES[normalized] ?? model ?? DEFAULT_IMAGE_MODEL_ID;
+};
+
 const noticeClasses = (type: Notice["type"]) =>
   type === "error"
     ? "border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-100"
@@ -420,6 +433,22 @@ export default function Home() {
     window.localStorage.setItem("sparkpost-locale", locale);
   }, [locale]);
 
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadGenerateStatus() {
+      try {
+        const response = await fetch("/api/generate/status", { cache: "no-store", signal: controller.signal });
+        if (!response.ok) return;
+        const data = (await response.json()) as { status?: SystemStatus };
+        if (!controller.signal.aborted && (data.status === "available" || data.status === "unavailable" || data.status === "unknown")) {
+          setSystemStatus(data.status);
+        }
+      } catch {}
+    }
+    void loadGenerateStatus();
+    return () => controller.abort();
+  }, []);
   useEffect(() => {
     if (authStatus === "signedOut" && showLoginPanel && pendingGenerateAfterLogin) {
       setAuthNotice({ type: "info", text: t.loginToContinue });
@@ -671,7 +700,7 @@ export default function Home() {
   }
 
   const statusCards = [
-    { label: t.provider, value: systemStatus === "available" ? t.providerAvailable : systemStatus === "unavailable" ? t.providerUnavailable : t.providerUnknown },
+    { label: t.provider, value: getDisplayImageModel(generationTask?.model) },
     { label: t.status, value: isGeneratingImage ? t.rendering : interactionStatus === "authRequired" ? t.authRequired : interactionStatus === "checking" ? t.checking : t.ready },
     { label: t.account, value: authStatus === "signedIn" ? t.signedIn : authStatus === "signedOut" ? t.signedOut : t.checking },
     { label: t.canvasTitle, value: resultStatus === "success" ? t.resultSuccess : resultStatus === "error" ? t.resultError : t.resultEmpty },
@@ -845,7 +874,7 @@ export default function Home() {
                     {generationNotice ? <NoticeBanner notice={generationNotice} /> : null}
                     {authNotice && showLoginPanel ? <NoticeBanner notice={authNotice} /> : null}
                     <button type="button" onClick={startRenderIntent} disabled={!canRender} className={`w-full rounded-xl px-4 py-3.5 text-sm font-semibold transition duration-200 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? "bg-white text-black hover:bg-slate-200" : "bg-gray-900 text-white hover:bg-black"}`}>{isGeneratingImage ? t.rendering : t.renderNow}</button>
-                    <p className={`text-center text-[11px] leading-relaxed ${isDark ? "text-[#666]" : "text-gray-500"}`}>{locale === "zh" ? "免登录即可输入 Prompt。在执行核心渲染时，我们将无缝保存你的进度并引导完成验证。" : "Enter your prompt without logging in. We will seamlessly save your progress and prompt you to verify when you execute the core render."}</p>
+                    <p className={`text-center text-[11px] leading-relaxed ${isDark ? "text-[#666]" : "text-gray-500"}`}>{locale === "zh" ? "无需登录即可先输入 Prompt。系统会保留你的进度，并在你执行核心渲染时提示完成验证。" : "Enter your prompt without logging in. We will seamlessly save your progress and prompt you to verify when you execute the core render."}</p>
                     {(mode === "i2i" || hasReference) ? <div className="rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-xs leading-6 text-amber-100">{t.i2iNotice}</div> : null}
                   </div>
                 </div>
@@ -864,8 +893,8 @@ export default function Home() {
                   <div className={`p-3 rounded-xl border ${isDark ? "border-white/5 bg-[#0A0A0A]" : "border-gray-200 bg-gray-50"}`}>
                     <div className={`text-[10px] uppercase tracking-wider mb-2 ${isDark ? "text-[#666]" : "text-gray-500"}`}>{t.provider}</div>
                     <div className={`flex items-center gap-2 text-xs font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
-                      <span className={`w-2 h-2 rounded-full ${systemStatus === "available" ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : systemStatus === "unavailable" ? "bg-red-500" : "bg-gray-500"}`} />
-                      {systemStatus === "available" ? t.providerAvailable : systemStatus === "unavailable" ? t.providerUnavailable : t.providerUnknown}
+                      <span className={`w-2 h-2 rounded-full ${systemStatus === "available" ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : systemStatus === "unavailable" ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.45)]" : "bg-gray-500"}`} />
+                      {getDisplayImageModel(generationTask?.model)}
                     </div>
                   </div>
                   <div className={`p-3 rounded-xl border ${isDark ? "border-white/5 bg-[#0A0A0A]" : "border-gray-200 bg-gray-50"}`}>
@@ -921,7 +950,7 @@ export default function Home() {
                     <div className={`text-xs font-semibold uppercase tracking-wider mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>{t.propertiesTitle}</div>
                     <div className={`space-y-3 text-xs p-4 rounded-xl border ${isDark ? "bg-[#0A0A0A] border-white/5" : "bg-gray-50 border-gray-200"}`}>
                       <div className="flex justify-between items-center"><span className={isDark ? "text-[#666]" : "text-gray-500"}>{t.taskId}</span><span className={isDark ? "text-[#CCC] font-mono" : "text-gray-700 font-mono"}>{generationTask.id.substring(0, 8)}...</span></div>
-                      <div className="flex justify-between items-center"><span className={isDark ? "text-[#666]" : "text-gray-500"}>{t.model}</span><span className={`px-2 py-0.5 rounded ${isDark ? "text-[#CCC] bg-white/5" : "text-gray-700 bg-black/5"}`}>{generationTask.model || "-"}</span></div>
+                      <div className="flex justify-between items-center"><span className={isDark ? "text-[#666]" : "text-gray-500"}>{t.model}</span><span className={`px-2 py-0.5 rounded ${isDark ? "text-[#CCC] bg-white/5" : "text-gray-700 bg-black/5"}`}>{getDisplayImageModel(generationTask?.model)}</span></div>
                       <div className="flex justify-between items-center"><span className={isDark ? "text-[#666]" : "text-gray-500"}>{t.cost}</span><span className={`flex items-center gap-1 ${isDark ? "text-[#CCC]" : "text-gray-700"}`}><span className={isDark ? "text-cyan-400" : "text-cyan-600"}><SparklesIcon /></span>{generationTask.costCredits} {t.credits}</span></div>
                       <div className="flex justify-between items-center"><span className={isDark ? "text-[#666]" : "text-gray-500"}>{t.completedAt}</span><span className={isDark ? "text-[#CCC]" : "text-gray-700"}>{formatDate(generationTask.completedAt, locale)}</span></div>
                     </div>
@@ -996,6 +1025,11 @@ export default function Home() {
     </div>
   );
 }
+
+
+
+
+
 
 
 

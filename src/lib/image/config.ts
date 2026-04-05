@@ -1,7 +1,7 @@
-const DEFAULT_TEXT_TO_IMAGE_COST = 10;
+﻿const DEFAULT_TEXT_TO_IMAGE_COST = 10;
 const DEFAULT_UPLOAD_DIR = "./uploads";
 const DEFAULT_IMAGE_BACKEND = "official";
-const DEFAULT_IMAGE_MODEL = "gpt-image-1";
+const DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image-openai";
 const DEFAULT_IMAGE_BASE_URL = "https://api.openai.com/v1";
 
 export const imageConfig = {
@@ -15,5 +15,6 @@ export const imageConfig = {
 };
 
 export function isImageBackendConfigured() {
-  return imageConfig.backend === "official" && imageConfig.apiKey.length > 0;
+  return ["official", "relay"].includes(imageConfig.backend) && imageConfig.apiKey.length > 0;
 }
+

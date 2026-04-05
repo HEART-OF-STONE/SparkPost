@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+﻿import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
@@ -42,6 +42,30 @@ type ProviderResult = {
   model: string;
 };
 
+function getImageGenerationEndpoint() {
+  if (imageConfig.baseUrl.endsWith("/images/generations")) {
+    return imageConfig.baseUrl;
+  }
+
+  return `${imageConfig.baseUrl}/images/generations`;
+}
+
+async function fetchRemoteImageBuffer(url: string) {
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new ImageGenerationProviderError("Image provider returned an unreadable image URL.");
+  }
+
+  const mimeType = response.headers.get("content-type") || "image/png";
+  const arrayBuffer = await response.arrayBuffer();
+
+  return {
+    buffer: Buffer.from(arrayBuffer),
+    mimeType,
+  };
+}
+
 async function callOfficialImageProvider(prompt: string): Promise<ProviderResult> {
   if (!isImageBackendConfigured()) {
     throw new ImageGenerationConfigError(
@@ -49,7 +73,7 @@ async function callOfficialImageProvider(prompt: string): Promise<ProviderResult
     );
   }
 
-  const response = await fetch(`${imageConfig.baseUrl}/images/generations`, {
+  const response = await fetch(getImageGenerationEndpoint(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -64,7 +88,7 @@ async function callOfficialImageProvider(prompt: string): Promise<ProviderResult
   const body = (await response.json().catch(() => null)) as
     | {
         error?: { message?: string };
-        data?: Array<{ b64_json?: string }>;
+        data?: Array<{ b64_json?: string; url?: string }>;
       }
     | null;
 
@@ -74,20 +98,29 @@ async function callOfficialImageProvider(prompt: string): Promise<ProviderResult
     );
   }
 
-  const encodedImage = body?.data?.[0]?.b64_json;
-  if (!encodedImage) {
-    throw new ImageGenerationProviderError("Image provider returned no image data.");
+  const imageData = body?.data?.[0];
+  if (imageData?.b64_json) {
+    return {
+      buffer: Buffer.from(imageData.b64_json, "base64"),
+      mimeType: "image/png",
+      model: imageConfig.model,
+    };
   }
 
-  return {
-    buffer: Buffer.from(encodedImage, "base64"),
-    mimeType: "image/png",
-    model: imageConfig.model,
-  };
+  if (imageData?.url) {
+    const remoteImage = await fetchRemoteImageBuffer(imageData.url);
+    return {
+      buffer: remoteImage.buffer,
+      mimeType: remoteImage.mimeType,
+      model: imageConfig.model,
+    };
+  }
+
+  throw new ImageGenerationProviderError("Image provider returned no image data.");
 }
 
 async function generateImageBuffer(prompt: string) {
-  if (imageConfig.backend === "official") {
+  if (["official", "relay"].includes(imageConfig.backend)) {
     return callOfficialImageProvider(prompt);
   }
 
@@ -217,3 +250,4 @@ export async function generateTextToImageForUser(userId: string, prompt: string)
     throw error;
   }
 }
+

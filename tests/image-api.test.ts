@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
+﻿/* eslint-disable @typescript-eslint/no-require-imports */
 import assert from "node:assert/strict";
 
 declare const test: (name: string, fn: () => Promise<void> | void) => void;
@@ -98,7 +98,7 @@ test("POST /api/generate/image returns task payload on success", async () => {
           prompt,
           createdAt: new Date("2026-03-29T12:00:00.000Z"),
           completedAt: new Date("2026-03-29T12:00:03.000Z"),
-          model: "gpt-image-1",
+          model: "gemini-3.1-flash-image-openai",
           costCredits: 10,
           remainingCredits: 10,
           assets: [
@@ -131,6 +131,7 @@ test("POST /api/generate/image returns task payload on success", async () => {
   assert.equal(result.body.ok, true);
   assert.equal(result.body.task.id, "task-1");
   assert.equal(result.body.task.status, "succeeded");
-  assert.equal(result.body.task.model, "gpt-image-1");
+  assert.equal(result.body.task.model, "gemini-3.1-flash-image-openai");
   assert.equal(result.body.task.assets[0]?.fileUrl, "/uploads/generated/task-1.png");
 });
+
