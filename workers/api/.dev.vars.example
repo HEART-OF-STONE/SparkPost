@@ -1,0 +1,12 @@
+# Copy this file to workers/api/.dev.vars for local wrangler dev.
+SESSION_SECRET=sparkpost-workers-dev-secret
+DEV_AUTH_DEBUG_CODE=true
+AUTH_CODE_TTL_MINUTES=10
+AUTH_CODE_COOLDOWN_SECONDS=60
+AUTH_VERIFY_CODE_MAX_ATTEMPTS=5
+AUTH_VERIFY_CODE_LOCKOUT_SECONDS=900
+AUTH_SESSION_TTL_DAYS=7
+SIGNUP_BONUS_CREDITS=20
+IMAGE_BACKEND=official
+IMAGE_MODEL=dall-e-3
+IMAGE_API_KEY=replace_me_for_image_generation
