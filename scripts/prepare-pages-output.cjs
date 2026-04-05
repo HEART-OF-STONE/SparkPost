@@ -2,98 +2,64 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const rootDir = process.cwd();
-const openNextDir = path.join(rootDir, ".open-next");
 const pagesDir = path.join(rootDir, ".pages");
-const assetsDir = path.join(openNextDir, "assets");
-const workerEntry = path.join(openNextDir, "worker.js");
-const wrappedWorkerEntry = path.join(pagesDir, "_worker.js");
+const nextServerAppDir = path.join(rootDir, ".next", "server", "app");
+const nextStaticDir = path.join(rootDir, ".next", "static");
+const publicDir = path.join(rootDir, "public");
+const indexHtmlPath = path.join(nextServerAppDir, "index.html");
+const faviconBodyPath = path.join(nextServerAppDir, "favicon.ico.body");
 
-if (!fs.existsSync(workerEntry)) {
-  throw new Error(
-    "Missing .open-next/worker.js. Run the OpenNext build before preparing the Pages output.",
-  );
+if (!fs.existsSync(indexHtmlPath)) {
+  throw new Error("Missing .next/server/app/index.html. Run next build before preparing the Pages output.");
 }
 
-if (!fs.existsSync(assetsDir)) {
-  throw new Error(
-    "Missing .open-next/assets. Run the OpenNext build before preparing the Pages output.",
-  );
+if (!fs.existsSync(nextStaticDir)) {
+  throw new Error("Missing .next/static. Run next build before preparing the Pages output.");
 }
 
 fs.rmSync(pagesDir, { recursive: true, force: true });
 fs.mkdirSync(pagesDir, { recursive: true });
 
-copyTree(assetsDir, pagesDir);
-copyOpenNextRuntime(openNextDir, path.join(pagesDir, ".open-next"));
-removeBundledEnvFiles(path.join(pagesDir, ".open-next"));
+fs.copyFileSync(indexHtmlPath, path.join(pagesDir, "index.html"));
 
-fs.writeFileSync(
-  wrappedWorkerEntry,
-  [
-    'export * from "./.open-next/worker.js";',
-    '',
-    'export default {',
-    '  async fetch(request, env, ctx) {',
-    '    try {',
-    '      const mod = await import("./.open-next/worker.js");',
-    '      return await mod.default.fetch(request, env, ctx);',
-    '    } catch (error) {',
-    '      const name = error instanceof Error && error.name ? error.name : "Error";',
-    '      const message = error instanceof Error && error.message ? error.message : String(error);',
-    '      return new Response(`Runtime error: ${name}\nMessage: ${message}`, {',
-    '        status: 500,',
-    '        headers: {',
-    '          "content-type": "text/plain; charset=utf-8",',
-    '          "cache-control": "no-store",',
-    '        },',
-    '      });',
-    '    }',
-    '  },',
-    '};',
-    '',
-  ].join("\n"),
-  "utf8",
-);
+if (fs.existsSync(faviconBodyPath)) {
+  fs.copyFileSync(faviconBodyPath, path.join(pagesDir, "favicon.ico"));
+}
 
-console.log("Prepared Cloudflare Pages output in .pages");
+copyDirContents(nextStaticDir, path.join(pagesDir, "_next", "static"));
 
-function copyOpenNextRuntime(sourceDir, destinationDir) {
+if (fs.existsSync(publicDir)) {
+  copyPublicAssets(publicDir, pagesDir);
+}
+
+console.log("Prepared static Cloudflare Pages output in .pages");
+
+function copyDirContents(sourceDir, destinationDir) {
   fs.mkdirSync(destinationDir, { recursive: true });
 
   for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
-    if (entry.name === "assets") {
-      continue;
-    }
-
     const sourcePath = path.join(sourceDir, entry.name);
     const destinationPath = path.join(destinationDir, entry.name);
-    copyTree(sourcePath, destinationPath);
-  }
-}
-
-function copyTree(sourcePath, destinationPath) {
-  fs.cpSync(sourcePath, destinationPath, {
-    recursive: true,
-    dereference: true,
-    force: true,
-  });
-}
-
-function removeBundledEnvFiles(directoryPath) {
-  if (!fs.existsSync(directoryPath)) {
-    return;
-  }
-
-  for (const entry of fs.readdirSync(directoryPath, { withFileTypes: true })) {
-    const entryPath = path.join(directoryPath, entry.name);
 
     if (entry.isDirectory()) {
-      removeBundledEnvFiles(entryPath);
+      copyDirContents(sourcePath, destinationPath);
       continue;
     }
 
-    if (entry.isFile() && entry.name === ".env") {
-      fs.rmSync(entryPath, { force: true });
+    fs.copyFileSync(sourcePath, destinationPath);
+  }
+}
+
+function copyPublicAssets(sourceDir, destinationDir) {
+  for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+    const sourcePath = path.join(sourceDir, entry.name);
+    const destinationPath = path.join(destinationDir, entry.name);
+
+    if (entry.isDirectory()) {
+      copyDirContents(sourcePath, destinationPath);
+      continue;
     }
+
+    fs.copyFileSync(sourcePath, destinationPath);
   }
 }
