@@ -1,5 +1,7 @@
 import { Prisma } from "@prisma/client";
 
+import { DatabaseUnavailableError } from "@/lib/prisma";
+
 const DATABASE_UNAVAILABLE_CODES = new Set([
   "P1001",
   "P1002",
@@ -9,6 +11,10 @@ const DATABASE_UNAVAILABLE_CODES = new Set([
 ]);
 
 export function isDatabaseUnavailableError(error: unknown) {
+  if (error instanceof DatabaseUnavailableError) {
+    return true;
+  }
+
   if (
     error instanceof Prisma.PrismaClientInitializationError ||
     error instanceof Prisma.PrismaClientRustPanicError
