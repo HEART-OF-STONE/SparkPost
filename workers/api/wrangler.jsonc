@@ -15,7 +15,7 @@
     {
       "binding": "SPARKPOST_DB",
       "database_name": "sparkpost",
-      "database_id": "REPLACE_WITH_REAL_D1_DATABASE_ID"
+      "database_id": "b63555f6-af09-41e7-b9a6-7c2947ca27e0"
     }
   ],
   "r2_buckets": [
