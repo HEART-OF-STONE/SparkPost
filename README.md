@@ -63,7 +63,8 @@ npm run d1:migrate:remote
 
 默认变量已经写在 [workers/api/wrangler.jsonc](./workers/api/wrangler.jsonc)：
 - `IMAGE_BACKEND=official`
-- `IMAGE_MODEL=gemini-3.1-flash-image-openai`
+- `IMAGE_MODEL=dall-e-3`
+- 当前 README 中的图片模型展示名称统一按官方模型示例 `DALL-E 3` 说明
 
 仍需通过 Wrangler secret 或 Cloudflare 后台补充：
 - `SESSION_SECRET`
