@@ -1,31 +1,36 @@
 {
-  "name": "sparkpost",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
-    "test:auth": "node scripts/run-auth-api-tests.cjs",
-    "test:auth:db": "node scripts/run-auth-db-smoke.cjs",
-    "test:image": "node scripts/run-image-api-tests.cjs"
-  },
-  "dependencies": {
-    "@prisma/client": "^6.19.2",
-    "next": "16.2.1",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.1",
-    "prisma": "^6.19.2",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  }
+    "name":  "sparkpost",
+    "version":  "0.1.0",
+    "private":  true,
+    "scripts":  {
+                    "dev":  "next dev",
+                    "build":  "next build",
+                    "start":  "next start",
+                    "lint":  "eslint",
+                    "test:auth":  "node scripts/run-auth-api-tests.cjs",
+                    "test:auth:db":  "node scripts/run-auth-db-smoke.cjs",
+                    "test:image":  "node scripts/run-image-api-tests.cjs",
+                    "cf:build":  "node ./node_modules/@opennextjs/cloudflare/dist/cli/index.js build",
+                    "cf:preview":  "node ./node_modules/@opennextjs/cloudflare/dist/cli/index.js preview",
+                    "cf:deploy":  "node ./node_modules/@opennextjs/cloudflare/dist/cli/index.js deploy"
+                },
+    "dependencies":  {
+                         "@prisma/client":  "^6.19.2",
+                         "next":  "16.2.1",
+                         "react":  "19.2.4",
+                         "react-dom":  "19.2.4"
+                     },
+    "devDependencies":  {
+                            "@tailwindcss/postcss":  "^4",
+                            "@types/node":  "^20",
+                            "@types/react":  "^19",
+                            "@types/react-dom":  "^19",
+                            "eslint":  "^9",
+                            "eslint-config-next":  "16.2.1",
+                            "prisma":  "^6.19.2",
+                            "tailwindcss":  "^4",
+                            "typescript":  "^5",
+                            "@opennextjs/cloudflare":  "^1.0.0",
+                            "wrangler":  "^4.11.1"
+                        }
 }

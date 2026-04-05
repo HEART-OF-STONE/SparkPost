@@ -4,6 +4,7 @@ node_modules/
 
 # next build outputs
 .next/
+.open-next/
 out/
 
 # general build outputs
