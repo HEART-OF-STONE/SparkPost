@@ -334,10 +334,10 @@ const formatTemplate = (template: string, values: Record<string, string | number
 const primaryImageUrl = (task: ImageTaskResult | null) => task?.assets[0]?.fileUrl ?? null;
 const noticeClasses = (type: Notice["type"]) =>
   type === "error"
-    ? "border-rose-500/30 bg-rose-500/10 text-rose-100"
+    ? "border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-100"
     : type === "success"
-      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-100"
-      : "border-white/15 bg-white/5 text-slate-200";
+      ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100"
+      : "border-gray-200 bg-gray-100 text-gray-700 dark:border-white/15 dark:bg-white/5 dark:text-slate-200";
 
 const BrainIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" /><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" /><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4 4.5 4.5 0 0 1 3-4 4.5 4.5 0 0 1 3-4Z" /></svg>;
 const ShieldIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" /></svg>;
@@ -354,7 +354,7 @@ function NoticeBanner({ notice }: { notice: Notice }) {
 
 function VisualHero({ isDark }: { isDark: boolean }) {
   return (
-    <div className={`mt-16 w-full max-w-6xl mx-auto relative rounded-3xl overflow-hidden border shadow-2xl h-[400px] md:h-[600px] group ${isDark ? "border-white/5 bg-black" : "border-gray-200 bg-white"}`}>
+    <div className={`mt-16 w-full max-w-[1720px] mx-auto relative rounded-3xl overflow-hidden border shadow-2xl h-[520px] md:h-[760px] group ${isDark ? "border-white/5 bg-black" : "border-gray-200 bg-white"}`}>
       <div className={`absolute inset-0 z-10 ${isDark ? "bg-gradient-to-t from-black via-black/20 to-transparent" : "bg-gradient-to-t from-gray-50 via-gray-50/20 to-transparent"}`} />
       <div className={`absolute inset-0 z-10 ${isDark ? "bg-gradient-to-b from-black via-transparent to-transparent" : "bg-gradient-to-b from-gray-50 via-transparent to-transparent"}`} />
       <div className={`absolute inset-0 z-10 ${isDark ? "bg-gradient-to-r from-black via-transparent to-black" : "bg-gradient-to-r from-gray-50 via-transparent to-gray-50"}`} />
@@ -705,11 +705,11 @@ export default function Home() {
 
   return (
     <div className={isDark ? "dark" : ""}>
-      <main className={`min-h-screen selection:bg-cyan-500/30 ${isDark ? "bg-[#000] text-[#EDEDED]" : "bg-gray-50 text-gray-900"}`}>
+      <main className={`flex min-h-screen flex-col selection:bg-cyan-500/30 ${isDark ? "bg-[#000] text-[#EDEDED]" : "bg-gray-50 text-gray-900"}`}>
 
         <header className={`sticky top-0 z-50 flex h-16 shrink-0 items-center justify-between border-b px-6 backdrop-blur-md transition-colors duration-300 ${isDark ? "border-white/10 bg-black/50" : "border-gray-200 bg-white/70"}`}>
           <div className="flex items-center gap-3 group cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-            <div className="relative flex h-8 w-8 items-center justify-center rounded-xl bg-white dark:bg-[#0A0A0A] border border-gray-200 dark:border-white/10 shadow-sm transition-transform duration-300 group-hover:scale-105 overflow-hidden">
+            <div className={`relative flex h-8 w-8 items-center justify-center rounded-xl border shadow-sm transition-transform duration-300 group-hover:scale-105 overflow-hidden ${isDark ? "bg-[#06080d] border-cyan-500/20 shadow-[0_0_0_1px_rgba(34,211,238,0.08),0_12px_24px_rgba(0,0,0,0.28)]" : "bg-white border-gray-200"}`}>
               <div className="absolute h-5 w-5 rounded-full border border-cyan-400/40 animate-ping" style={{ animationDuration: "3s" }} />
               <div className="absolute h-5 w-5 rounded-full border border-indigo-500/30 animate-ping" style={{ animationDuration: "3s", animationDelay: "1.5s" }} />
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="relative z-10">
@@ -729,7 +729,7 @@ export default function Home() {
                 </defs>
               </svg>
             </div>
-            <span className={`text-[15px] font-bold tracking-wide transition-colors ${isDark ? "text-white group-hover:text-cyan-400" : "text-gray-900 group-hover:text-cyan-600"}`}>{t.brand}</span>
+            <span className={`text-[15px] font-bold tracking-wide transition-colors ${isDark ? "text-cyan-300 group-hover:text-cyan-200" : "text-gray-900 group-hover:text-cyan-600"}`}>{t.brand}</span>
             <div className={`mx-2 h-4 w-px ${isDark ? "bg-white/20" : "bg-gray-300"}`} />
             <button type="button" onClick={(event) => { event.stopPropagation(); setIsDark((current) => !current); }} className={`rounded-full p-1.5 transition-colors ${isDark ? "text-gray-400 hover:bg-white/10" : "text-gray-500 hover:bg-gray-200"}`}>
               {isDark ? <SunIcon /> : <MoonIcon />}
@@ -747,22 +747,22 @@ export default function Home() {
 
             {user ? (
               <div className="flex items-center gap-3">
-                <div className="hidden sm:flex items-center gap-1.5 bg-gray-100 dark:bg-white/5 px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/10 text-xs font-medium">
-                  <div className="text-cyan-600 dark:text-cyan-400"><SparklesIcon /></div>
-                  <span className="text-gray-900 dark:text-white">{user.creditBalance} {t.credits}</span>
+                <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium ${isDark ? "bg-white/5 border-white/10" : "bg-gray-100 border-gray-200"}`}>
+                  <div className={isDark ? "text-cyan-400" : "text-cyan-600"}><SparklesIcon /></div>
+                  <span className={isDark ? "text-white" : "text-gray-900"}>{user.creditBalance} {t.credits}</span>
                 </div>
                 <div className="relative" ref={menuRef}>
-                  <button type="button" onClick={() => setShowAccountMenu((current) => !current)} className="flex items-center justify-center h-8 w-8 rounded-full bg-gray-200 dark:bg-[#111] border border-gray-300 dark:border-white/10 text-gray-700 dark:text-gray-300 text-xs font-medium transition-colors hover:bg-gray-300 dark:hover:bg-[#222] shadow-sm">
+                  <button type="button" onClick={() => setShowAccountMenu((current) => !current)} className={`flex items-center justify-center h-8 w-8 rounded-full border text-xs font-medium transition-colors shadow-sm ${isDark ? "bg-[#111] border-white/10 text-gray-300 hover:bg-[#222]" : "bg-gray-200 border-gray-300 text-gray-700 hover:bg-gray-300"}`}>
                     {accountInitials}
                   </button>
                   {showAccountMenu ? (
-                    <div className="absolute right-0 top-[calc(100%+12px)] z-50 w-56 rounded-xl border border-gray-200 dark:border-white/10 bg-white/95 dark:bg-[#0A0A0A]/95 backdrop-blur-xl shadow-2xl overflow-hidden">
-                      <div className="p-4 border-b border-gray-100 dark:border-white/10">
-                        <div className="text-xs text-gray-500 dark:text-[#888] truncate">{user.email}</div>
-                        <div className="text-sm font-semibold mt-1 text-gray-900 dark:text-white">{user.creditBalance} {t.credits}</div>
+                    <div className={`absolute right-0 top-[calc(100%+12px)] z-50 w-56 rounded-xl border backdrop-blur-xl shadow-2xl overflow-hidden ${isDark ? "border-white/10 bg-[#0A0A0A]/95" : "border-gray-200 bg-white/95"}`}>
+                      <div className={`p-4 border-b ${isDark ? "border-white/10" : "border-gray-100"}`}>
+                        <div className={`text-xs truncate ${isDark ? "text-[#888]" : "text-gray-500"}`}>{user.email}</div>
+                        <div className={`text-sm font-semibold mt-1 ${isDark ? "text-white" : "text-gray-900"}`}>{user.creditBalance} {t.credits}</div>
                       </div>
                       <div className="p-1.5">
-                        <button type="button" onClick={() => void handleLogout()} className="w-full text-left rounded-lg px-3 py-2 text-xs text-gray-600 dark:text-[#CCC] hover:bg-gray-100 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-colors">
+                        <button type="button" onClick={() => void handleLogout()} className={`w-full text-left rounded-lg px-3 py-2 text-xs transition-colors ${isDark ? "text-[#CCC] hover:bg-white/10 hover:text-white" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}`}>
                           {t.signOut}
                         </button>
                       </div>
@@ -782,21 +782,23 @@ export default function Home() {
           <div className="pb-24">
             <section className="relative min-h-[85vh] justify-center overflow-hidden px-5 pt-24 pb-16 sm:px-8">
               <div className={`pointer-events-none absolute left-1/2 top-1/2 h-[600px] w-[800px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-[120px] ${isDark ? "bg-cyan-500/20" : "bg-cyan-400/10"}`} />
-              <div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center text-center">
-                <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${isDark ? "border-cyan-500/20 bg-cyan-500/10 text-cyan-300" : "border-cyan-500/20 bg-cyan-50 text-cyan-600"}`}><span className={`h-2 w-2 rounded-full animate-pulse ${isDark ? "bg-cyan-400" : "bg-cyan-500"}`} />{t.heroBadge}</div>
-                <h1 className={`mt-10 max-w-5xl whitespace-pre-line bg-gradient-to-b bg-clip-text text-5xl font-bold leading-[1.1] tracking-tighter text-transparent md:text-7xl ${isDark ? "from-white to-white/60" : "from-gray-900 to-gray-500"}`}>{t.heroTitle}</h1>
-                <p className={`mt-6 max-w-2xl text-lg leading-relaxed sm:text-xl ${isDark ? "text-[#888]" : "text-gray-600"}`}>{t.heroBody}</p>
-                <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
-                  <button type="button" onClick={() => playgroundRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} className={`inline-flex items-center gap-2 rounded-full px-6 py-3.5 text-sm font-semibold transition duration-200 hover:-translate-y-0.5 ${isDark ? "bg-white text-black hover:bg-slate-200" : "bg-gray-900 text-white hover:bg-black"}`}>{t.heroPrimary}<PlayIcon /></button>
-                  <button type="button" onClick={() => window.scrollTo({ top: 800, behavior: "smooth" })} className={`rounded-full border px-6 py-3.5 text-sm font-medium transition ${isDark ? "border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/[0.08] hover:text-white" : "border-gray-200 bg-white text-gray-900 hover:bg-gray-50"}`}>{t.heroSecondary}</button>
+              <div className="relative z-10 mx-auto flex w-full max-w-[1720px] flex-col items-center text-center">
+                <div className="mx-auto flex max-w-[1100px] flex-col items-center text-center">
+                  <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${isDark ? "border-cyan-500/20 bg-cyan-500/10 text-cyan-300" : "border-cyan-500/20 bg-cyan-50 text-cyan-600"}`}><span className={`h-2 w-2 rounded-full animate-pulse ${isDark ? "bg-cyan-400" : "bg-cyan-500"}`} />{t.heroBadge}</div>
+                  <h1 className={`mt-10 max-w-5xl whitespace-pre-line bg-gradient-to-b bg-clip-text text-5xl font-bold leading-[1.1] tracking-tighter text-transparent md:text-7xl ${isDark ? "from-white to-white/60" : "from-gray-900 to-gray-500"}`}>{t.heroTitle}</h1>
+                  <p className={`mt-6 max-w-2xl text-lg leading-relaxed sm:text-xl ${isDark ? "text-[#888]" : "text-gray-600"}`}>{t.heroBody}</p>
+                  <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
+                    <button type="button" onClick={() => playgroundRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} className={`inline-flex items-center gap-2 rounded-full px-6 py-3.5 text-sm font-semibold transition duration-200 hover:-translate-y-0.5 ${isDark ? "bg-white text-black hover:bg-slate-200" : "bg-gray-900 text-white hover:bg-black"}`}>{t.heroPrimary}<PlayIcon /></button>
+                    <button type="button" onClick={() => window.scrollTo({ top: 800, behavior: "smooth" })} className={`rounded-full border px-6 py-3.5 text-sm font-medium transition ${isDark ? "border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/[0.08] hover:text-white" : "border-gray-200 bg-white text-gray-900 hover:bg-gray-50"}`}>{t.heroSecondary}</button>
+                  </div>
                 </div>
-                <div className="w-full max-w-6xl"><VisualHero isDark={isDark} /></div>
+                <div className="w-full max-w-[1720px]"><VisualHero isDark={isDark} /></div>
               </div>
             </section>
 
-            <section id="feature-strip" className={`mx-auto max-w-6xl border-t px-5 py-24 ${isDark ? "border-white/5" : "border-gray-200"}`}><div className="grid gap-6 md:grid-cols-3">
+            <section id="feature-strip" className={`mx-auto max-w-[1480px] border-t px-6 py-24 ${isDark ? "border-white/5" : "border-gray-200"}`}><div className="grid gap-6 md:grid-cols-3">
               {featureCards.map((card) => (
-                <article key={card.title} className={`group rounded-[1.5rem] border p-8 transition-colors ${isDark ? "border-white/5 bg-[#0A0A0A] shadow-none hover:border-cyan-500/30" : "border-gray-200 bg-white shadow-sm hover:border-cyan-500/30"}`}>
+                <article key={card.title} className={`group min-h-[320px] rounded-[1.5rem] border p-10 transition-colors ${isDark ? "border-white/5 bg-[#0A0A0A] shadow-none hover:border-cyan-500/30" : "border-gray-200 bg-white shadow-sm hover:border-cyan-500/30"}`}>
                   <div className={`flex h-12 w-12 items-center justify-center rounded-xl border transition-transform group-hover:scale-110 ${card.tint}`}>{card.icon}</div>
                   <h2 className={`mt-6 text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>{card.title}</h2>
                   <p className={`mt-3 text-sm leading-relaxed ${isDark ? "text-[#888]" : "text-gray-600"}`}>{card.body}</p>
@@ -805,13 +807,13 @@ export default function Home() {
               </div>
             </section>
 
-            <section ref={playgroundRef} className="mx-auto max-w-6xl px-5 py-24 sm:px-8">
+            <section ref={playgroundRef} className="mx-auto max-w-[1480px] px-6 py-24">
               <div className="mb-12 text-center">
                 <h2 className={`text-3xl font-bold tracking-tight ${isDark ? "text-white" : "text-gray-900"}`}>{t.playgroundTitle}</h2>
                 <p className={`mx-auto mt-4 max-w-xl text-sm ${isDark ? "text-[#888]" : "text-gray-600"}`}>{t.playgroundBody}</p>
               </div>
 
-              <div className={`overflow-hidden rounded-[2rem] border shadow-xl md:flex md:min-h-[450px] ${isDark ? "border-white/10 bg-[#0A0A0A]" : "border-gray-200 bg-white"}`}>
+              <div className={`overflow-hidden rounded-[2rem] border shadow-xl md:flex md:min-h-[520px] ${isDark ? "border-white/10 bg-[#0A0A0A]" : "border-gray-200 bg-white"}`}>
                 <div className={`w-full border-b p-6 md:w-[380px] md:border-b-0 md:border-r ${isDark ? "border-white/10 bg-[#050505]" : "border-gray-200 bg-gray-50"}`}>
                   <div className={`mb-5 flex rounded-xl border p-1 ${isDark ? "border-white/5 bg-[#111]" : "border-gray-200 bg-white shadow-sm"}`}>
                     <button type="button" onClick={() => setMode("t2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "t2i" ? (isDark ? "bg-[#1f1f1f] text-white shadow-sm" : "bg-gray-100 text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><SparklesIcon />{t.t2iMode}</button>
@@ -855,35 +857,29 @@ export default function Home() {
             </section>
           </div>
         ) : (
-          <div className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col px-5 py-8 sm:px-8 lg:flex-row lg:gap-6 lg:py-10">
-            <aside className={`w-full shrink-0 rounded-[2rem] border lg:w-[380px] ${isDark ? "border-white/10 bg-[#08090c] shadow-[0_24px_90px_rgba(0,0,0,0.42)]" : "border-gray-200 bg-white shadow-xl"}`}>
-              <div className="flex h-full flex-col gap-6 p-6">
-                <div>
-                  <div className={`text-[11px] uppercase tracking-[0.3em] ${isDark ? "text-cyan-200/80" : "text-cyan-600"}`}>{t.workspaceEyebrow}</div>
-                  <h1 className={`mt-4 text-3xl font-semibold tracking-tight ${isDark ? "text-white" : "text-gray-900"}`}>{t.workspaceTitle}</h1>
-                  <p className={`mt-4 text-sm leading-7 ${isDark ? "text-slate-400" : "text-gray-600"}`}>{t.workspaceBody}</p>
-                </div>
-
+          <div className="flex min-h-[calc(100vh-4rem)] w-full flex-1 overflow-hidden">
+            <aside className={`flex min-h-0 w-full shrink-0 flex-col overflow-y-auto border-r md:w-[380px] ${isDark ? "border-white/10 bg-[#050505]" : "border-gray-200 bg-white"}`}>
+              <div className="p-6 flex flex-col gap-6 flex-1">
                 <div className="grid grid-cols-2 gap-3">
-                  {statusCards.map((card) => (
-                    <div key={card.label} className={`rounded-xl border px-4 py-3.5 ${isDark ? "border-white/8 bg-white/[0.03]" : "border-gray-200 bg-gray-50"}`}>
-                      <div className={`text-[10px] uppercase tracking-[0.22em] ${isDark ? "text-slate-500" : "text-gray-500"}`}>{card.label}</div>
-                      <div className={`mt-2 text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>{card.value}</div>
+                  <div className={`p-3 rounded-xl border ${isDark ? "border-white/5 bg-[#0A0A0A]" : "border-gray-200 bg-gray-50"}`}>
+                    <div className={`text-[10px] uppercase tracking-wider mb-2 ${isDark ? "text-[#666]" : "text-gray-500"}`}>{t.provider}</div>
+                    <div className={`flex items-center gap-2 text-xs font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                      <span className={`w-2 h-2 rounded-full ${systemStatus === "available" ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : systemStatus === "unavailable" ? "bg-red-500" : "bg-gray-500"}`} />
+                      {systemStatus === "available" ? t.providerAvailable : systemStatus === "unavailable" ? t.providerUnavailable : t.providerUnknown}
                     </div>
-                  ))}
+                  </div>
+                  <div className={`p-3 rounded-xl border ${isDark ? "border-white/5 bg-[#0A0A0A]" : "border-gray-200 bg-gray-50"}`}>
+                    <div className={`text-[10px] uppercase tracking-wider mb-2 ${isDark ? "text-[#666]" : "text-gray-500"}`}>{t.status}</div>
+                    <div className={`flex items-center gap-2 text-xs font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                      <span className={`w-2 h-2 rounded-full ${isGeneratingImage ? "bg-cyan-500 animate-pulse shadow-[0_0_8px_rgba(6,182,212,0.6)]" : "bg-green-500"}`} />
+                      {isGeneratingImage ? t.rendering : t.ready}
+                    </div>
+                  </div>
                 </div>
 
-                <div className={`rounded-[1.5rem] border p-5 ${isDark ? "border-white/10 bg-white/[0.04]" : "border-gray-200 bg-white"}`}>
-                  <div className={`text-[11px] uppercase tracking-[0.24em] ${isDark ? "text-slate-500" : "text-gray-500"}`}>{t.workspaceNotesTitle}</div>
-                  <ul className={`mt-3 space-y-3 text-sm leading-7 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
-                    <li>{t.workspaceNote1}</li>
-                    <li>{t.workspaceNote2}</li>
-                  </ul>
-                </div>
-
-                <div className={`flex rounded-xl border p-1 ${isDark ? "border-white/5 bg-[#111]" : "border-gray-200 bg-white shadow-sm"}`}>
-                  <button type="button" onClick={() => setMode("t2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "t2i" ? (isDark ? "bg-[#1f1f1f] text-white shadow-sm" : "bg-gray-100 text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><SparklesIcon />{t.t2iMode}</button>
-                  <button type="button" onClick={() => setMode("i2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "i2i" ? (isDark ? "bg-[#1f1f1f] text-white shadow-sm" : "bg-gray-100 text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><ImageIcon />{t.i2iMode}</button>
+                <div className={`flex rounded-xl border p-1 mt-2 ${isDark ? "border-white/5 bg-[#111]" : "border-gray-200 bg-gray-100 shadow-sm"}`}>
+                  <button type="button" onClick={() => setMode("t2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "t2i" ? (isDark ? "bg-[#222] text-white shadow-sm" : "bg-white text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><SparklesIcon />{t.t2iMode}</button>
+                  <button type="button" onClick={() => setMode("i2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "i2i" ? (isDark ? "bg-[#222] text-white shadow-sm" : "bg-white text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><ImageIcon />{t.i2iMode}</button>
                 </div>
 
                 {mode === "i2i" ? (
@@ -897,7 +893,8 @@ export default function Home() {
                   </div>
                 ) : null}
 
-                <div className="flex items-end justify-between gap-3">
+                <div className="mt-2 flex min-h-[160px] flex-1 flex-col">
+                  <div className="flex items-end justify-between gap-3 mb-3">
                   <label htmlFor="workspace-prompt" className={`text-[11px] font-semibold uppercase tracking-[0.24em] ${isDark ? "text-slate-500" : "text-gray-500"}`}>{t.promptLabel}</label>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => handleSoon("inspire")} className={`rounded-md border px-2.5 py-1.5 text-[10px] transition ${isDark ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>{t.inspire}</button>
@@ -905,52 +902,57 @@ export default function Home() {
                   </div>
                 </div>
 
-                <textarea ref={promptRef} id="workspace-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} className={`min-h-[190px] w-full resize-none rounded-xl border p-4 text-sm leading-7 outline-none transition ${isDark ? "border-white/5 bg-black/40 text-white placeholder:text-slate-500 focus:border-white/15" : "border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 focus:border-gray-400"}`} placeholder={t.promptPlaceholder} />
+                <textarea ref={promptRef} id="workspace-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} className={`w-full flex-1 resize-none rounded-xl border p-4 text-sm leading-7 outline-none transition ${isDark ? "border-white/5 bg-[#0A0A0A] text-white placeholder:text-slate-500 focus:border-white/15" : "border-gray-200 bg-gray-50 text-gray-900 placeholder:text-gray-400 focus:border-gray-400"}`} placeholder={t.promptPlaceholder} />
+                </div>
 
                 {authNotice ? <NoticeBanner notice={authNotice} /> : null}
                 {generationNotice ? <NoticeBanner notice={generationNotice} /> : null}
                 {mode === "i2i" ? <div className={`rounded-xl border px-3 py-2 text-xs leading-6 ${isDark ? "border-amber-500/20 bg-amber-500/8 text-amber-100" : "border-amber-200 bg-amber-50 text-amber-700"}`}>{t.i2iNotice}</div> : null}
 
-                <div className={`mt-auto space-y-4 border-t pt-5 ${isDark ? "border-white/8" : "border-gray-200"}`}>
-                  <button type="button" onClick={() => void generateImage()} disabled={!canRender} className={`w-full rounded-xl px-4 py-3.5 text-sm font-semibold transition duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? "bg-white text-black hover:bg-slate-200" : "bg-gray-900 text-white hover:bg-black"}`}>{isGeneratingImage ? t.rendering : t.renderNow}</button>
-                  <p className={`text-[11px] leading-6 ${isDark ? "text-slate-500" : "text-gray-500"}`}>{t.continueHint}</p>
+                <div className="space-y-4">
+                  <button type="button" onClick={() => void generateImage()} disabled={!canRender} className={`w-full rounded-xl px-4 py-3.5 text-sm font-semibold transition-all hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50 flex justify-center items-center gap-2 ${isDark ? "bg-white text-black hover:bg-slate-200" : "bg-gray-900 text-white hover:bg-black"}`}>
+                    {isGeneratingImage ? t.rendering : t.renderNow}
+                    {!isGeneratingImage ? <span className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${isDark ? "bg-black/10 border-black/5" : "bg-white/20 border-white/10"}`}><span className={isDark ? "text-cyan-600" : "text-cyan-400"}><SparklesIcon /></span>{currentCost} {t.credits}</span> : null}
+                  </button>
+                </div>
+
+                {generationTask ? (
+                  <div className={`mt-2 pt-6 border-t ${isDark ? "border-white/5" : "border-gray-200"}`}>
+                    <div className={`text-xs font-semibold uppercase tracking-wider mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>{t.propertiesTitle}</div>
+                    <div className={`space-y-3 text-xs p-4 rounded-xl border ${isDark ? "bg-[#0A0A0A] border-white/5" : "bg-gray-50 border-gray-200"}`}>
+                      <div className="flex justify-between items-center"><span className={isDark ? "text-[#666]" : "text-gray-500"}>{t.taskId}</span><span className={isDark ? "text-[#CCC] font-mono" : "text-gray-700 font-mono"}>{generationTask.id.substring(0, 8)}...</span></div>
+                      <div className="flex justify-between items-center"><span className={isDark ? "text-[#666]" : "text-gray-500"}>{t.model}</span><span className={`px-2 py-0.5 rounded ${isDark ? "text-[#CCC] bg-white/5" : "text-gray-700 bg-black/5"}`}>{generationTask.model || "-"}</span></div>
+                      <div className="flex justify-between items-center"><span className={isDark ? "text-[#666]" : "text-gray-500"}>{t.cost}</span><span className={`flex items-center gap-1 ${isDark ? "text-[#CCC]" : "text-gray-700"}`}><span className={isDark ? "text-cyan-400" : "text-cyan-600"}><SparklesIcon /></span>{generationTask.costCredits} {t.credits}</span></div>
+                      <div className="flex justify-between items-center"><span className={isDark ? "text-[#666]" : "text-gray-500"}>{t.completedAt}</span><span className={isDark ? "text-[#CCC]" : "text-gray-700"}>{formatDate(generationTask.completedAt, locale)}</span></div>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className={`rounded-[1.5rem] border p-5 ${isDark ? "border-white/10 bg-white/[0.04]" : "border-gray-200 bg-white"}`}>
+                  <div className={`text-[11px] uppercase tracking-[0.24em] ${isDark ? "text-slate-500" : "text-gray-500"}`}>{t.workspaceNotesTitle}</div>
+                  <ul className={`mt-3 space-y-3 text-sm leading-7 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                    <li>{t.workspaceNote1}</li>
+                    <li>{t.workspaceNote2}</li>
+                  </ul>
                 </div>
               </div>
             </aside>
 
-            <section className={`mt-6 flex-1 overflow-hidden rounded-[2rem] border lg:mt-0 ${isDark ? "border-white/10 bg-[radial-gradient(circle_at_52%_16%,rgba(255,247,214,0.12),transparent_16%),radial-gradient(circle_at_50%_28%,rgba(168,85,247,0.16),transparent_28%),linear-gradient(155deg,rgba(9,10,12,0.96),rgba(6,8,12,0.98)_52%,rgba(7,16,24,0.98))] shadow-[0_28px_110px_rgba(0,0,0,0.48)]" : "border-gray-200 bg-[radial-gradient(circle_at_52%_16%,rgba(255,247,214,0.34),transparent_16%),radial-gradient(circle_at_50%_28%,rgba(168,85,247,0.10),transparent_28%),linear-gradient(180deg,#ffffff_0%,#f8fafc_52%,#eef2f7_100%)] shadow-xl"}`}>
-              <div className={`border-b px-6 py-4 text-[11px] uppercase tracking-[0.28em] ${isDark ? "border-white/10 text-slate-500" : "border-gray-200 text-gray-500"}`}>{t.canvasTitle}</div>
-              <div className="grid gap-6 p-6 xl:grid-cols-[1.25fr_0.75fr] xl:p-8">
-                <div className="space-y-5">
-                  <div className="grid gap-5 md:grid-cols-[1.1fr_0.9fr]">
-                    <div className={`rounded-[1.5rem] border p-5 ${isDark ? "border-white/10 bg-white/[0.04]" : "border-gray-200 bg-white"}`}>
-                      <div className={`text-[11px] uppercase tracking-[0.24em] ${isDark ? "text-slate-500" : "text-gray-500"}`}>{t.promptLabel}</div>
-                      <div className={`mt-4 text-sm leading-7 ${isDark ? "text-slate-200" : "text-gray-700"}`}>{prompt}</div>
-                    </div>
-                    <div className={`rounded-[1.5rem] border p-5 ${isDark ? "border-white/10 bg-white/[0.04]" : "border-gray-200 bg-white"}`}>
-                      <div className={`text-[11px] uppercase tracking-[0.24em] ${isDark ? "text-slate-500" : "text-gray-500"}`}>{t.runtimeTitle}</div>
-                      <div className={`mt-4 space-y-3 text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
-                        <div className="flex items-center justify-between gap-4"><span className={isDark ? "text-slate-500" : "text-gray-500"}>{t.provider}</span><span className={isDark ? "text-right text-white" : "text-right text-gray-900"}>{systemStatus === "available" ? t.providerAvailable : systemStatus === "unavailable" ? t.providerUnavailable : t.providerUnknown}</span></div>
-                        <div className="flex items-center justify-between gap-4"><span className={isDark ? "text-slate-500" : "text-gray-500"}>{t.status}</span><span className={isDark ? "text-right text-white" : "text-right text-gray-900"}>{isGeneratingImage ? t.rendering : t.ready}</span></div>
-                        <div className="flex items-center justify-between gap-4"><span className={isDark ? "text-slate-500" : "text-gray-500"}>{t.credits}</span><span className={isDark ? "text-right text-white" : "text-right text-gray-900"}>{user?.creditBalance ?? "-"}</span></div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="h-[460px] rounded-[1.5rem]">{renderSurface}</div>
+            <main className={`relative flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-8 transition-colors duration-300 ${isDark ? "bg-[#000] bg-[radial-gradient(#222_1px,transparent_1px)]" : "bg-gray-50 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)]"} [background-size:24px_24px]`}>
+              {generatedImageUrl && !previewLoadFailed && !isGeneratingImage ? (
+                <div className="relative w-full h-full max-h-full flex items-center justify-center animate-in fade-in duration-700">
+                  <Image src={generatedImageUrl} alt="Generated result" fill unoptimized className="object-contain rounded-md shadow-2xl" onError={() => setPreviewLoadFailed(true)} />
                 </div>
-
-                <aside className={`rounded-[1.5rem] border p-5 ${isDark ? "border-white/10 bg-[#0a0f16]/82 shadow-[0_16px_70px_rgba(0,0,0,0.36)]" : "border-gray-200 bg-white shadow-sm"}`}>
-                  <div className={`text-[11px] uppercase tracking-[0.24em] ${isDark ? "text-slate-500" : "text-gray-500"}`}>{t.propertiesTitle}</div>
-                  <div className={`mt-5 space-y-4 text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
-                    <div className="flex items-center justify-between gap-4"><span className={isDark ? "text-slate-500" : "text-gray-500"}>{t.taskId}</span><span className={`max-w-[12rem] truncate text-right ${isDark ? "text-white" : "text-gray-900"}`}>{generationTask?.id ?? "-"}</span></div>
-                    <div className="flex items-center justify-between gap-4"><span className={isDark ? "text-slate-500" : "text-gray-500"}>{t.model}</span><span className={isDark ? "text-right text-white" : "text-right text-gray-900"}>{generationTask?.model ?? "-"}</span></div>
-                    <div className="flex items-center justify-between gap-4"><span className={isDark ? "text-slate-500" : "text-gray-500"}>{t.cost}</span><span className={isDark ? "text-right text-white" : "text-right text-gray-900"}>{generationTask ? generationTask.costCredits : currentCost}</span></div>
-                    <div className="flex items-center justify-between gap-4"><span className={isDark ? "text-slate-500" : "text-gray-500"}>{t.createdAt}</span><span className={isDark ? "text-right text-white" : "text-right text-gray-900"}>{formatDate(generationTask?.createdAt ?? null, locale)}</span></div>
-                    <div className="flex items-center justify-between gap-4"><span className={isDark ? "text-slate-500" : "text-gray-500"}>{t.completedAt}</span><span className={isDark ? "text-right text-white" : "text-right text-gray-900"}>{formatDate(generationTask?.completedAt ?? null, locale)}</span></div>
+              ) : (
+                <div className="max-w-sm text-center">
+                  <div className={`w-16 h-16 rounded-full border flex items-center justify-center mx-auto mb-6 shadow-xl ${isDark ? "border-white/5 bg-[#0A0A0A]" : "border-gray-200 bg-white"}`}>
+                    {isGeneratingImage ? <div className="w-6 h-6 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" /> : <div className={`w-4 h-4 rounded-full ${isDark ? "bg-white/10" : "bg-gray-300"}`} />}
                   </div>
-                </aside>
-              </div>
-            </section>
+                  <div className={`mb-2 text-base font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>{isGeneratingImage ? t.rendering : t.canvasEmptyTitle}</div>
+                  <div className={`mx-auto max-w-[200px] text-xs leading-relaxed ${isDark ? "text-[#666]" : "text-gray-500"}`}>{isGeneratingImage ? t.workspaceBody : previewLoadFailed ? t.imagePreviewUnavailable : t.canvasEmptyBody}</div>
+                </div>
+              )}
+            </main>
           </div>
         )}
 
@@ -994,6 +996,10 @@ export default function Home() {
     </div>
   );
 }
+
+
+
+
 
 
 
