@@ -10,7 +10,18 @@ export interface Env {
   SPARKPOST_ASSETS?: {
     fetch: (input: Request | string | URL, init?: RequestInit) => Promise<Response>;
   };
-  SPARKPOST_R2?: unknown;
+  SPARKPOST_R2?: {
+    put: (
+      key: string,
+      value: ArrayBuffer | ArrayBufferView | ReadableStream | Blob | string,
+      options?: { httpMetadata?: { contentType?: string } },
+    ) => Promise<unknown>;
+    get: (key: string) => Promise<{
+      body: ReadableStream | null;
+      httpMetadata?: { contentType?: string };
+      writeHttpMetadata?: (headers: Headers) => void;
+    } | null>;
+  };
   SESSION_SECRET?: string;
   IMAGE_BACKEND?: string;
   IMAGE_API_KEY?: string;
@@ -65,9 +76,14 @@ type UserRow = {
 };
 
 type ProviderResult = {
-  assetUrl: string;
+  bytes: Uint8Array;
   mimeType: string;
   model: string;
+};
+
+type StoredAsset = {
+  assetId: string;
+  fileUrl: string;
 };
 
 type GenerationTaskRow = {
@@ -98,6 +114,7 @@ const DEFAULT_SESSION_TTL_DAYS = 7;
 const DEFAULT_SIGNUP_BONUS_CREDITS = 20;
 const SESSION_COOKIE_NAME = "sparkpost_session";
 const SESSION_COOKIE_PATH = "/";
+const GENERATED_ASSET_PREFIX = "generated";
 
 const getNumberEnv = (value: string | undefined, fallback: number) => {
   const parsed = Number.parseInt(value ?? "", 10);
@@ -532,15 +549,16 @@ const getImageGenerationEndpoint = (imageConfig: ReturnType<typeof getImageConfi
   return `${imageConfig.baseUrl}/images/generations`;
 };
 
-const fetchRemoteImageAsDataUrl = async (url: string) => {
+const decodeBase64Image = (value: string) => new Uint8Array(Buffer.from(value, "base64"));
+
+const fetchRemoteImageBytes = async (url: string) => {
   const response = await fetch(url);
   if (!response.ok) {
     throw new ImageGenerationProviderError("Image provider returned an unreadable image URL.");
   }
   const mimeType = response.headers.get("content-type") || "image/png";
   const bytes = new Uint8Array(await response.arrayBuffer());
-  const base64 = Buffer.from(bytes).toString("base64");
-  return { assetUrl: `data:${mimeType};base64,${base64}`, mimeType };
+  return { bytes, mimeType };
 };
 
 const callOfficialImageProvider = async (prompt: string, env: Env): Promise<ProviderResult> => {
@@ -569,15 +587,15 @@ const callOfficialImageProvider = async (prompt: string, env: Env): Promise<Prov
   const imageData = body?.data?.[0];
   if (imageData?.b64_json) {
     return {
-      assetUrl: `data:image/png;base64,${imageData.b64_json}`,
+      bytes: decodeBase64Image(imageData.b64_json),
       mimeType: "image/png",
       model: imageConfig.model,
     };
   }
 
   if (imageData?.url) {
-    const remoteImage = await fetchRemoteImageAsDataUrl(imageData.url);
-    return { assetUrl: remoteImage.assetUrl, mimeType: remoteImage.mimeType, model: imageConfig.model };
+    const remoteImage = await fetchRemoteImageBytes(imageData.url);
+    return { bytes: remoteImage.bytes, mimeType: remoteImage.mimeType, model: imageConfig.model };
   }
 
   throw new ImageGenerationProviderError("Image provider returned no image data.");
@@ -591,7 +609,74 @@ const generateProviderImage = async (prompt: string, env: Env) => {
   throw new ImageGenerationConfigError(`Unsupported IMAGE_BACKEND: ${imageConfig.backend}`);
 };
 
-const generateTextToImageForUser = async (userId: string, prompt: string, env: Env) => {
+const getFileExtensionFromMimeType = (mimeType: string) => {
+  const normalizedMimeType = mimeType.toLowerCase();
+  if (normalizedMimeType === "image/jpeg") return "jpg";
+  if (normalizedMimeType === "image/webp") return "webp";
+  if (normalizedMimeType === "image/gif") return "gif";
+  return "png";
+};
+
+const createAssetResponseUrl = (request: Request, key: string) => {
+  const origin = new URL(request.url).origin;
+  return `${origin}/api/assets/${key}`;
+};
+
+const persistGeneratedAsset = async (
+  request: Request,
+  env: Env,
+  userId: string,
+  taskId: string,
+  providerResult: ProviderResult,
+): Promise<StoredAsset> => {
+  if (!env.SPARKPOST_R2) {
+    throw new ImageGenerationConfigError("R2 binding SPARKPOST_R2 is not configured.");
+  }
+
+  const assetId = crypto.randomUUID();
+  const fileExtension = getFileExtensionFromMimeType(providerResult.mimeType);
+  const key = `${GENERATED_ASSET_PREFIX}/${userId}/${taskId}/${assetId}.${fileExtension}`;
+
+  await env.SPARKPOST_R2.put(key, providerResult.bytes, {
+    httpMetadata: {
+      contentType: providerResult.mimeType,
+    },
+  });
+
+  return {
+    assetId,
+    fileUrl: createAssetResponseUrl(request, key),
+  };
+};
+
+const getGeneratedAssetResponse = async (_request: Request, env: Env, url: URL) => {
+  if (!env.SPARKPOST_R2) {
+    return json({ error: "Object storage is not configured." }, { status: 503 });
+  }
+
+  const encodedKey = url.pathname.slice("/api/assets/".length);
+  const assetKey = decodeURIComponent(encodedKey);
+
+  if (!assetKey || !assetKey.startsWith(`${GENERATED_ASSET_PREFIX}/`)) {
+    return json({ error: "Asset not found." }, { status: 404 });
+  }
+
+  const object = await env.SPARKPOST_R2.get(assetKey);
+  if (!object || !object.body) {
+    return json({ error: "Asset not found." }, { status: 404 });
+  }
+
+  const headers = new Headers();
+  if (typeof object.writeHttpMetadata === "function") {
+    object.writeHttpMetadata(headers);
+  }
+  headers.set("content-type", object.httpMetadata?.contentType || headers.get("content-type") || "image/png");
+  headers.set("cache-control", "public, max-age=31536000, immutable");
+
+  return new Response(object.body, { status: 200, headers });
+};
+
+const generateTextToImageForUser = async (request: Request, userId: string, prompt: string, env: Env) => {
   if (!env.SPARKPOST_DB) {
     throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
   }
@@ -619,7 +704,7 @@ const generateTextToImageForUser = async (userId: string, prompt: string, env: E
 
   try {
     const providerResult = await generateProviderImage(prompt, env);
-    const assetId = crypto.randomUUID();
+    const storedAsset = await persistGeneratedAsset(request, env, userId, taskId, providerResult);
     const completedAt = new Date();
     const remainingCredits = creditAccount.balance - imageConfig.textToImageCost;
 
@@ -645,7 +730,7 @@ const generateTextToImageForUser = async (userId: string, prompt: string, env: E
       `INSERT INTO generated_assets (
          id, task_id, asset_type, file_url, width, height, created_at
        ) VALUES (?, ?, 'image', ?, NULL, NULL, ?)`,
-    ).bind(assetId, taskId, providerResult.assetUrl, completedAt.toISOString()).run();
+    ).bind(storedAsset.assetId, taskId, storedAsset.fileUrl, completedAt.toISOString()).run();
 
     await env.SPARKPOST_DB.prepare(
       `UPDATE generation_tasks SET status = 'succeeded', model = ?, completed_at = ? WHERE id = ?`,
@@ -667,8 +752,8 @@ const generateTextToImageForUser = async (userId: string, prompt: string, env: E
       remainingCredits,
       assets: [
         {
-          id: assetId,
-          fileUrl: providerResult.assetUrl,
+          id: storedAsset.assetId,
+          fileUrl: storedAsset.fileUrl,
           width: null,
           height: null,
         },
@@ -782,7 +867,7 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
       if (!authenticatedUser.user) return json({ error: "Authentication required." }, { status: 401 });
 
       try {
-        const task = await generateTextToImageForUser(authenticatedUser.user.id, input.prompt, env);
+        const task = await generateTextToImageForUser(request, authenticatedUser.user.id, input.prompt, env);
         return json({ ok: true, task });
       } catch (error) {
         if (error instanceof ImageGenerationCreditsError) {
@@ -815,9 +900,13 @@ export default {
     }
 
     const url = new URL(request.url);
-    const match = routes.find((route) => route.method === request.method && route.pathname === url.pathname);
 
     try {
+      if (request.method === "GET" && url.pathname.startsWith("/api/assets/")) {
+        return withCors(request, await getGeneratedAssetResponse(request, env, url));
+      }
+
+      const match = routes.find((route) => route.method === request.method && route.pathname === url.pathname);
       if (match) {
         return withCors(request, await match.handler(request, env, url));
       }
