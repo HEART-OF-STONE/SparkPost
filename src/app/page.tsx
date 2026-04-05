@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
-import { fetchApi } from "@/lib/api/client";
+import { fetchApi, resolveApiAssetUrl } from "@/lib/api/client";
 
 type Locale = "zh" | "en";
 type Notice = { type: "success" | "error" | "info"; text: string };
@@ -332,7 +332,7 @@ const timeLeftText = (seconds: number) =>
 const formatDate = (value: string | null, locale: Locale) =>
   value ? new Date(value).toLocaleString(locale === "zh" ? "zh-CN" : "en-US", { hour12: false }) : "-";
 const formatTemplate = (template: string, values: Record<string, string | number>) => template.replace(/\{(\w+)\}/g, (_, key: string) => String(values[key] ?? ""));
-const primaryImageUrl = (task: ImageTaskResult | null) => task?.assets[0]?.fileUrl ?? null;
+const primaryImageUrl = (task: ImageTaskResult | null) => resolveApiAssetUrl(task?.assets[0]?.fileUrl ?? null);
 const DEFAULT_IMAGE_MODEL_ID = "gemini-3.1-flash-image-openai";
 const MODEL_DISPLAY_NAMES: Record<string, string> = {
   "gemini-3.1-flash-image-openai": "Nano Banana 2",
