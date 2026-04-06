@@ -347,6 +347,15 @@ const getDisplayImageModel = (model: string | null | undefined) => {
   return MODEL_DISPLAY_NAMES[normalized] ?? model ?? DEFAULT_IMAGE_MODEL_ID;
 };
 
+const createLocalPreviewUser = (): AuthUser => ({
+  id: "local-preview-user",
+  email: "preview@sparkpost.local",
+  createdAt: new Date().toISOString(),
+  emailVerifiedAt: new Date().toISOString(),
+  lastLoginAt: new Date().toISOString(),
+  creditBalance: 20,
+});
+
 const noticeClasses = (type: Notice["type"]) =>
   type === "error"
     ? "border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-100"
@@ -358,6 +367,8 @@ const BrainIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="no
 const ShieldIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" /></svg>;
 const SparklesIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" /></svg>;
 const ImageIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></svg>;
+const CloseIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>;
+const PlusIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14" /><path d="M5 12h14" /></svg>;
 const UploadIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>;
 const PlayIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="6 3 20 12 6 21 6 3" /></svg>;
 const SunIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2" /><path d="M12 20v2" /><path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" /><path d="M2 12h2" /><path d="M20 12h2" /><path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" /></svg>;
@@ -390,8 +401,15 @@ export default function Home() {
   const [mode, setMode] = useState<Mode>("t2i");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
-  const [prompt, setPrompt] = useState("A cinematic futuristic product scene with glowing edges, reflective glass, and dramatic studio lighting.");
-  const [referenceImageName, setReferenceImageName] = useState<string | null>(null);
+  const [prompts, setPrompts] = useState({
+    t2i: "A cinematic futuristic product scene with glowing edges, reflective glass, and dramatic studio lighting.",
+    i2i: "",
+  });
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [showMentionMenu, setShowMentionMenu] = useState(false);
+  const [mentionMenuPos, setMentionMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [mentionQuery, setMentionQuery] = useState("");
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
   const [isSendingCode, setIsSendingCode] = useState(false);
@@ -411,10 +429,14 @@ export default function Home() {
 
   const emailRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
-  const promptRef = useRef<HTMLTextAreaElement>(null);
+  const promptRef = useRef<HTMLDivElement>(null);
   const playgroundRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const mentionMenuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const activeEditorRef = useRef<HTMLDivElement | null>(null);
+  const savedRangeRef = useRef<Range | null>(null);
+  const isTypingRef = useRef(false);
 
   const t = copy[locale];
   const authStatus: AuthStatus = isLoadingSession ? "checking" : user ? "signedIn" : "signedOut";
@@ -423,8 +445,12 @@ export default function Home() {
   const cooldownActive = useMemo(() => cooldownEndsAt !== null && timeLeft > 0, [cooldownEndsAt, timeLeft]);
   const accountInitials = user?.email.slice(0, 2).toUpperCase() ?? "SP";
   const currentCost = 10;
-  const canRender = !!prompt.trim() && !isGeneratingImage;
-  const hasReference = mode === "i2i" && !!referenceImageName;
+  const currentPrompt = prompts[mode];
+  const canRender = !!currentPrompt.trim() && !isGeneratingImage;
+  const referenceUploadInputId = user ? "workspace-reference-upload" : "landing-reference-upload";
+  const i2iPromptPlaceholder = locale === "zh"
+    ? "输入 @ 引用参考图，例如让 @R2 延续 @R1 的构图。"
+    : "Type @ to reference uploaded images, e.g. redraw @R1 in the style of @R2.";
 
   useEffect(() => {
     const saved = window.localStorage.getItem("sparkpost-locale");
@@ -467,7 +493,22 @@ export default function Home() {
         setUser(data.user);
         if (data.user) setEmail(data.user.email);
       } catch (error) {
-        if (!controller.signal.aborted) setAuthNotice({ type: "error", text: error instanceof Error ? error.message : t.sessionLoadFailed });
+        if (!controller.signal.aborted) {
+          const isLocalPreviewHost =
+            typeof window !== "undefined" && (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost");
+
+          if (isLocalPreviewHost) {
+            const previewUser = createLocalPreviewUser();
+            setUser(previewUser);
+            setEmail(previewUser.email);
+            setAuthNotice({
+              type: "info",
+              text: locale === "zh" ? "本地预览模式已启用，当前工作台使用模拟账户。" : "Local preview mode is enabled with a mock workspace account.",
+            });
+          } else {
+            setAuthNotice({ type: "error", text: error instanceof Error ? error.message : t.sessionLoadFailed });
+          }
+        }
       } finally {
         if (!controller.signal.aborted) setIsLoadingSession(false);
       }
@@ -500,8 +541,19 @@ export default function Home() {
   }, [authStatus, pendingGenerateAfterLogin]);
 
   useEffect(() => {
+    if (!isTypingRef.current && activeEditorRef.current) {
+      syncEditorHTML(prompts[mode], activeEditorRef.current, uploadedImages, mode);
+    }
+    isTypingRef.current = false;
+  }, [isDark, mode, prompts, uploadedImages]);
+
+  useEffect(() => {
     function closeMenu(event: MouseEvent) {
       if (menuRef.current && event.target instanceof Node && !menuRef.current.contains(event.target)) setShowAccountMenu(false);
+      if (mentionMenuRef.current && event.target instanceof Node && !mentionMenuRef.current.contains(event.target)) {
+        setShowMentionMenu(false);
+        setMentionMenuPos(null);
+      }
     }
     document.addEventListener("mousedown", closeMenu);
     return () => document.removeEventListener("mousedown", closeMenu);
@@ -517,7 +569,7 @@ export default function Home() {
 
   const generateImage = useCallback(async () => {
     setGenerationNotice(null);
-    if (!prompt.trim()) {
+    if (!currentPrompt.trim()) {
       setGenerationNotice({ type: "error", text: t.enterPrompt });
       return;
     }
@@ -534,7 +586,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt: currentPrompt }),
       });
       const data = (await response.json().catch(() => null)) as GenerateImageResponse | null;
       if (!response.ok) {
@@ -558,7 +610,7 @@ export default function Home() {
     } finally {
       setIsGeneratingImage(false);
     }
-  }, [mode, prompt, t.enterPrompt, t.generateFailed, t.generateSuccess, t.i2iNotice, t.imagePreviewUnavailable, t.unexpectedPayload]);
+  }, [currentPrompt, mode, t.enterPrompt, t.generateFailed, t.generateSuccess, t.i2iNotice, t.imagePreviewUnavailable, t.unexpectedPayload]);
 
   useEffect(() => {
     if (user && pendingGenerateAfterLogin && !isGeneratingImage) {
@@ -678,7 +730,7 @@ export default function Home() {
   }
 
   function startRenderIntent() {
-    if (!prompt.trim()) {
+    if (!currentPrompt.trim()) {
       setGenerationNotice({ type: "error", text: t.enterPrompt });
       return;
     }
@@ -691,9 +743,254 @@ export default function Home() {
     setAuthNotice({ type: "info", text: t.loginToContinue });
   }
 
-  function handleReferenceUpload(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    setReferenceImageName(file?.name ?? null);
+  function handleModeSwitch(nextMode: Mode) {
+    setMode(nextMode);
+    setShowMentionMenu(false);
+    setMentionMenuPos(null);
+    isTypingRef.current = false;
+  }
+
+  function getBadgeHTML(imageUrl: string, index: number) {
+    const background = isDark ? "#222" : "#ecfeff";
+    const border = isDark ? "rgba(255,255,255,0.1)" : "rgba(6,182,212,0.3)";
+    return `<span class="mention-badge" contenteditable="false" data-img="${imageUrl}" style="display:inline-block;vertical-align:middle;user-select:none;"><span style="display:inline-block;height:22px;line-height:20px;padding:0 6px;border-radius:4px;background:${background};border:1px solid ${border};box-sizing:border-box;white-space:nowrap;"><img src="${imageUrl}" style="display:inline-block;width:14px;height:14px;border-radius:2px;object-fit:cover;vertical-align:middle;margin-right:4px;pointer-events:none;" /><span style="display:inline-block;font-size:11px;font-weight:700;color:#06b6d4;vertical-align:middle;pointer-events:none;margin-bottom:1px;">@R${index + 1}</span></span></span>`;
+  }
+
+  function syncEditorHTML(value: string, editor: HTMLElement, images: string[], currentMode: Mode) {
+    let html = value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+    if (currentMode === "i2i") {
+      images.forEach((imageUrl, index) => {
+        html = html.replace(new RegExp(`@R${index + 1}\\b`, "g"), getBadgeHTML(imageUrl, index));
+      });
+    }
+    if (editor.innerHTML !== html) editor.innerHTML = html;
+  }
+
+  function handleEditorInput(event: FormEvent<HTMLDivElement>, currentMode: Mode) {
+    const editor = event.currentTarget;
+    activeEditorRef.current = editor;
+    promptRef.current = editor;
+    isTypingRef.current = true;
+
+    const nextValue = editor.innerText.replace(/\u00A0/g, " ");
+    setPrompts((current) => ({ ...current, [currentMode]: nextValue }));
+
+    if (currentMode === "i2i" && uploadedImages.length > 0) {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        const textBefore = range.startContainer.textContent?.slice(0, range.startOffset) ?? "";
+        const mentionMatch = textBefore.match(/@([^\s@]*)$/);
+        const nextQuery = mentionMatch?.[1]?.toLowerCase() ?? "";
+        const isReferenceQuery = mentionMatch !== null && (nextQuery === "" || /^r\d*$/.test(nextQuery));
+
+        if (isReferenceQuery) {
+          const hasMatches =
+            nextQuery === "" || uploadedImages.some((_, index) => `r${index + 1}`.startsWith(nextQuery));
+
+          if (!hasMatches) {
+            setMentionQuery("");
+            setShowMentionMenu(false);
+            setMentionMenuPos(null);
+            return;
+          }
+
+          savedRangeRef.current = range.cloneRange();
+          setMentionQuery(nextQuery);
+          let rect = range.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) {
+            const probe = document.createElement("span");
+            probe.textContent = "\u200b";
+            range.insertNode(probe);
+            rect = probe.getBoundingClientRect();
+            probe.parentNode?.removeChild(probe);
+          }
+          setMentionMenuPos({ top: rect.bottom + 4, left: Math.max(16, rect.left) });
+          setShowMentionMenu(true);
+          return;
+        }
+      }
+    }
+
+    setMentionQuery("");
+    setShowMentionMenu(false);
+    setMentionMenuPos(null);
+  }
+
+  function insertMention(index: number) {
+    if (!savedRangeRef.current || !activeEditorRef.current) return;
+    const selection = window.getSelection();
+    if (!selection) return;
+
+    selection.removeAllRanges();
+    selection.addRange(savedRangeRef.current);
+
+    const range = savedRangeRef.current;
+    const startContainer = range.startContainer;
+    const textBefore = startContainer.textContent?.slice(0, range.startOffset) ?? "";
+    const match = textBefore.match(/@([^\s@]*)$/);
+    if (!match) return;
+
+    range.setStart(startContainer, range.startOffset - match[0].length);
+    range.deleteContents();
+
+    const fragment = document.createRange().createContextualFragment(getBadgeHTML(uploadedImages[index], index));
+    const badgeNode = fragment.firstChild;
+    if (!badgeNode) return;
+
+    range.insertNode(badgeNode);
+    range.setStartAfter(badgeNode);
+    range.setEndAfter(badgeNode);
+
+    const spacer = document.createTextNode("\u00A0");
+    range.insertNode(spacer);
+    range.setStartAfter(spacer);
+    range.collapse(true);
+
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    setMentionQuery("");
+    setShowMentionMenu(false);
+    setMentionMenuPos(null);
+    isTypingRef.current = true;
+    setPrompts((current) => ({ ...current, [mode]: activeEditorRef.current!.innerText.replace(/\u00A0/g, " ") }));
+  }
+
+  function handleImageUpload(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    if (!files.length) return;
+
+    const remainingSlots = 5 - uploadedImages.length;
+    const selectedFiles = files.slice(0, remainingSlots);
+    if (files.length > remainingSlots) {
+      setGenerationNotice({
+        type: "info",
+        text: locale === "zh" ? "最多只能上传 5 张参考图。" : "You can upload up to 5 reference images.",
+      });
+    }
+
+    Promise.all(
+      selectedFiles.map(
+        (file) =>
+          new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(String(reader.result ?? ""));
+            reader.readAsDataURL(file);
+          }),
+      ),
+    ).then((nextImages) => {
+      setUploadedImages((current) => [...current, ...nextImages.filter(Boolean)]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    });
+  }
+
+  function removeImage(indexToRemove: number) {
+    setUploadedImages((current) => current.filter((_, index) => index !== indexToRemove));
+  }
+
+  function renderReferenceUpload() {
+    if (mode !== "i2i") return null;
+
+    return (
+      <div className="mt-5 animate-in fade-in slide-in-from-top-2 duration-300">
+        <div className="mb-2 flex items-center justify-between">
+          <div className={`text-[11px] font-semibold uppercase tracking-[0.24em] ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+            {t.uploadReference} <span className="normal-case tracking-normal text-cyan-500">({uploadedImages.length}/5)</span>
+          </div>
+        </div>
+
+        {uploadedImages.length > 0 ? (
+          <div className="mb-2 flex flex-wrap gap-3">
+            {uploadedImages.map((imageUrl, index) => (
+              <div key={`${imageUrl}-${index}`} onClick={() => setPreviewImage(imageUrl)} className={`group relative h-[60px] w-[60px] cursor-pointer overflow-hidden rounded-lg border transition-colors ${isDark ? "border-white/10 hover:border-cyan-400/60" : "border-gray-200 hover:border-cyan-500"}`}>
+                <img src={imageUrl} alt={`Reference ${index + 1}`} className="h-full w-full object-cover" />
+                <div className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-bold text-white backdrop-blur-md">R{index + 1}</div>
+                <button
+                  type="button"
+                  onClick={(clickEvent) => {
+                    clickEvent.stopPropagation();
+                    removeImage(index);
+                  }}
+                  disabled={isGeneratingImage}
+                  className="absolute right-1 top-1 rounded-full bg-black/60 p-0.5 text-white opacity-0 transition-all hover:bg-red-500 group-hover:opacity-100 disabled:cursor-not-allowed"
+                  aria-label={`Remove reference ${index + 1}`}
+                >
+                  <CloseIcon />
+                </button>
+              </div>
+            ))}
+            {uploadedImages.length < 5 ? (
+              <div className={`relative flex h-[60px] w-[60px] items-center justify-center rounded-lg border-2 border-dashed transition-colors ${isGeneratingImage ? "cursor-not-allowed opacity-50" : "cursor-pointer"} ${isDark ? "border-white/10 text-slate-400 hover:border-cyan-400/50 hover:bg-white/[0.05] hover:text-cyan-300" : "border-gray-300 text-gray-400 hover:border-cyan-500 hover:bg-cyan-50 hover:text-cyan-600"}`}>
+                <PlusIcon />
+                <input
+                  ref={fileInputRef}
+                  id={referenceUploadInputId}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleImageUpload}
+                  disabled={isGeneratingImage}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div
+            className={`relative flex h-24 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed transition ${isGeneratingImage ? "cursor-not-allowed opacity-50" : "cursor-pointer"} ${isDark ? "border-white/10 bg-white/[0.02] text-slate-400 hover:border-cyan-400/40 hover:text-cyan-300" : "border-gray-300 bg-gray-50 text-gray-400 hover:border-cyan-400/40 hover:text-cyan-600"}`}
+          >
+            <UploadIcon />
+            <span className="mt-2 text-xs">{locale === "zh" ? "点击上传，最多 5 张参考图" : "Click to upload up to 5 reference images"}</span>
+            <input
+              ref={fileInputRef}
+              id={referenceUploadInputId}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleImageUpload}
+              disabled={isGeneratingImage}
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderPromptEditor(surface: "landing" | "workspace") {
+    const isWorkspace = surface === "workspace";
+    const commonClassName = isWorkspace
+      ? isDark
+        ? "border-white/5 bg-[#0A0A0A] text-white focus:border-white/15"
+        : "border-gray-200 bg-gray-50 text-gray-900 focus:border-gray-400"
+      : isDark
+        ? "border-white/5 bg-black/40 text-white focus:border-white/20"
+        : "border-gray-200 bg-white text-gray-900 focus:border-gray-400";
+
+    return (
+      <div className="relative flex min-h-[140px] flex-1 flex-col">
+        <div
+          key={`${surface}-${mode}`}
+          ref={(editor) => {
+            if (!editor) return;
+            if (surface === "workspace") promptRef.current = editor;
+            if (!activeEditorRef.current || activeEditorRef.current === editor) activeEditorRef.current = editor;
+            if (editor.innerHTML === "") syncEditorHTML(prompts[mode], editor, uploadedImages, mode);
+          }}
+          contentEditable={!isGeneratingImage}
+          suppressContentEditableWarning
+          onFocus={(event) => {
+            activeEditorRef.current = event.currentTarget;
+            if (surface === "workspace") promptRef.current = event.currentTarget;
+          }}
+          onInput={(event) => handleEditorInput(event, mode)}
+          className={`prompt-editor w-full flex-1 rounded-xl border p-4 text-sm outline-none transition ${commonClassName} ${mode === "i2i" ? "leading-[26px]" : isWorkspace ? "leading-7" : "leading-relaxed"}`}
+          data-placeholder={mode === "i2i" ? i2iPromptPlaceholder : t.promptPlaceholder}
+          style={{ minHeight: "140px", whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+        />
+      </div>
+    );
   }
 
   function handleSoon(action: "inspire" | "enhance") {
@@ -712,6 +1009,14 @@ export default function Home() {
     { title: t.feature2Title, body: t.feature2Body, icon: <SparklesIcon />, tint: isDark ? "text-violet-400 bg-violet-500/10 border-violet-500/20" : "text-violet-600 bg-violet-50 border-violet-100" },
     { title: t.feature3Title, body: t.feature3Body, icon: <ShieldIcon />, tint: isDark ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" : "text-emerald-600 bg-emerald-50 border-emerald-100" },
   ];
+
+  const filteredMentionOptions = uploadedImages
+    .map((imageUrl, index) => ({
+      imageUrl,
+      index,
+      label: `r${index + 1}`,
+    }))
+    .filter((option) => mentionQuery === "" || option.label.startsWith(mentionQuery));
 
   const renderSurface = generatedImageUrl && !previewLoadFailed ? (
     <div className={`relative h-full min-h-[320px] w-full overflow-hidden rounded-[1.5rem] border ${isDark ? "border-white/10 bg-black/50 shadow-[0_20px_80px_rgba(0,0,0,0.35)]" : "border-gray-200 bg-white shadow-[0_20px_80px_rgba(148,163,184,0.22)]"}`}>
@@ -846,20 +1151,11 @@ export default function Home() {
               <div className={`overflow-hidden rounded-[2rem] border shadow-xl md:flex md:min-h-[520px] ${isDark ? "border-white/10 bg-[#0A0A0A]" : "border-gray-200 bg-white"}`}>
                 <div className={`w-full border-b p-6 md:w-[380px] md:border-b-0 md:border-r ${isDark ? "border-white/10 bg-[#050505]" : "border-gray-200 bg-gray-50"}`}>
                   <div className={`mb-5 flex rounded-xl border p-1 ${isDark ? "border-white/5 bg-[#111]" : "border-gray-200 bg-white shadow-sm"}`}>
-                    <button type="button" onClick={() => setMode("t2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "t2i" ? (isDark ? "bg-[#1f1f1f] text-white shadow-sm" : "bg-gray-100 text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><SparklesIcon />{t.t2iMode}</button>
-                    <button type="button" onClick={() => setMode("i2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "i2i" ? (isDark ? "bg-[#1f1f1f] text-white shadow-sm" : "bg-gray-100 text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><ImageIcon />{t.i2iMode}</button>
+                    <button type="button" onClick={() => handleModeSwitch("t2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "t2i" ? (isDark ? "bg-[#1f1f1f] text-white shadow-sm" : "bg-gray-100 text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><SparklesIcon />{t.t2iMode}</button>
+                    <button type="button" onClick={() => handleModeSwitch("i2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "i2i" ? (isDark ? "bg-[#1f1f1f] text-white shadow-sm" : "bg-gray-100 text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><ImageIcon />{t.i2iMode}</button>
                   </div>
 
-                  {mode === "i2i" ? (
-                    <div className="mt-5">
-                      <div className={`mb-2 text-[11px] font-semibold uppercase tracking-[0.24em] ${isDark ? "text-slate-500" : "text-gray-500"}`}>{t.uploadReference}</div>
-                      <input ref={fileInputRef} type="file" accept="image/*" onChange={handleReferenceUpload} className="hidden" />
-                      <button type="button" onClick={() => fileInputRef.current?.click()} className={`flex h-28 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed transition ${isDark ? "border-white/10 bg-white/[0.02] text-slate-400 hover:border-cyan-400/40 hover:text-cyan-300" : "border-gray-300 bg-gray-50 text-gray-400 hover:border-cyan-400/40 hover:text-cyan-600"}`}>
-                        <UploadIcon />
-                        <span className="mt-2 text-xs">{referenceImageName ?? t.uploadHint}</span>
-                      </button>
-                    </div>
-                  ) : null}
+                  {renderReferenceUpload()}
 
                   <div className="mt-5 flex items-end justify-between gap-3">
                     <label htmlFor="landing-prompt" className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{t.promptLabel}</label>
@@ -869,14 +1165,14 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <textarea id="landing-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} className={`mt-3 min-h-[140px] w-full flex-1 resize-none rounded-xl border p-4 text-sm outline-none transition ${isDark ? "border-white/5 bg-black/40 text-white placeholder:text-[#444] focus:border-white/20" : "border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 focus:border-gray-400"}`} placeholder={t.promptPlaceholder} />
+                  <div className="mt-3">{renderPromptEditor("landing")}</div>
 
                   <div className={`mt-5 space-y-4 border-t pt-5 ${isDark ? "border-white/5" : "border-gray-200"}`}>
                     {generationNotice ? <NoticeBanner notice={generationNotice} /> : null}
                     {authNotice && showLoginPanel ? <NoticeBanner notice={authNotice} /> : null}
                     <button type="button" onClick={startRenderIntent} disabled={!canRender} className={`w-full rounded-xl px-4 py-3.5 text-sm font-semibold transition duration-200 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? "bg-white text-black hover:bg-slate-200" : "bg-gray-900 text-white hover:bg-black"}`}>{isGeneratingImage ? t.rendering : t.renderNow}</button>
                     <p className={`text-center text-[11px] leading-relaxed ${isDark ? "text-[#666]" : "text-gray-500"}`}>{locale === "zh" ? "无需登录即可先输入 Prompt。系统会保留你的进度，并在你执行核心渲染时提示完成验证。" : "Enter your prompt without logging in. We will seamlessly save your progress and prompt you to verify when you execute the core render."}</p>
-                    {(mode === "i2i" || hasReference) ? <div className="rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-xs leading-6 text-amber-100">{t.i2iNotice}</div> : null}
+                    {mode === "i2i" ? <div className="rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-xs leading-6 text-amber-100">{t.i2iNotice}</div> : null}
                   </div>
                 </div>
 
@@ -908,20 +1204,11 @@ export default function Home() {
                 </div>
 
                 <div className={`flex rounded-xl border p-1 mt-2 ${isDark ? "border-white/5 bg-[#111]" : "border-gray-200 bg-gray-100 shadow-sm"}`}>
-                  <button type="button" onClick={() => setMode("t2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "t2i" ? (isDark ? "bg-[#222] text-white shadow-sm" : "bg-white text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><SparklesIcon />{t.t2iMode}</button>
-                  <button type="button" onClick={() => setMode("i2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "i2i" ? (isDark ? "bg-[#222] text-white shadow-sm" : "bg-white text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><ImageIcon />{t.i2iMode}</button>
+                  <button type="button" onClick={() => handleModeSwitch("t2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "t2i" ? (isDark ? "bg-[#222] text-white shadow-sm" : "bg-white text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><SparklesIcon />{t.t2iMode}</button>
+                  <button type="button" onClick={() => handleModeSwitch("i2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "i2i" ? (isDark ? "bg-[#222] text-white shadow-sm" : "bg-white text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><ImageIcon />{t.i2iMode}</button>
                 </div>
 
-                {mode === "i2i" ? (
-                  <div>
-                    <div className={`mb-2 text-[11px] font-semibold uppercase tracking-[0.24em] ${isDark ? "text-slate-500" : "text-gray-500"}`}>{t.uploadReference}</div>
-                    <input ref={fileInputRef} type="file" accept="image/*" onChange={handleReferenceUpload} className="hidden" />
-                    <button type="button" onClick={() => fileInputRef.current?.click()} className={`flex h-28 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed transition ${isDark ? "border-white/10 bg-white/[0.02] text-slate-400 hover:border-cyan-400/40 hover:text-cyan-300" : "border-gray-300 bg-gray-50 text-gray-400 hover:border-cyan-400/40 hover:text-cyan-600"}`}>
-                      <UploadIcon />
-                      <span className="mt-2 text-xs">{referenceImageName ?? t.uploadHint}</span>
-                    </button>
-                  </div>
-                ) : null}
+                {renderReferenceUpload()}
 
                 <div className="mt-2 flex min-h-[160px] flex-1 flex-col">
                   <div className="flex items-end justify-between gap-3 mb-3">
@@ -932,7 +1219,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                <textarea ref={promptRef} id="workspace-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} className={`w-full flex-1 resize-none rounded-xl border p-4 text-sm leading-7 outline-none transition ${isDark ? "border-white/5 bg-[#0A0A0A] text-white placeholder:text-slate-500 focus:border-white/15" : "border-gray-200 bg-gray-50 text-gray-900 placeholder:text-gray-400 focus:border-gray-400"}`} placeholder={t.promptPlaceholder} />
+                {renderPromptEditor("workspace")}
                 </div>
 
                 {authNotice ? <NoticeBanner notice={authNotice} /> : null}
@@ -986,6 +1273,40 @@ export default function Home() {
           </div>
         )}
 
+        {showMentionMenu && mentionMenuPos && filteredMentionOptions.length > 0 ? (
+          <div
+            ref={mentionMenuRef}
+            className={`fixed z-40 w-64 overflow-hidden rounded-2xl border shadow-2xl ${isDark ? "border-white/10 bg-[#0b0f16]" : "border-gray-200 bg-white"}`}
+            style={{ top: mentionMenuPos.top, left: mentionMenuPos.left }}
+          >
+            {filteredMentionOptions.map(({ imageUrl, index }) => (
+              <button
+                key={`${imageUrl}-${index}`}
+                type="button"
+                onClick={() => insertMention(index)}
+                className={`flex w-full items-center gap-3 border-b px-3 py-2.5 text-left transition last:border-b-0 ${isDark ? "border-white/5 hover:bg-white/[0.05]" : "border-gray-100 hover:bg-cyan-50"}`}
+              >
+                <img src={imageUrl} alt={`Reference ${index + 1}`} className="h-9 w-9 rounded-lg object-cover" />
+                <div>
+                  <div className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>@R{index + 1}</div>
+                  <div className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>{locale === "zh" ? "插入参考图引用" : "Insert image reference"}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {previewImage ? (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setPreviewImage(null)}>
+            <div className="relative flex h-full max-h-[90vh] w-full max-w-5xl items-center justify-center p-4">
+              <img src={previewImage} alt="Reference preview" className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl ring-1 ring-white/10" onClick={(event) => event.stopPropagation()} />
+              <button type="button" onClick={() => setPreviewImage(null)} className="absolute right-4 top-4 rounded-full bg-black/60 p-2.5 text-white transition hover:bg-black/80">
+                <CloseIcon />
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {showLoginPanel ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-md">
             <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-[#090d14] p-6 shadow-[0_32px_120px_rgba(0,0,0,0.52)]">
@@ -1022,6 +1343,13 @@ export default function Home() {
             </div>
           </div>
         ) : null}
+      <style jsx global>{`
+        .prompt-editor:empty::before {
+          content: attr(data-placeholder);
+          color: ${isDark ? "#64748b" : "#94a3b8"};
+          pointer-events: none;
+        }
+      `}</style>
       </main>
     </div>
   );
