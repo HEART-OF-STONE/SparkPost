@@ -347,6 +347,15 @@ const getDisplayImageModel = (model: string | null | undefined) => {
   return MODEL_DISPLAY_NAMES[normalized] ?? model ?? DEFAULT_IMAGE_MODEL_ID;
 };
 
+const createLocalPreviewUser = (): AuthUser => ({
+  id: "local-preview-user",
+  email: "preview@sparkpost.local",
+  createdAt: new Date().toISOString(),
+  emailVerifiedAt: new Date().toISOString(),
+  lastLoginAt: new Date().toISOString(),
+  creditBalance: 20,
+});
+
 const noticeClasses = (type: Notice["type"]) =>
   type === "error"
     ? "border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-100"
@@ -400,6 +409,7 @@ export default function Home() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showMentionMenu, setShowMentionMenu] = useState(false);
   const [mentionMenuPos, setMentionMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [mentionQuery, setMentionQuery] = useState("");
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
   const [isSendingCode, setIsSendingCode] = useState(false);
@@ -437,8 +447,9 @@ export default function Home() {
   const currentCost = 10;
   const currentPrompt = prompts[mode];
   const canRender = !!currentPrompt.trim() && !isGeneratingImage;
+  const referenceUploadInputId = user ? "workspace-reference-upload" : "landing-reference-upload";
   const i2iPromptPlaceholder = locale === "zh"
-    ? "?? @ ???????????????? @R2 ????? @R1?"
+    ? "输入 @ 引用参考图，例如让 @R2 延续 @R1 的构图。"
     : "Type @ to reference uploaded images, e.g. redraw @R1 in the style of @R2.";
 
   useEffect(() => {
@@ -482,7 +493,22 @@ export default function Home() {
         setUser(data.user);
         if (data.user) setEmail(data.user.email);
       } catch (error) {
-        if (!controller.signal.aborted) setAuthNotice({ type: "error", text: error instanceof Error ? error.message : t.sessionLoadFailed });
+        if (!controller.signal.aborted) {
+          const isLocalPreviewHost =
+            typeof window !== "undefined" && (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost");
+
+          if (isLocalPreviewHost) {
+            const previewUser = createLocalPreviewUser();
+            setUser(previewUser);
+            setEmail(previewUser.email);
+            setAuthNotice({
+              type: "info",
+              text: locale === "zh" ? "本地预览模式已启用，当前工作台使用模拟账户。" : "Local preview mode is enabled with a mock workspace account.",
+            });
+          } else {
+            setAuthNotice({ type: "error", text: error instanceof Error ? error.message : t.sessionLoadFailed });
+          }
+        }
       } finally {
         if (!controller.signal.aborted) setIsLoadingSession(false);
       }
@@ -754,8 +780,23 @@ export default function Home() {
       if (selection && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
         const textBefore = range.startContainer.textContent?.slice(0, range.startOffset) ?? "";
-        if (/@(\w*)$/.test(textBefore)) {
+        const mentionMatch = textBefore.match(/@([^\s@]*)$/);
+        const nextQuery = mentionMatch?.[1]?.toLowerCase() ?? "";
+        const isReferenceQuery = mentionMatch !== null && (nextQuery === "" || /^r\d*$/.test(nextQuery));
+
+        if (isReferenceQuery) {
+          const hasMatches =
+            nextQuery === "" || uploadedImages.some((_, index) => `r${index + 1}`.startsWith(nextQuery));
+
+          if (!hasMatches) {
+            setMentionQuery("");
+            setShowMentionMenu(false);
+            setMentionMenuPos(null);
+            return;
+          }
+
           savedRangeRef.current = range.cloneRange();
+          setMentionQuery(nextQuery);
           let rect = range.getBoundingClientRect();
           if (rect.width === 0 || rect.height === 0) {
             const probe = document.createElement("span");
@@ -771,6 +812,7 @@ export default function Home() {
       }
     }
 
+    setMentionQuery("");
     setShowMentionMenu(false);
     setMentionMenuPos(null);
   }
@@ -786,7 +828,7 @@ export default function Home() {
     const range = savedRangeRef.current;
     const startContainer = range.startContainer;
     const textBefore = startContainer.textContent?.slice(0, range.startOffset) ?? "";
-    const match = textBefore.match(/@(\w*)$/);
+    const match = textBefore.match(/@([^\s@]*)$/);
     if (!match) return;
 
     range.setStart(startContainer, range.startOffset - match[0].length);
@@ -808,6 +850,7 @@ export default function Home() {
     selection.removeAllRanges();
     selection.addRange(range);
 
+    setMentionQuery("");
     setShowMentionMenu(false);
     setMentionMenuPos(null);
     isTypingRef.current = true;
@@ -878,19 +921,39 @@ export default function Home() {
               </div>
             ))}
             {uploadedImages.length < 5 ? (
-              <button type="button" onClick={() => !isGeneratingImage && fileInputRef.current?.click()} className={`flex h-[60px] w-[60px] items-center justify-center rounded-lg border-2 border-dashed transition-colors ${isDark ? "border-white/10 text-slate-400 hover:border-cyan-400/50 hover:bg-white/[0.05] hover:text-cyan-300" : "border-gray-300 text-gray-400 hover:border-cyan-500 hover:bg-cyan-50 hover:text-cyan-600"}`}>
+              <div className={`relative flex h-[60px] w-[60px] items-center justify-center rounded-lg border-2 border-dashed transition-colors ${isGeneratingImage ? "cursor-not-allowed opacity-50" : "cursor-pointer"} ${isDark ? "border-white/10 text-slate-400 hover:border-cyan-400/50 hover:bg-white/[0.05] hover:text-cyan-300" : "border-gray-300 text-gray-400 hover:border-cyan-500 hover:bg-cyan-50 hover:text-cyan-600"}`}>
                 <PlusIcon />
-              </button>
+                <input
+                  ref={fileInputRef}
+                  id={referenceUploadInputId}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleImageUpload}
+                  disabled={isGeneratingImage}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                />
+              </div>
             ) : null}
           </div>
         ) : (
-          <button type="button" onClick={() => !isGeneratingImage && fileInputRef.current?.click()} className={`flex h-24 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed transition ${isDark ? "border-white/10 bg-white/[0.02] text-slate-400 hover:border-cyan-400/40 hover:text-cyan-300" : "border-gray-300 bg-gray-50 text-gray-400 hover:border-cyan-400/40 hover:text-cyan-600"}`}>
+          <div
+            className={`relative flex h-24 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed transition ${isGeneratingImage ? "cursor-not-allowed opacity-50" : "cursor-pointer"} ${isDark ? "border-white/10 bg-white/[0.02] text-slate-400 hover:border-cyan-400/40 hover:text-cyan-300" : "border-gray-300 bg-gray-50 text-gray-400 hover:border-cyan-400/40 hover:text-cyan-600"}`}
+          >
             <UploadIcon />
             <span className="mt-2 text-xs">{locale === "zh" ? "点击上传，最多 5 张参考图" : "Click to upload up to 5 reference images"}</span>
-          </button>
+            <input
+              ref={fileInputRef}
+              id={referenceUploadInputId}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleImageUpload}
+              disabled={isGeneratingImage}
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+            />
+          </div>
         )}
-
-        <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
       </div>
     );
   }
@@ -946,6 +1009,14 @@ export default function Home() {
     { title: t.feature2Title, body: t.feature2Body, icon: <SparklesIcon />, tint: isDark ? "text-violet-400 bg-violet-500/10 border-violet-500/20" : "text-violet-600 bg-violet-50 border-violet-100" },
     { title: t.feature3Title, body: t.feature3Body, icon: <ShieldIcon />, tint: isDark ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" : "text-emerald-600 bg-emerald-50 border-emerald-100" },
   ];
+
+  const filteredMentionOptions = uploadedImages
+    .map((imageUrl, index) => ({
+      imageUrl,
+      index,
+      label: `r${index + 1}`,
+    }))
+    .filter((option) => mentionQuery === "" || option.label.startsWith(mentionQuery));
 
   const renderSurface = generatedImageUrl && !previewLoadFailed ? (
     <div className={`relative h-full min-h-[320px] w-full overflow-hidden rounded-[1.5rem] border ${isDark ? "border-white/10 bg-black/50 shadow-[0_20px_80px_rgba(0,0,0,0.35)]" : "border-gray-200 bg-white shadow-[0_20px_80px_rgba(148,163,184,0.22)]"}`}>
@@ -1202,13 +1273,13 @@ export default function Home() {
           </div>
         )}
 
-        {showMentionMenu && mentionMenuPos && uploadedImages.length > 0 ? (
+        {showMentionMenu && mentionMenuPos && filteredMentionOptions.length > 0 ? (
           <div
             ref={mentionMenuRef}
             className={`fixed z-40 w-64 overflow-hidden rounded-2xl border shadow-2xl ${isDark ? "border-white/10 bg-[#0b0f16]" : "border-gray-200 bg-white"}`}
             style={{ top: mentionMenuPos.top, left: mentionMenuPos.left }}
           >
-            {uploadedImages.map((imageUrl, index) => (
+            {filteredMentionOptions.map(({ imageUrl, index }) => (
               <button
                 key={`${imageUrl}-${index}`}
                 type="button"
