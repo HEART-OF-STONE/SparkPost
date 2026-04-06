@@ -32,6 +32,7 @@ export interface Env {
   IMAGE_MODEL?: string;
   IMAGE_BASE_URL?: string;
   TEXT_TO_IMAGE_COST?: string;
+  IMAGE_TO_IMAGE_COST?: string;
   DEV_AUTH_DEBUG_CODE?: string;
   AUTH_CODE_TTL_MINUTES?: string;
   AUTH_CODE_COOLDOWN_SECONDS?: string;
@@ -115,6 +116,7 @@ const DEFAULT_IMAGE_BACKEND = "official";
 const DEFAULT_IMAGE_MODEL = "dall-e-3";
 const DEFAULT_IMAGE_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_TEXT_TO_IMAGE_COST = 10;
+const DEFAULT_IMAGE_TO_IMAGE_COST = 10;
 const DEFAULT_CODE_TTL_MINUTES = 10;
 const DEFAULT_CODE_COOLDOWN_SECONDS = 60;
 const DEFAULT_VERIFY_CODE_MAX_ATTEMPTS = 5;
@@ -152,6 +154,7 @@ const getImageConfig = (env: Env) => {
   const model = env.IMAGE_MODEL ?? DEFAULT_IMAGE_MODEL;
   const baseUrl = (env.IMAGE_BASE_URL ?? DEFAULT_IMAGE_BASE_URL).replace(/\/$/, "");
   const textToImageCost = getNumberEnv(env.TEXT_TO_IMAGE_COST, DEFAULT_TEXT_TO_IMAGE_COST);
+  const imageToImageCost = getNumberEnv(env.IMAGE_TO_IMAGE_COST, DEFAULT_IMAGE_TO_IMAGE_COST);
 
   return {
     backend,
@@ -159,6 +162,7 @@ const getImageConfig = (env: Env) => {
     model,
     baseUrl,
     textToImageCost,
+    imageToImageCost,
     status:
       ["official", "relay"].includes(backend) && apiKey.length > 0 ? "available" : "unavailable",
   };
@@ -453,11 +457,21 @@ const validateVerifyCodeInput = (input: unknown, env: Env) => {
   return { ok: true as const, email: normalizedEmail, code: normalizedCode };
 };
 
-const validateTextToImageInput = (input: unknown) => {
-  const prompt = typeof input === "object" && input !== null && !Array.isArray(input) && "prompt" in input ? input.prompt : undefined;
+const isRecord = (input: unknown): input is Record<string, unknown> =>
+  typeof input === "object" && input !== null && !Array.isArray(input);
+
+const isSupportedReferenceImage = (value: string) =>
+  /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(value);
+
+const validateGenerateImageInput = (input: unknown) => {
+  const prompt = isRecord(input) && "prompt" in input ? input.prompt : undefined;
+  const mode = isRecord(input) && "mode" in input ? input.mode : undefined;
+  const referenceImages = isRecord(input) && "referenceImages" in input ? input.referenceImages : undefined;
+
   if (typeof prompt !== "string") {
     return { ok: false as const, error: "Prompt is required." };
   }
+
   const normalizedPrompt = normalizePrompt(prompt);
   if (normalizedPrompt.length < 3) {
     return { ok: false as const, error: "Prompt must be at least 3 characters." };
@@ -465,7 +479,32 @@ const validateTextToImageInput = (input: unknown) => {
   if (normalizedPrompt.length > 2000) {
     return { ok: false as const, error: "Prompt must be 2000 characters or fewer." };
   }
-  return { ok: true as const, prompt: normalizedPrompt };
+
+  const normalizedMode =
+    mode === "i2i" || mode === "t2i" ? mode : Array.isArray(referenceImages) && referenceImages.length > 0 ? "i2i" : "t2i";
+
+  if (normalizedMode === "t2i") {
+    return { ok: true as const, mode: normalizedMode, prompt: normalizedPrompt, referenceImages: [] as string[] };
+  }
+
+  if (!Array.isArray(referenceImages) || referenceImages.length === 0) {
+    return { ok: false as const, error: "At least one reference image is required for image-to-image." };
+  }
+
+  if (referenceImages.length > 5) {
+    return { ok: false as const, error: "Image-to-image supports up to 5 reference images." };
+  }
+
+  if (referenceImages.some((value) => typeof value !== "string" || !isSupportedReferenceImage(value))) {
+    return { ok: false as const, error: "Reference images must be valid image data URLs." };
+  }
+
+  return {
+    ok: true as const,
+    mode: normalizedMode,
+    prompt: normalizedPrompt,
+    referenceImages,
+  };
 };
 
 const generateVerificationCode = (env: Env) => {
@@ -630,7 +669,19 @@ const getImageGenerationEndpoint = (imageConfig: ReturnType<typeof getImageConfi
   return `${imageConfig.baseUrl}/images/generations`;
 };
 
+const getImageEditEndpoint = (imageConfig: ReturnType<typeof getImageConfig>) => {
+  if (imageConfig.baseUrl.endsWith("/images/edits")) {
+    return imageConfig.baseUrl;
+  }
+  return `${imageConfig.baseUrl}/images/edits`;
+};
+
 const decodeBase64Image = (value: string) => new Uint8Array(Buffer.from(value, "base64"));
+
+const getMimeTypeFromDataUrl = (value: string) => {
+  const match = value.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/);
+  return match?.[1] ?? "image/png";
+};
 
 const fetchRemoteImageBytes = async (url: string) => {
   const response = await fetch(url);
@@ -683,9 +734,87 @@ const callOfficialImageProvider = async (prompt: string, env: Env): Promise<Prov
   throw new ImageGenerationProviderError("Image provider returned no image data.");
 };
 
-const generateProviderImage = async (prompt: string, env: Env) => {
+const callOfficialImageEditProvider = async (
+  prompt: string,
+  referenceImages: string[],
+  env: Env,
+): Promise<ProviderResult> => {
+  const imageConfig = getImageConfig(env);
+  if (imageConfig.status !== "available") {
+    throw new ImageGenerationConfigError("Image generation provider is not configured.");
+  }
+
+  const endpoint = getImageEditEndpoint(imageConfig);
+  const primaryPayload: JsonRecord = {
+    model: imageConfig.model,
+    prompt,
+    images: referenceImages,
+  };
+  const fallbackPayload: JsonRecord | null =
+    referenceImages.length === 1
+      ? {
+          model: imageConfig.model,
+          prompt,
+          image: referenceImages[0],
+        }
+      : null;
+
+  const executeRequest = async (payload: JsonRecord) => {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${imageConfig.apiKey}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const body = (await response.json().catch(() => null)) as
+      | { error?: { message?: string }; data?: Array<{ b64_json?: string; url?: string }> }
+      | null;
+
+    return { response, body };
+  };
+
+  let { response, body } = await executeRequest(primaryPayload);
+  if (!response.ok && fallbackPayload) {
+    const fallbackResult = await executeRequest(fallbackPayload);
+    response = fallbackResult.response;
+    body = fallbackResult.body;
+  }
+
+  if (!response.ok) {
+    console.error("Image edit provider request failed.", { status: response.status, body });
+    throw new ImageGenerationProviderError("Image generation provider request failed.");
+  }
+
+  const imageData = body?.data?.[0];
+  if (imageData?.b64_json) {
+    return {
+      bytes: decodeBase64Image(imageData.b64_json),
+      mimeType: "image/png",
+      model: imageConfig.model,
+    };
+  }
+
+  if (imageData?.url) {
+    const remoteImage = await fetchRemoteImageBytes(imageData.url);
+    return { bytes: remoteImage.bytes, mimeType: remoteImage.mimeType, model: imageConfig.model };
+  }
+
+  throw new ImageGenerationProviderError("Image provider returned no image data.");
+};
+
+const generateProviderImage = async (
+  prompt: string,
+  env: Env,
+  options?: { mode?: "t2i" | "i2i"; referenceImages?: string[] },
+) => {
   const imageConfig = getImageConfig(env);
   if (["official", "relay"].includes(imageConfig.backend)) {
+    if (options?.mode === "i2i") {
+      return callOfficialImageEditProvider(prompt, options.referenceImages ?? [], env);
+    }
     return callOfficialImageProvider(prompt, env);
   }
   throw new ImageGenerationConfigError(`Unsupported IMAGE_BACKEND: ${imageConfig.backend}`);
@@ -831,6 +960,114 @@ const generateTextToImageForUser = async (request: Request, userId: string, prom
       completedAt: task?.completedAt ?? completedAt.toISOString(),
       model: task?.model ?? providerResult.model,
       costCredits: task?.costCredits ?? imageConfig.textToImageCost,
+      remainingCredits,
+      assets: [
+        {
+          id: storedAsset.assetId,
+          fileUrl: storedAsset.fileUrl,
+          width: null,
+          height: null,
+        },
+      ],
+    };
+  } catch (error) {
+    await env.SPARKPOST_DB.prepare(
+      `UPDATE generation_tasks SET status = 'failed', error_message = ?, completed_at = ? WHERE id = ?`,
+    ).bind(error instanceof Error ? error.message : "Image generation failed.", new Date().toISOString(), taskId).run();
+    throw error;
+  }
+};
+
+const generateImageToImageForUser = async (
+  request: Request,
+  userId: string,
+  prompt: string,
+  referenceImages: string[],
+  env: Env,
+) => {
+  if (!env.SPARKPOST_DB) {
+    throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
+  }
+
+  const imageConfig = getImageConfig(env);
+  const now = new Date();
+  const creditAccount = await env.SPARKPOST_DB.prepare(
+    `SELECT balance FROM credit_accounts WHERE user_id = ? LIMIT 1`,
+  ).bind(userId).first<{ balance: number }>();
+
+  if (!creditAccount) {
+    throw new ImageGenerationAuthError("Authenticated user has no credit account.");
+  }
+
+  if (creditAccount.balance < imageConfig.imageToImageCost) {
+    throw new ImageGenerationCreditsError("Not enough credits to generate an image.");
+  }
+
+  const taskId = crypto.randomUUID();
+  await env.SPARKPOST_DB.prepare(
+    `INSERT INTO generation_tasks (
+       id, user_id, task_type, status, prompt, model, cost_credits, input_image_url, created_at
+     ) VALUES (?, ?, 'image_to_image', 'running', ?, ?, ?, ?, ?)`,
+  ).bind(
+    taskId,
+    userId,
+    prompt,
+    imageConfig.model,
+    imageConfig.imageToImageCost,
+    `inline:${getMimeTypeFromDataUrl(referenceImages[0])}`,
+    now.toISOString(),
+  ).run();
+
+  try {
+    const providerResult = await generateProviderImage(prompt, env, {
+      mode: "i2i",
+      referenceImages,
+    });
+    const storedAsset = await persistGeneratedAsset(request, env, userId, taskId, providerResult);
+    const completedAt = new Date();
+    const remainingCredits = creditAccount.balance - imageConfig.imageToImageCost;
+
+    await env.SPARKPOST_DB.prepare(
+      `UPDATE credit_accounts SET balance = ?, updated_at = ? WHERE user_id = ?`,
+    ).bind(remainingCredits, completedAt.toISOString(), userId).run();
+
+    await env.SPARKPOST_DB.prepare(
+      `INSERT INTO credit_transactions (
+         id, user_id, type, amount, balance_after, related_task_id, remark, created_at
+       ) VALUES (?, ?, 'image_to_image', ?, ?, ?, ?, ?)`,
+    ).bind(
+      crypto.randomUUID(),
+      userId,
+      -imageConfig.imageToImageCost,
+      remainingCredits,
+      taskId,
+      prompt.slice(0, 120),
+      completedAt.toISOString(),
+    ).run();
+
+    await env.SPARKPOST_DB.prepare(
+      `INSERT INTO generated_assets (
+         id, task_id, asset_type, file_url, width, height, created_at
+       ) VALUES (?, ?, 'image', ?, NULL, NULL, ?)`,
+    ).bind(storedAsset.assetId, taskId, storedAsset.fileUrl, completedAt.toISOString()).run();
+
+    await env.SPARKPOST_DB.prepare(
+      `UPDATE generation_tasks SET status = 'succeeded', model = ?, completed_at = ? WHERE id = ?`,
+    ).bind(providerResult.model, completedAt.toISOString(), taskId).run();
+
+    const task = await env.SPARKPOST_DB.prepare(
+      `SELECT id, status, prompt, created_at AS createdAt, completed_at AS completedAt, model, cost_credits AS costCredits
+       FROM generation_tasks WHERE id = ? LIMIT 1`,
+    ).bind(taskId).first<GenerationTaskRow>();
+
+    return {
+      id: task?.id ?? taskId,
+      status: task?.status ?? "succeeded",
+      prompt: task?.prompt ?? prompt,
+      createdAt: task?.createdAt ?? now.toISOString(),
+      completedAt: task?.completedAt ?? completedAt.toISOString(),
+      model: task?.model ?? providerResult.model,
+      costCredits: task?.costCredits ?? imageConfig.imageToImageCost,
       remainingCredits,
       assets: [
         {
@@ -1012,7 +1249,7 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
     handler: async (request, env) => {
       const bodyResult = await parseJsonBody(request);
       if (!bodyResult.ok) return json({ error: bodyResult.error }, { status: 400 });
-      const input = validateTextToImageInput(bodyResult.body);
+      const input = validateGenerateImageInput(bodyResult.body);
       if (!input.ok) return json({ error: input.error }, { status: 400 });
 
       const authenticatedUser = await getAuthenticatedUser(request, env);
@@ -1020,7 +1257,16 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
       if (!authenticatedUser.user) return json({ error: "Authentication required." }, { status: 401 });
 
       try {
-        const task = await generateTextToImageForUser(request, authenticatedUser.user.id, input.prompt, env);
+        const task =
+          input.mode === "i2i"
+            ? await generateImageToImageForUser(
+                request,
+                authenticatedUser.user.id,
+                input.prompt,
+                input.referenceImages,
+                env,
+              )
+            : await generateTextToImageForUser(request, authenticatedUser.user.id, input.prompt, env);
         return json({ ok: true, task });
       } catch (error) {
         if (error instanceof ImageGenerationCreditsError) {
