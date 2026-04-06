@@ -18,7 +18,7 @@ type Copy = {
   t2iMode: string; i2iMode: string; uploadRef: string; uploadHint: string;
   feature1Title: string; feature1Desc: string; feature2Title: string; feature2Desc: string; feature3Title: string; feature3Desc: string;
   playgroundTitle: string; playgroundDesc: string;
-  promptLabel: string; landingPromptPlaceholder: string; workspacePromptPlaceholder: string; workspacePromptHint: string;
+  promptLabel: string; landingPromptPlaceholder: string; workspacePromptPlaceholder: string; workspacePromptHint: string; i2iPromptPlaceholder: string;
   previewTitle: string; previewBody: string; previewCards: Array<[string, string, string]>; pathTitle: string; pathItems: string[];
   authTitle: string; authBody: string; email: string; code: string; sendCode: string; sendingCode: string; verify: string; verifying: string; authHint: string; cooldown: string;
   workspaceEyebrow: string; workspaceTitle: string; workspaceBody: string; runtimeTitle: string; runtimeBody: string; notesTitle: string; notesItems: string[];
@@ -42,7 +42,7 @@ const copy: Record<Locale, Copy> = {
     feature3Title: "毫秒级状态同步", feature3Desc: "所见即所得的消耗指示器与底座状态监控，企业级的可靠性保障每一次渲染任务都使命必达。",
     playgroundTitle: "即刻体验工作台", playgroundDesc: "在下方直接输入你的灵感，无需登录即可预览生图界面的专业级交互感受。",
     landingHint: "免登录即可输入 Prompt。在执行核心渲染时，我们将无缝保存你的进度并引导完成验证。", keepPrompt: "Prompt 会在登录前后保留。",
-    promptLabel: "Prompt (提示词)", landingPromptPlaceholder: "例如：一张电影级的产品特写KV，半透明玻璃材质，深灰色背景，柔和的青色环境光，8k分辨率，辛烷渲染器...", workspacePromptPlaceholder: "描述你想生成的画面，例如：极简风格的工业设计产品、柔和的环境光...", workspacePromptHint: "当前为同步单图路径，支持多状态连贯响应。",
+    promptLabel: "Prompt (提示词)", landingPromptPlaceholder: "例如：一张电影级的产品特写KV，半透明玻璃材质，深灰色背景，柔和的青色环境光，8k分辨率，辛烷渲染器...", workspacePromptPlaceholder: "描述你想生成的画面，例如：极简风格的工业设计产品、柔和的环境光...", i2iPromptPlaceholder: "输入 @ 可以直接引用已上传的参考图，例如：使用 @R2 的风格来重绘 @R1...", workspacePromptHint: "当前为同步单图路径，支持多状态连贯响应。",
     previewTitle: "预览体验", previewBody: "提交 prompt 后，生成结果将在此画布中渲染。", previewCards: [["探索", "风格定义", "通过 prompt 快速建立视觉方向。"], ["反馈", "实时预览", "错误与消耗状态实时同步。"], ["扩展", "灵活工作流", "为团队协作与资产沉淀提供空间。"]], pathTitle: "技术路径说明", pathItems: ["按需触发 Auth，而非阻断式登录墙。", "Auth Modal 与主界面共享上下文。", "登录后无缝过渡到专业工作台视图。"],
     authTitle: "验证以解锁渲染", authBody: "你的灵感已保存。完成极速邮箱验证后，渲染引擎将立即自动启动。", email: "工作邮箱", code: "6位安全码", sendCode: "获取安全码", sendingCode: "发送中...", verify: "验证并渲染", verifying: "验证中...", authHint: "沙盒环境提示：点击获取验证码后，后台将自动生成 123456 并填充以供测试。", cooldown: "重新发送",
     workspaceEyebrow: "SparkPost Studio", workspaceTitle: "工作台", workspaceBody: "主界面聚焦 prompt、生成动作、结果预览和任务信息。", runtimeTitle: "系统状态", runtimeBody: "实时反馈底层服务与接口可用性。", notesTitle: "说明", notesItems: ["专注于效率，去除冗余视觉干扰。", "若 Provider 异常，系统将在此暴露错误详情。"],
@@ -64,7 +64,7 @@ const copy: Record<Locale, Copy> = {
     feature3Title: "Real-time Sync", feature3Desc: "WYSIWYG credit indicators and cluster status monitoring. Enterprise-grade reliability ensures every render job is delivered.",
     playgroundTitle: "Experience the Studio", playgroundDesc: "Enter your inspiration below to preview the professional interaction of our generation studio without logging in.",
     landingHint: "Enter your prompt without logging in. We will seamlessly save your progress and prompt you to verify when you execute the core render.", keepPrompt: "Prompt preserved across sessions.",
-    promptLabel: "Prompt", landingPromptPlaceholder: "e.g., A cinematic close-up of a high-tech product, translucent glass, dark gray background, soft cyan ambient light, 8k, Octane render...", workspacePromptPlaceholder: "Describe your scene, e.g., Minimalist industrial design, soft ambient light...", workspacePromptHint: "Synchronous single-image pipeline.",
+    promptLabel: "Prompt", landingPromptPlaceholder: "e.g., A cinematic close-up of a high-tech product, translucent glass, dark gray background, soft cyan ambient light, 8k, Octane render...", workspacePromptPlaceholder: "Describe your scene, e.g., Minimalist industrial design, soft ambient light...", i2iPromptPlaceholder: "Type @ to reference uploaded images, e.g., Redraw @R1 using the style of @R2...", workspacePromptHint: "Synchronous single-image pipeline.",
     previewTitle: "Preview Experience", previewBody: "Submit a prompt to render the output on this canvas.", previewCards: [["Explore", "Style Definition", "Establish visual direction quickly."], ["Feedback", "Real-time Sync", "Errors and credit changes in real-time."], ["Extend", "Flexible Flow", "Built for team collaboration and storage."]], pathTitle: "Architecture Path", pathItems: ["On-demand auth, no hard login walls.", "Auth Modal shares context with workspace.", "Seamless transition to pro view."],
     authTitle: "Verify to unlock render", authBody: "Your inspiration is saved. The render engine will start automatically after a quick email verification.", email: "Work Email", code: "6-digit Code", sendCode: "Get Code", sendingCode: "Sending...", verify: "Verify & Render", verifying: "Verifying...", authHint: "Sandbox note: Clicking 'Get Code' will auto-fill 123456 for testing purposes.", cooldown: "Resend in",
     workspaceEyebrow: "SparkPost Studio", workspaceTitle: "Studio", workspaceBody: "Focused purely on composition, generation, and task details.", runtimeTitle: "System Status", runtimeBody: "Real-time feedback on underlying services.", notesTitle: "Notes", notesItems: ["Optimized for efficiency, removing visual noise.", "Provider issues will be surfaced here clearly."],
@@ -79,17 +79,19 @@ const formatDate = (value: string | null, locale: Locale) => value ? new Date(va
 const formatTemplate = (template: string, values: Record<string, string | number>) => template.replace(/\{(\w+)\}/g, (_, key: string) => String(values[key] ?? ""));
 const primaryImageUrl = (task: ImageTaskResult | null) => task?.assets[0]?.fileUrl ?? null;
 
-// Gemini API Key
 const apiKey = "";
 
 export default function App() {
-  // Theme State (default dark)
   const [isDark, setIsDark] = useState(true);
-
   const [locale, setLocale] = useState<Locale>("en");
+  
+  const [prompts, setPrompts] = useState({
+    t2i: "A cinematic futuristic product scene with glowing edges, reflective glass, and dramatic studio lighting.",
+    i2i: ""
+  });
+
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
-  const [prompt, setPrompt] = useState("A cinematic futuristic product scene with glowing edges, reflective glass, and dramatic studio lighting.");
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [isSendingCode, setIsSendingCode] = useState(false);
@@ -107,17 +109,22 @@ export default function App() {
   const [previewLoadFailed, setPreviewLoadFailed] = useState(false);
   const [systemStatus, setSystemStatus] = useState<SystemStatus>("available");
   
-  // Feature State
   const [mode, setMode] = useState<'t2i' | 'i2i'>('t2i');
-  const [referenceImage, setReferenceImage] = useState<string | null>(null);
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  // Gemini State
+  const [showMentionMenu, setShowMentionMenu] = useState(false);
+  const [mentionMenuPos, setMentionMenuPos] = useState<{top: number, left: number} | null>(null);
+  const [hoveredBadge, setHoveredBadge] = useState<{img: string, rect: DOMRect} | null>(null);
+  const savedRange = useRef<Range | null>(null);
+  const activeEditorRef = useRef<HTMLElement | null>(null);
+  const isTypingRef = useRef(false);
+
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [isInspiring, setIsInspiring] = useState(false);
 
   const emailRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
-  const promptRef = useRef<HTMLTextAreaElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const playgroundRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -125,6 +132,170 @@ export default function App() {
   const t = copy[locale];
   const authStatus: AuthStatus = isLoadingSession ? "checking" : user ? "signedIn" : "signedOut";
   const cooldownActive = useMemo(() => cooldownEndsAt !== null && timeLeft > 0, [cooldownEndsAt, timeLeft]);
+
+  const handleModeSwitch = (newMode: 't2i' | 'i2i') => {
+    setMode(newMode);
+    isTypingRef.current = false;
+    setShowMentionMenu(false);
+    setMentionMenuPos(null);
+    setHoveredBadge(null);
+  };
+
+  // ---------------- 提取统一的原子级 HTML 渲染 (无 Margin, 无 Flex) ----------------
+  const getBadgeHTML = (img: string, idx: number, isDark: boolean) => {
+    const bg = isDark ? '#222' : '#ecfeff';
+    const border = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(6,182,212,0.3)';
+    // 【终极重构：消灭双光标与光标巨大化 Bug】
+    // 1. 绝对不要在根 span 上写任何 margin。
+    // 2. 绝对不要使用 flex, align-items。全部使用纯正的 inline-block 和 vertical-align: middle。
+    return `<span class="mention-badge" contenteditable="false" data-img="${img}" style="display: inline-block; vertical-align: middle; user-select: none;"><span style="display: inline-block; height: 22px; line-height: 20px; padding: 0 6px; border-radius: 4px; background: ${bg}; border: 1px solid ${border}; box-sizing: border-box; white-space: nowrap;"><img src="${img}" style="display: inline-block; width: 14px; height: 14px; border-radius: 2px; object-fit: cover; vertical-align: middle; margin-right: 4px; pointer-events: none;" /><span style="display: inline-block; font-size: 11px; font-weight: bold; color: #06b6d4; vertical-align: middle; pointer-events: none; margin-bottom: 1px;">@R${idx + 1}</span></span></span>`;
+  };
+
+  const syncEditorHTML = (text: string, editor: HTMLElement, images: string[], currentMode: string) => {
+    if (!editor) return;
+    let html = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+    
+    if (currentMode === 'i2i') {
+      images.forEach((img, idx) => {
+        const regex = new RegExp(`@R${idx + 1}\\b`, 'g');
+        html = html.replace(regex, getBadgeHTML(img, idx, isDark));
+      });
+    }
+    editor.innerHTML = html;
+  };
+
+  useEffect(() => {
+    if (!isTypingRef.current && activeEditorRef.current) {
+      syncEditorHTML(prompts[mode], activeEditorRef.current, uploadedImages, mode);
+    }
+    isTypingRef.current = false;
+  }, [prompts, mode, uploadedImages, isDark]);
+
+  const handleEditorInput = (e: React.FormEvent<HTMLDivElement>, currentMode: 't2i' | 'i2i') => {
+    const el = e.currentTarget;
+    activeEditorRef.current = el;
+    isTypingRef.current = true;
+    
+    const newText = el.innerText.replace(/\u00A0/g, ' ');
+    setPrompts(prev => ({ ...prev, [currentMode]: newText }));
+
+    if (currentMode === 'i2i' && uploadedImages.length > 0) {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        const textBefore = range.startContainer.textContent?.slice(0, range.startOffset) || "";
+        const match = textBefore.match(/@(\w*)$/);
+        
+        if (match) {
+          savedRange.current = range.cloneRange();
+          // 【完美定位探针】：使用临时零宽字符，精确捕捉此瞬间光标的绝对屏幕位置
+          let rect = range.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) {
+            const span = document.createElement('span');
+            span.textContent = '\u200b';
+            range.insertNode(span);
+            rect = span.getBoundingClientRect();
+            span.parentNode?.removeChild(span);
+          }
+          setMentionMenuPos({ top: rect.bottom + 4, left: Math.max(16, rect.left) });
+          setShowMentionMenu(true);
+        } else {
+          setShowMentionMenu(false);
+          setMentionMenuPos(null);
+        }
+      }
+    }
+  };
+
+  const insertMention = (idx: number) => {
+    if (!savedRange.current || !activeEditorRef.current) return;
+    const selection = window.getSelection();
+    if (!selection) return;
+
+    selection.removeAllRanges();
+    selection.addRange(savedRange.current);
+
+    const range = savedRange.current;
+    const startContainer = range.startContainer;
+    const textBeforeCursor = startContainer.textContent?.slice(0, range.startOffset) || "";
+    const match = textBeforeCursor.match(/@(\w*)$/);
+
+    if (match) {
+      // 抹掉 @ 字符
+      range.setStart(startContainer, range.startOffset - match[0].length);
+      range.deleteContents();
+
+      // 使用同款完美原子 DOM 结构插入
+      const img = uploadedImages[idx];
+      const fragment = document.createRange().createContextualFragment(getBadgeHTML(img, idx, isDark));
+      const badgeNode = fragment.firstChild as HTMLElement;
+      
+      range.insertNode(badgeNode);
+      range.setStartAfter(badgeNode);
+      range.setEndAfter(badgeNode);
+      
+      // 【关键隔离】：插入普通空格 \u00A0 强制让光标跟在后面，而不是和无外边距的元素重叠
+      const space = document.createTextNode('\u00A0');
+      range.insertNode(space);
+      range.setStartAfter(space);
+      range.collapse(true);
+
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+
+    setShowMentionMenu(false);
+    setMentionMenuPos(null);
+    isTypingRef.current = true;
+    setPrompts(prev => ({ ...prev, [mode]: activeEditorRef.current!.innerText.replace(/\u00A0/g, ' ') }));
+  };
+
+  const handleEditorMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const badge = target.closest('.mention-badge') as HTMLElement;
+    if (badge) {
+      const img = badge.getAttribute('data-img');
+      if (img) {
+        setHoveredBadge({ img, rect: badge.getBoundingClientRect() });
+        return;
+      }
+    }
+    if (hoveredBadge) setHoveredBadge(null);
+  };
+
+  const handleEditorMouseLeave = () => {
+    setHoveredBadge(null);
+  };
+
+  // --- 其他核心逻辑 ---
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    const remainingSlots = 5 - uploadedImages.length;
+    const filesToProcess = files.slice(0, remainingSlots);
+
+    if (files.length > remainingSlots) {
+      setGenerationNotice({ type: "info", text: locale === 'zh' ? "最多只能上传 5 张参考图" : "Max 5 reference images allowed" });
+    }
+
+    const newImagesPromises = filesToProcess.map(file => {
+      return new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+    });
+
+    Promise.all(newImagesPromises).then(newImages => {
+      setUploadedImages(prev => [...prev, ...newImages]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    });
+  };
+
+  const removeImage = (indexToRemove: number) => {
+    setUploadedImages(prev => prev.filter((_, index) => index !== indexToRemove));
+  };
 
   useEffect(() => {
     if (authStatus === "signedOut" && showLoginPanel && pendingGenerateAfterLogin) {
@@ -144,9 +315,6 @@ export default function App() {
     return () => window.clearInterval(id);
   }, [cooldownEndsAt]);
 
-  useEffect(() => { if (showLoginPanel) window.setTimeout(() => emailRef.current?.focus(), 40); }, [showLoginPanel]);
-  useEffect(() => { if (authStatus === "signedIn" && !pendingGenerateAfterLogin) promptRef.current?.focus(); }, [authStatus, pendingGenerateAfterLogin]);
-
   useEffect(() => {
     function closeMenu(event: MouseEvent) {
       if (menuRef.current && event.target instanceof Node && !menuRef.current.contains(event.target)) setShowAccountMenu(false);
@@ -159,16 +327,6 @@ export default function App() {
     playgroundRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setReferenceImage(reader.result as string);
-      reader.readAsDataURL(file);
-    }
-  };
-
-  // Gemini API Function
   const callGeminiAPI = async (systemInstruction: string, userText: string) => {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
     const payload = {
@@ -193,7 +351,8 @@ export default function App() {
   };
 
   const handleEnhance = async () => {
-    if (!prompt.trim()) {
+    const currentPrompt = prompts[mode];
+    if (!currentPrompt.trim()) {
       setGenerationNotice({ type: "error", text: locale === 'zh' ? "⚠️ 请先写下简短的基础概念再点击扩写。" : "⚠️ Please enter a basic concept first." });
       return;
     }
@@ -201,8 +360,8 @@ export default function App() {
     setIsEnhancing(true);
     try {
       const systemPrompt = "你是一个精通 Midjourney 和 Stable Diffusion 的专业 AI 绘画提示词专家。请把用户输入的简单短语扩充为极其详细、富有画面感的专业英文提示词。要求包含：明确的主体描述、精细的背景环境、电影级的光影设置、渲染器和相机参数。最后换行附上这段英文的中文翻译。请直接返回结果，不要有任何寒暄。";
-      const enhancedText = await callGeminiAPI(systemPrompt, prompt);
-      setPrompt(enhancedText.trim());
+      const enhancedText = await callGeminiAPI(systemPrompt, currentPrompt);
+      setPrompts(prev => ({ ...prev, [mode]: enhancedText.trim() }));
     } catch (e) {
       setGenerationNotice({ type: "error", text: locale === 'zh' ? "⚠️ 提示词扩写失败，请检查 API 密钥或稍后重试。" : "⚠️ Failed to enhance prompt, check API key or try again." });
     } finally {
@@ -216,7 +375,7 @@ export default function App() {
     try {
       const systemPrompt = "你是一个充满创意的 AI 艺术总监。请随机为一个令人惊艳的画面构思并写出专业的 AI 绘画英文提示词。必须包含：主体、动态细节、环境、色彩倾向、灯光和渲染质量词汇。最后换行附上中文翻译。直接返回结果，绝不允许有任何寒暄。";
       const inspirationText = await callGeminiAPI(systemPrompt, "随机给我一个惊艳的绘画灵感");
-      setPrompt(inspirationText.trim());
+      setPrompts(prev => ({ ...prev, [mode]: inspirationText.trim() }));
     } catch (e) {
       setGenerationNotice({ type: "error", text: locale === 'zh' ? "⚠️ 灵感获取失败，请检查 API 密钥或稍后重试。" : "⚠️ Failed to get inspiration, check API key or try again." });
     } finally {
@@ -224,11 +383,17 @@ export default function App() {
     }
   };
 
-  // MOCK: Generate Image
   const generateImage = useCallback(async () => {
     setGenerationNotice(null);
-    if (!prompt.trim()) {
+    const currentPrompt = prompts[mode];
+    
+    if (!currentPrompt.trim()) {
       setGenerationNotice({ type: "error", text: t.enterPrompt });
+      return;
+    }
+
+    if (mode === 'i2i' && uploadedImages.length === 0) {
+      setGenerationNotice({ type: "error", text: locale === 'zh' ? "图生图模式下至少需要上传 1 张参考图" : "At least 1 reference image required" });
       return;
     }
 
@@ -247,7 +412,7 @@ export default function App() {
       const mockTask: ImageTaskResult = {
         id: "tsk_" + Math.random().toString(36).substr(2, 9),
         status: "completed",
-        prompt: prompt,
+        prompt: currentPrompt,
         createdAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
         model: mode === 't2i' ? "SparkPost Visual v2.4" : "SparkPost ImageControl v1.2",
@@ -263,7 +428,7 @@ export default function App() {
       if (user) setUser({ ...user, creditBalance: mockTask.remainingCredits });
       setIsGeneratingImage(false);
     }, 3000);
-  }, [prompt, t, user, mode]);
+  }, [prompts, t, user, mode, uploadedImages.length, locale]);
 
   useEffect(() => {
     if (user && pendingGenerateAfterLogin && !isGeneratingImage) {
@@ -272,7 +437,6 @@ export default function App() {
     }
   }, [generateImage, isGeneratingImage, pendingGenerateAfterLogin, user]);
 
-  // MOCK: Send Code
   async function handleSendCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAuthNotice(null);
@@ -286,7 +450,6 @@ export default function App() {
     }, 800);
   }
 
-  // MOCK: Verify Code
   async function handleVerifyCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAuthNotice(null);
@@ -310,7 +473,6 @@ export default function App() {
     }, 1200);
   }
 
-  // MOCK: Logout
   async function handleLogout() {
     setUser(null);
     setCode("");
@@ -329,11 +491,10 @@ export default function App() {
     setAuthNotice({ type: "info", text: t.loginToContinue });
   }
 
-  const canGenerate = !!prompt.trim() && !isGeneratingImage;
+  const canGenerate = !!prompts[mode].trim() && !isGeneratingImage;
   const accountInitials = user?.email.slice(0, 2).toUpperCase() ?? "SP";
   const currentCost = mode === 't2i' ? 10 : 15;
 
-  // SVG Icons
   const Icons = {
     Sparkles: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>,
     Zap: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14H4z"/></svg>,
@@ -358,48 +519,74 @@ export default function App() {
 
   return (
     <div className={`${isDark ? 'dark' : ''}`}>
+      <style dangerouslySetInnerHTML={{__html: `
+        .prompt-editor:empty:before {
+          content: attr(data-placeholder);
+          color: #6b7280;
+          pointer-events: none;
+          display: block;
+        }
+        .dark .prompt-editor:empty:before { color: #52525b; }
+      `}} />
+
+      {/* --- 精确指哪打哪的下拉菜单 --- */}
+      {showMentionMenu && mentionMenuPos && (
+        <div 
+          className="fixed z-[130] w-56 bg-white dark:bg-[#111] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100"
+          style={{ top: mentionMenuPos.top, left: mentionMenuPos.left }}
+        >
+          <div className="px-3 py-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-black/40">Select Reference</div>
+          <div className="max-h-48 overflow-y-auto">
+            {uploadedImages.map((img, idx) => (
+              <button key={idx} onClick={() => insertMention(idx)} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-cyan-50 dark:hover:bg-white/5 transition-colors text-left border-b border-gray-100 dark:border-white/5 last:border-0 group">
+                <div className="relative">
+                  <img src={img} className="w-8 h-8 rounded border border-gray-200 dark:border-white/10 object-cover shadow-sm" />
+                  <div className="absolute -top-1.5 -right-1.5 bg-gradient-to-r from-cyan-400 to-blue-500 text-white text-[9px] font-bold px-1 rounded shadow">R{idx + 1}</div>
+                </div>
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-200 group-hover:text-cyan-600 dark:group-hover:text-cyan-400">Insert @R{idx + 1}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* --- 悬浮 @ 图片的大图预览 --- */}
+      {hoveredBadge && (
+        <div 
+          className="fixed z-[120] pointer-events-none animate-in fade-in zoom-in-95 duration-100"
+          style={{
+            left: hoveredBadge.rect.left + hoveredBadge.rect.width / 2,
+            top: hoveredBadge.rect.top > 180 ? hoveredBadge.rect.top - 160 : hoveredBadge.rect.bottom + 10,
+            transform: 'translateX(-50%)'
+          }}
+        >
+          <div className="bg-white dark:bg-[#111] border border-gray-200 dark:border-white/10 p-1.5 rounded-xl shadow-2xl">
+            <img src={hoveredBadge.img} className="w-36 h-36 object-cover rounded-lg" />
+          </div>
+        </div>
+      )}
+
       <div className="min-h-screen bg-gray-50 dark:bg-[#000] text-gray-900 dark:text-[#EDEDED] font-sans flex flex-col selection:bg-cyan-500/30 scroll-smooth transition-colors duration-300">
         
-        {/* 顶部导航 (Glassmorphism Sticky Header) */}
+        {/* 顶部导航 */}
         <header className="flex h-16 shrink-0 items-center justify-between border-b border-gray-200 dark:border-white/10 px-6 bg-white/70 dark:bg-black/50 backdrop-blur-md sticky top-0 z-50 transition-colors duration-300">
           <div className="flex items-center gap-3 group cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-            {/* Logo 宇宙奇点 (Cosmic Singularity) */}
             <div className="relative flex h-8 w-8 items-center justify-center rounded-xl bg-white dark:bg-[#0A0A0A] border border-gray-200 dark:border-white/10 shadow-sm transition-transform duration-300 group-hover:scale-105 overflow-hidden">
-              
-              {/* 纯 CSS 扩散脉冲 (CSS Diffusion Rings) */}
               <div className="absolute h-5 w-5 rounded-full border border-cyan-400/40 animate-ping" style={{ animationDuration: '3s' }} />
               <div className="absolute h-5 w-5 rounded-full border border-indigo-500/30 animate-ping" style={{ animationDuration: '3s', animationDelay: '1.5s' }} />
-              
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="relative z-10">
-                {/* 倾斜的星环 */}
                 <ellipse cx="12" cy="12" rx="11" ry="4" transform="rotate(-30 12 12)" stroke="url(#ring-grad)" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="4 2" />
-                
-                {/* 星球本体 */}
                 <circle cx="12" cy="12" r="5" fill="url(#planet-grad)" />
-                
-                {/* 轨道星尘 (Stardust) */}
-                <circle cx="3" cy="6" r="1.5" fill="#38bdf8">
-                  <animate attributeName="opacity" values="0.2; 1; 0.2" dur="2s" repeatCount="indefinite" />
-                </circle>
-                <circle cx="20" cy="18" r="1" fill="#818cf8">
-                  <animate attributeName="opacity" values="1; 0.2; 1" dur="3s" repeatCount="indefinite" />
-                </circle>
-
+                <circle cx="3" cy="6" r="1.5" fill="#38bdf8"><animate attributeName="opacity" values="0.2; 1; 0.2" dur="2s" repeatCount="indefinite" /></circle>
+                <circle cx="20" cy="18" r="1" fill="#818cf8"><animate attributeName="opacity" values="1; 0.2; 1" dur="3s" repeatCount="indefinite" /></circle>
                 <defs>
-                  <linearGradient id="planet-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#0ea5e9" />
-                    <stop offset="100%" stopColor="#4f46e5" />
-                  </linearGradient>
-                  <linearGradient id="ring-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#38bdf8" />
-                    <stop offset="100%" stopColor="#6366f1" stopOpacity="0.2" />
-                  </linearGradient>
+                  <linearGradient id="planet-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#0ea5e9" /><stop offset="100%" stopColor="#4f46e5" /></linearGradient>
+                  <linearGradient id="ring-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#38bdf8" /><stop offset="100%" stopColor="#6366f1" stopOpacity="0.2" /></linearGradient>
                 </defs>
               </svg>
             </div>
             <span className="text-[15px] font-bold tracking-wide text-gray-900 dark:text-white transition-colors group-hover:text-cyan-600 dark:text-cyan-400">{t.badge}</span>
             <div className="w-px h-4 bg-gray-300 dark:bg-white/20 mx-2"></div>
-            {/* 主题切换按钮 */}
             <button onClick={(e) => { e.stopPropagation(); setIsDark(!isDark); }} className="p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 transition-colors">
               {isDark ? <Icons.Sun /> : <Icons.Moon />}
             </button>
@@ -414,12 +601,10 @@ export default function App() {
 
             {user ? (
               <div className="flex items-center gap-3">
-                {/* 积分展示 */}
                 <div className="hidden sm:flex items-center gap-1.5 bg-gray-100 dark:bg-white/5 px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/10 text-xs font-medium">
                   <div className="text-cyan-600 dark:text-cyan-400"><Icons.Zap /></div>
                   <span className="text-gray-900 dark:text-white">{user.creditBalance} {t.credits}</span>
                 </div>
-                {/* 头像与菜单 */}
                 <div className="relative" ref={menuRef}>
                   <button type="button" onClick={() => setShowAccountMenu((curr) => !curr)} className="flex items-center justify-center h-8 w-8 rounded-full bg-gray-200 dark:bg-[#111] border border-gray-300 dark:border-white/10 text-gray-700 dark:text-gray-300 text-xs font-medium transition-colors hover:bg-gray-300 dark:hover:bg-[#222] shadow-sm">
                     {accountInitials}
@@ -449,16 +634,12 @@ export default function App() {
           </div>
         </header>
 
-        {/* 主体内容 */}
         <main className="flex-1 flex flex-col relative w-full">
           {!user ? (
-            // ================= 未登录态：顶级 SaaS 落地页 =================
+            // ================= 未登录态 =================
             <div className="flex-1 w-full pb-24">
-              
-              {/* 1. Hero Section (首屏视觉) */}
               <section className="relative pt-24 pb-16 px-6 overflow-hidden flex flex-col items-center text-center w-full min-h-[85vh] justify-center">
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[600px] bg-cyan-400/10 dark:bg-cyan-500/20 blur-[120px] rounded-full pointer-events-none" />
-                
                 <div className="relative z-10 max-w-4xl mx-auto flex flex-col items-center">
                   <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-cyan-500/20 dark:border-cyan-500/30 bg-cyan-50 dark:bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 text-xs font-medium mb-8">
                     <span className="w-2 h-2 rounded-full bg-cyan-500 dark:bg-cyan-400 animate-pulse" />
@@ -491,7 +672,6 @@ export default function App() {
               {/* 2. Feature Grid (功能特性介绍) */}
               <section className="py-24 px-6 w-full max-w-6xl mx-auto relative border-t border-gray-200 dark:border-white/5">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Feature 1 */}
                   <div className="p-8 rounded-2xl bg-white dark:bg-[#0A0A0A] border border-gray-200 dark:border-white/5 hover:border-cyan-500/30 transition-colors shadow-sm dark:shadow-none group">
                     <div className="w-12 h-12 rounded-xl bg-cyan-50 dark:bg-cyan-500/10 border border-cyan-100 dark:border-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                       <Icons.Brain />
@@ -499,7 +679,6 @@ export default function App() {
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">{t.feature1Title}</h3>
                     <p className="text-sm text-gray-600 dark:text-[#888] leading-relaxed">{t.feature1Desc}</p>
                   </div>
-                  {/* Feature 2 */}
                   <div className="p-8 rounded-2xl bg-white dark:bg-[#0A0A0A] border border-gray-200 dark:border-white/5 hover:border-purple-500/30 transition-colors shadow-sm dark:shadow-none group">
                     <div className="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-500/10 border border-purple-100 dark:border-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                       <Icons.Zap />
@@ -507,7 +686,6 @@ export default function App() {
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">{t.feature2Title}</h3>
                     <p className="text-sm text-gray-600 dark:text-[#888] leading-relaxed">{t.feature2Desc}</p>
                   </div>
-                  {/* Feature 3 */}
                   <div className="p-8 rounded-2xl bg-white dark:bg-[#0A0A0A] border border-gray-200 dark:border-white/5 hover:border-green-500/30 transition-colors shadow-sm dark:shadow-none group">
                     <div className="w-12 h-12 rounded-xl bg-green-50 dark:bg-green-500/10 border border-green-100 dark:border-green-500/20 text-green-600 dark:text-green-400 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                       <Icons.Shield />
@@ -518,7 +696,7 @@ export default function App() {
                 </div>
               </section>
 
-              {/* 3. Interactive Playground (工作台沙盒体验) */}
+              {/* 3. Interactive Playground */}
               <section ref={playgroundRef} className="py-24 px-6 w-full max-w-6xl mx-auto">
                 <div className="text-center mb-12">
                   <h2 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white mb-4">{t.playgroundTitle}</h2>
@@ -530,59 +708,106 @@ export default function App() {
                   <div className="w-full md:w-[380px] border-b md:border-b-0 md:border-r border-gray-200 dark:border-white/10 p-6 flex flex-col bg-gray-50 dark:bg-[#050505]">
                     
                     <div className="flex bg-white dark:bg-[#111] p-1 rounded-xl border border-gray-200 dark:border-white/5 mb-5 shadow-sm dark:shadow-none">
-                      <button onClick={() => setMode('t2i')} className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-all ${mode === 't2i' ? 'bg-gray-100 dark:bg-[#222] text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-[#666] hover:text-gray-900 dark:hover:text-[#CCC]'}`}>
+                      <button onClick={() => handleModeSwitch('t2i')} className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-all ${mode === 't2i' ? 'bg-gray-100 dark:bg-[#222] text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-[#666] hover:text-gray-900 dark:hover:text-[#CCC]'}`}>
                         <Icons.Sparkles /> {t.t2iMode}
                       </button>
-                      <button onClick={() => setMode('i2i')} className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-all ${mode === 'i2i' ? 'bg-gray-100 dark:bg-[#222] text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-[#666] hover:text-gray-900 dark:hover:text-[#CCC]'}`}>
+                      <button onClick={() => handleModeSwitch('i2i')} className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-all ${mode === 'i2i' ? 'bg-gray-100 dark:bg-[#222] text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-[#666] hover:text-gray-900 dark:hover:text-[#CCC]'}`}>
                         <Icons.Image /> {t.i2iMode}
                       </button>
                     </div>
 
                     {mode === 'i2i' && (
                       <div className="mb-5 animate-in fade-in slide-in-from-top-2 duration-300">
-                        <label className="text-xs font-semibold text-gray-500 dark:text-[#888] uppercase tracking-wider mb-2 block">{t.uploadRef}</label>
-                        <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
-                        {!referenceImage ? (
-                          <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-gray-300 dark:border-white/10 rounded-xl h-28 flex flex-col items-center justify-center text-gray-400 dark:text-[#666] hover:border-cyan-500/40 hover:bg-cyan-50 dark:hover:bg-cyan-500/5 hover:text-cyan-600 dark:hover:text-cyan-400 transition-all cursor-pointer group bg-white dark:bg-transparent">
-                            <Icons.Upload />
-                            <span className="text-[11px] mt-2 group-hover:text-cyan-600 dark:group-hover:text-cyan-400">{t.uploadHint}</span>
+                        <div className="flex justify-between items-center mb-2">
+                          <label className="text-xs font-semibold text-gray-500 dark:text-[#888] uppercase tracking-wider block">
+                            {t.uploadRef} <span className="text-cyan-600 dark:text-cyan-400 normal-case tracking-normal">({uploadedImages.length}/5)</span>
+                          </label>
+                        </div>
+                        
+                        {uploadedImages.length > 0 ? (
+                          <div className="flex flex-wrap gap-3 mb-2">
+                            {uploadedImages.map((img, idx) => (
+                              <div key={idx} onClick={() => setPreviewImage(img)} className="relative w-[60px] h-[60px] group rounded-lg border border-gray-200 dark:border-white/10 overflow-hidden cursor-pointer hover:border-cyan-500 transition-colors shadow-sm">
+                                <img src={img} alt={`Ref ${idx}`} className="w-full h-full object-cover" />
+                                <div className="absolute top-1 left-1 bg-black/60 text-white text-[9px] font-bold px-1.5 py-0.5 rounded backdrop-blur-md shadow-sm">R{idx + 1}</div>
+                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
+                                   <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"/></svg>
+                                </div>
+                                <button onClick={(e) => { e.stopPropagation(); removeImage(idx); }} disabled={isGeneratingImage} className="absolute top-1 right-1 bg-black/60 hover:bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-all">
+                                  <Icons.X />
+                                </button>
+                              </div>
+                            ))}
+                            {uploadedImages.length < 5 && (
+                              <button onClick={() => !isGeneratingImage && fileInputRef.current?.click()} className="w-[60px] h-[60px] flex items-center justify-center rounded-lg border-2 border-dashed border-gray-300 dark:border-white/10 text-gray-400 hover:text-cyan-600 hover:border-cyan-500 dark:hover:text-cyan-400 dark:hover:border-cyan-500/50 hover:bg-cyan-50 dark:hover:bg-white/5 transition-colors">
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"/></svg>
+                              </button>
+                            )}
                           </div>
                         ) : (
-                          <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-white/10 h-28 group">
-                            <img src={referenceImage} alt="Reference" className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
-                              <button onClick={() => setReferenceImage(null)} className="bg-red-500/20 text-red-100 hover:bg-red-500/40 border border-red-500/50 p-2 rounded-full transition-colors shadow-lg">
-                                <Icons.X />
-                              </button>
-                            </div>
+                          <div onClick={() => !isGeneratingImage && fileInputRef.current?.click()} className={`relative border-2 border-dashed border-gray-300 dark:border-white/10 rounded-xl h-24 flex flex-col items-center justify-center text-gray-500 transition-all group bg-gray-50 dark:bg-transparent ${isGeneratingImage ? 'opacity-50 cursor-not-allowed' : 'hover:border-cyan-500/40 hover:bg-cyan-50 dark:hover:bg-cyan-500/5 hover:text-cyan-600 dark:hover:text-cyan-400 cursor-pointer'}`}>
+                            <Icons.Upload />
+                            <span className="text-[11px] mt-2 group-hover:text-cyan-600 dark:group-hover:text-cyan-400">Click to upload up to 5 images</span>
                           </div>
                         )}
+                        <input type="file" multiple ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
                       </div>
                     )}
 
-                    <div className="flex justify-between items-end mb-3">
-                    <label htmlFor="landing-prompt" className="text-xs font-semibold text-gray-500 dark:text-[#888] uppercase tracking-wider">{t.promptLabel}</label>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={handleInspire} disabled={isInspiring} className="text-[10px] flex items-center gap-1 bg-white dark:bg-[#111] text-gray-600 dark:text-[#CCC] border border-gray-200 dark:border-white/10 px-2 py-1.5 rounded-md hover:bg-gray-50 dark:hover:bg-[#222] transition-colors disabled:opacity-50">
-                        {isInspiring ? (locale === 'zh' ? '✨ 思考中...' : '✨ Inspiring...') : (locale === 'zh' ? '✨ 给我灵感' : '✨ Inspire Me')}
+                    <div className="flex flex-col flex-1 min-h-[160px]">
+                      <div className="flex justify-between items-end mb-3">
+                        <label className="text-xs font-semibold text-gray-500 dark:text-[#888] uppercase tracking-wider">{t.promptLabel}</label>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={handleInspire} disabled={isInspiring || isGeneratingImage} className="text-[10px] flex items-center gap-1 bg-white dark:bg-[#111] text-gray-600 dark:text-[#CCC] border border-gray-200 dark:border-white/10 px-2 py-1.5 rounded-md hover:bg-gray-50 dark:hover:bg-[#222] transition-colors disabled:opacity-50">
+                            {isInspiring ? (locale === 'zh' ? '✨ 思考中...' : '✨ Inspiring...') : (locale === 'zh' ? '✨ 给我灵感' : '✨ Inspire Me')}
+                          </button>
+                          <button type="button" onClick={handleEnhance} disabled={isEnhancing || isGeneratingImage} className="text-[10px] flex items-center gap-1 bg-white dark:bg-[#111] text-gray-600 dark:text-[#CCC] border border-gray-200 dark:border-white/10 px-2 py-1.5 rounded-md hover:bg-gray-50 dark:hover:bg-[#222] transition-colors disabled:opacity-50">
+                            {isEnhancing ? (locale === 'zh' ? '✨ 优化中...' : '✨ Enhancing...') : (locale === 'zh' ? '✨ 智能扩写' : '✨ Enhance')}
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {/* --- 富文本 Prompt 核心交互区 --- */}
+                      <div className="relative flex-1 flex flex-col">
+                        {mode === 't2i' ? (
+                          <div 
+                            key="t2i-editor"
+                            ref={(el) => { if (el) { activeEditorRef.current = el; if (el.innerHTML === "") { syncEditorHTML(prompts['t2i'], el, [], 't2i'); } } }}
+                            contentEditable={!isGeneratingImage}
+                            onInput={(e) => handleEditorInput(e, 't2i')}
+                            onFocus={(e) => { activeEditorRef.current = e.currentTarget; }}
+                            className="prompt-editor w-full flex-1 rounded-xl border border-gray-200 dark:border-white/5 bg-white dark:bg-black/50 p-4 text-sm leading-relaxed text-gray-900 dark:text-white outline-none transition-colors focus:border-cyan-500/50 dark:focus:border-white/20 shadow-sm dark:shadow-none overflow-y-auto disabled:opacity-50" 
+                            data-placeholder={t.landingPromptPlaceholder} 
+                            style={{ minHeight: '140px', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}
+                          />
+                        ) : (
+                          <div 
+                            key="i2i-editor"
+                            ref={(el) => { if (el) { activeEditorRef.current = el; if (el.innerHTML === "") { syncEditorHTML(prompts['i2i'], el, uploadedImages, 'i2i'); } } }}
+                            contentEditable={!isGeneratingImage}
+                            onInput={(e) => handleEditorInput(e, 'i2i')}
+                            onMouseMove={handleEditorMouseMove}
+                            onMouseLeave={handleEditorMouseLeave}
+                            onFocus={(e) => { activeEditorRef.current = e.currentTarget; }}
+                            className="prompt-editor w-full flex-1 rounded-xl border border-gray-200 dark:border-white/5 bg-white dark:bg-black/50 p-4 text-sm leading-[26px] text-gray-900 dark:text-white outline-none transition-colors focus:border-cyan-500/50 dark:focus:border-white/20 shadow-sm dark:shadow-none overflow-y-auto disabled:opacity-50" 
+                            data-placeholder={t.i2iPromptPlaceholder} 
+                            style={{ minHeight: '140px', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}
+                          />
+                        )}
+                      </div>
+
+                    </div>
+                    
+                    <div className="mt-5 pt-5 border-t border-gray-200 dark:border-white/5 space-y-4">
+                      {generationNotice && <NoticeBanner notice={generationNotice} />}
+                      <button type="button" onClick={requireLoginToGenerate} className="w-full rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black px-4 py-3.5 text-sm font-semibold transition-all hover:bg-black dark:hover:bg-gray-200 hover:scale-[1.02]">
+                        {t.ctaPrimary}
                       </button>
-                      <button type="button" onClick={handleEnhance} disabled={isEnhancing} className="text-[10px] flex items-center gap-1 bg-white dark:bg-[#111] text-gray-600 dark:text-[#CCC] border border-gray-200 dark:border-white/10 px-2 py-1.5 rounded-md hover:bg-gray-50 dark:hover:bg-[#222] transition-colors disabled:opacity-50">
-                        {isEnhancing ? (locale === 'zh' ? '✨ 优化中...' : '✨ Enhancing...') : (locale === 'zh' ? '✨ 智能扩写' : '✨ Enhance')}
-                      </button>
+                      <p className="text-[11px] text-gray-500 dark:text-[#666] text-center leading-relaxed">{t.landingHint}</p>
                     </div>
                   </div>
-                  <textarea id="landing-prompt" value={prompt} onChange={(e) => setPrompt(e.target.value)} className="w-full flex-1 min-h-[140px] resize-none bg-white dark:bg-black/50 border border-gray-200 dark:border-white/5 rounded-xl p-4 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#444] focus:outline-none focus:border-gray-400 dark:focus:border-white/20 transition-colors shadow-sm dark:shadow-none" placeholder={t.landingPromptPlaceholder} />
                   
-                  <div className="mt-5 pt-5 border-t border-gray-200 dark:border-white/5 space-y-4">
-                    {generationNotice && <NoticeBanner notice={generationNotice} />}
-                    <button type="button" onClick={requireLoginToGenerate} className="w-full rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black px-4 py-3.5 text-sm font-semibold transition-all hover:bg-black dark:hover:bg-gray-200 hover:scale-[1.02]">
-                      {t.ctaPrimary}
-                    </button>
-                    <p className="text-[11px] text-gray-500 dark:text-[#666] text-center leading-relaxed">{t.landingHint}</p>
-                  </div>
-                </div>
-                
-                {/* 右侧画布 */}
+                  {/* 右侧画布 */}
                   <div className="flex-1 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] dark:bg-[radial-gradient(#222_1px,transparent_1px)] [background-size:24px_24px] bg-gray-50 dark:bg-[#000] p-6 flex flex-col items-center justify-center relative transition-colors duration-300">
                     <div className="w-full max-w-sm p-8 rounded-2xl border border-gray-200 dark:border-white/5 bg-white/80 dark:bg-[#0A0A0A]/80 backdrop-blur-md text-center shadow-xl">
                       <div className="w-12 h-12 rounded-full border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-[#111] flex items-center justify-center mx-auto mb-4">
@@ -620,41 +845,55 @@ export default function App() {
                   </div>
 
                   <div className="flex bg-gray-100 dark:bg-[#111] p-1 rounded-xl border border-gray-200 dark:border-white/5 mt-2">
-                    <button onClick={() => setMode('t2i')} disabled={isGeneratingImage} className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-all disabled:opacity-50 ${mode === 't2i' ? 'bg-white dark:bg-[#222] text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-[#666] hover:text-gray-900 dark:hover:text-[#CCC]'}`}>
+                    <button onClick={() => handleModeSwitch('t2i')} disabled={isGeneratingImage} className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-all disabled:opacity-50 ${mode === 't2i' ? 'bg-white dark:bg-[#222] text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-[#666] hover:text-gray-900 dark:hover:text-[#CCC]'}`}>
                       <Icons.Sparkles /> {t.t2iMode}
                     </button>
-                    <button onClick={() => setMode('i2i')} disabled={isGeneratingImage} className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-all disabled:opacity-50 ${mode === 'i2i' ? 'bg-white dark:bg-[#222] text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-[#666] hover:text-gray-900 dark:hover:text-[#CCC]'}`}>
+                    <button onClick={() => handleModeSwitch('i2i')} disabled={isGeneratingImage} className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-all disabled:opacity-50 ${mode === 'i2i' ? 'bg-white dark:bg-[#222] text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-[#666] hover:text-gray-900 dark:hover:text-[#CCC]'}`}>
                       <Icons.Image /> {t.i2iMode}
                     </button>
                   </div>
 
                   {mode === 'i2i' && (
                     <div className="mt-1 animate-in fade-in slide-in-from-top-2 duration-300">
-                      <label className="text-xs font-semibold text-gray-500 dark:text-[#888] uppercase tracking-wider mb-2 block">{t.uploadRef}</label>
-                      <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
-                      {!referenceImage ? (
-                        <div onClick={() => !isGeneratingImage && fileInputRef.current?.click()} className={`border-2 border-dashed border-gray-300 dark:border-white/10 rounded-xl h-28 flex flex-col items-center justify-center text-gray-400 dark:text-[#666] transition-all group bg-gray-50 dark:bg-transparent ${isGeneratingImage ? 'opacity-50 cursor-not-allowed' : 'hover:border-cyan-500/40 hover:bg-cyan-50 dark:hover:bg-cyan-500/5 hover:text-cyan-600 dark:hover:text-cyan-400 cursor-pointer'}`}>
-                          <Icons.Upload />
-                          <span className="text-[11px] mt-2 group-hover:text-cyan-600 dark:group-hover:text-cyan-400">{t.uploadHint}</span>
-                        </div>
-                      ) : (
-                        <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-white/10 h-28 group">
-                          <img src={referenceImage} alt="Reference" className="w-full h-full object-cover" />
-                          {!isGeneratingImage && (
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
-                              <button onClick={() => setReferenceImage(null)} className="bg-red-500/20 text-red-100 hover:bg-red-500/40 border border-red-500/50 p-2 rounded-full transition-colors shadow-lg">
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="text-xs font-semibold text-gray-500 dark:text-[#888] uppercase tracking-wider block">
+                          {t.uploadRef} <span className="text-cyan-600 dark:text-cyan-400 normal-case tracking-normal">({uploadedImages.length}/5)</span>
+                        </label>
+                      </div>
+
+                      {uploadedImages.length > 0 ? (
+                        <div className="flex flex-wrap gap-3 mb-2">
+                          {uploadedImages.map((img, idx) => (
+                            <div key={idx} onClick={() => setPreviewImage(img)} className="relative w-[60px] h-[60px] group rounded-lg border border-gray-200 dark:border-white/10 overflow-hidden cursor-pointer hover:border-cyan-500 transition-colors shadow-sm">
+                              <img src={img} alt={`Ref ${idx}`} className="w-full h-full object-cover" />
+                              <div className="absolute top-1 left-1 bg-black/60 text-white text-[9px] font-bold px-1.5 py-0.5 rounded backdrop-blur-md shadow-sm">R{idx + 1}</div>
+                              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
+                                 <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"/></svg>
+                              </div>
+                              <button onClick={(e) => { e.stopPropagation(); removeImage(idx); }} disabled={isGeneratingImage} className="absolute top-1 right-1 bg-black/60 hover:bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-all">
                                 <Icons.X />
                               </button>
                             </div>
+                          ))}
+                          {uploadedImages.length < 5 && (
+                            <button onClick={() => !isGeneratingImage && fileInputRef.current?.click()} className="w-[60px] h-[60px] flex items-center justify-center rounded-lg border-2 border-dashed border-gray-300 dark:border-white/10 text-gray-400 hover:text-cyan-600 hover:border-cyan-500 dark:hover:text-cyan-400 dark:hover:border-cyan-500/50 hover:bg-cyan-50 dark:hover:bg-white/5 transition-colors">
+                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"/></svg>
+                            </button>
                           )}
                         </div>
+                      ) : (
+                        <div onClick={() => !isGeneratingImage && fileInputRef.current?.click()} className={`relative border-2 border-dashed border-gray-300 dark:border-white/10 rounded-xl h-24 flex flex-col items-center justify-center text-gray-500 transition-all group bg-gray-50 dark:bg-transparent ${isGeneratingImage ? 'opacity-50 cursor-not-allowed' : 'hover:border-cyan-500/40 hover:bg-cyan-50 dark:hover:bg-cyan-500/5 hover:text-cyan-600 dark:hover:text-cyan-400 cursor-pointer'}`}>
+                          <Icons.Upload />
+                          <span className="text-[11px] mt-2 group-hover:text-cyan-600 dark:group-hover:text-cyan-400">Click to upload up to 5 images</span>
+                        </div>
                       )}
+                      <input type="file" multiple ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
                     </div>
                   )}
 
                   <div className="flex flex-col flex-1 min-h-[160px] mt-2">
                     <div className="flex justify-between items-end mb-3">
-                      <label htmlFor="workspace-prompt" className="text-xs font-semibold text-gray-500 dark:text-[#888] uppercase tracking-wider">{t.promptLabel}</label>
+                      <label className="text-xs font-semibold text-gray-500 dark:text-[#888] uppercase tracking-wider">{t.promptLabel}</label>
                       <div className="flex gap-2">
                         <button type="button" onClick={handleInspire} disabled={isInspiring || isGeneratingImage} className="text-[10px] flex items-center gap-1 bg-gray-100 dark:bg-[#111] text-gray-600 dark:text-[#CCC] border border-gray-200 dark:border-white/10 px-2 py-1.5 rounded-md hover:bg-gray-200 dark:hover:bg-[#222] transition-colors disabled:opacity-50">
                           {isInspiring ? (locale === 'zh' ? '✨ 思考中...' : '✨ Inspiring...') : (locale === 'zh' ? '✨ 给我灵感' : '✨ Inspire Me')}
@@ -664,7 +903,36 @@ export default function App() {
                         </button>
                       </div>
                     </div>
-                    <textarea ref={promptRef} id="workspace-prompt" value={prompt} onChange={(e) => setPrompt(e.target.value)} disabled={isGeneratingImage} className="w-full flex-1 rounded-xl border border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-[#0A0A0A] p-4 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#444] focus:outline-none focus:border-gray-400 dark:focus:border-white/20 transition-all disabled:opacity-50 resize-none shadow-sm dark:shadow-none" placeholder={t.workspacePromptPlaceholder} />
+                    
+                    {/* --- 富文本 Prompt 核心交互区 (Workspace) --- */}
+                    <div className="relative flex-1 flex flex-col">
+                      {mode === 't2i' ? (
+                        <div 
+                          key="t2i-editor"
+                          ref={(el) => { if (el) { activeEditorRef.current = el; if (el.innerHTML === "") { syncEditorHTML(prompts['t2i'], el, [], 't2i'); } } }}
+                          contentEditable={!isGeneratingImage}
+                          onInput={(e) => handleEditorInput(e, 't2i')}
+                          onFocus={(e) => { activeEditorRef.current = e.currentTarget; }}
+                          className="prompt-editor w-full flex-1 rounded-xl border border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-[#0A0A0A] p-4 text-sm leading-relaxed text-gray-900 dark:text-white outline-none transition-colors focus:border-cyan-500/50 dark:focus:border-white/20 shadow-sm dark:shadow-none overflow-y-auto disabled:opacity-50" 
+                          data-placeholder={t.workspacePromptPlaceholder} 
+                          style={{ minHeight: '140px', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}
+                        />
+                      ) : (
+                        <div 
+                          key="i2i-editor"
+                          ref={(el) => { if (el) { activeEditorRef.current = el; if (el.innerHTML === "") { syncEditorHTML(prompts['i2i'], el, uploadedImages, 'i2i'); } } }}
+                          contentEditable={!isGeneratingImage}
+                          onInput={(e) => handleEditorInput(e, 'i2i')}
+                          onMouseMove={handleEditorMouseMove}
+                          onMouseLeave={handleEditorMouseLeave}
+                          onFocus={(e) => { activeEditorRef.current = e.currentTarget; }}
+                          className="prompt-editor w-full flex-1 rounded-xl border border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-[#0A0A0A] p-4 text-sm leading-[26px] text-gray-900 dark:text-white outline-none transition-colors focus:border-cyan-500/50 dark:focus:border-white/20 shadow-sm dark:shadow-none overflow-y-auto disabled:opacity-50" 
+                          data-placeholder={t.i2iPromptPlaceholder} 
+                          style={{ minHeight: '140px', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}
+                        />
+                      )}
+                    </div>
+
                   </div>
 
                   <div className="space-y-4">
@@ -722,6 +990,29 @@ export default function App() {
             </div>
           )}
         </main>
+
+        {/* --- 缩略图放大预览弹窗 (Lightbox) --- */}
+        {previewImage && (
+          <div 
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-900/80 dark:bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+            onClick={() => setPreviewImage(null)}
+          >
+            <div className="relative max-w-4xl max-h-[90vh] w-full h-full flex items-center justify-center p-4">
+              <img 
+                src={previewImage} 
+                alt="Preview Full" 
+                className="max-w-full max-h-full object-contain rounded-xl drop-shadow-2xl ring-1 ring-white/10"
+                onClick={(e) => e.stopPropagation()} 
+              />
+              <button 
+                onClick={() => setPreviewImage(null)} 
+                className="absolute top-4 right-4 text-white bg-black/50 hover:bg-black/80 p-2.5 rounded-full backdrop-blur-md transition-colors"
+              >
+                <Icons.X />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 共享 Auth 弹窗 (Modal) */}
         {showLoginPanel && (
