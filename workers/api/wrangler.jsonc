@@ -1,0 +1,27 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "sparkpost-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-05",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "IMAGE_BACKEND": "official",
+    "IMAGE_MODEL": "dall-e-3"
+  },
+  "d1_databases": [
+    {
+      "binding": "SPARKPOST_DB",
+      "database_name": "sparkpost",
+      "database_id": "b63555f6-af09-41e7-b9a6-7c2947ca27e0"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "SPARKPOST_R2",
+      "bucket_name": "sparkpost"
+    }
+  ]
+}
