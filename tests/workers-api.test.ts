@@ -129,6 +129,44 @@ function createFakeDb(state: FakeState) {
   };
 }
 
+function createVerificationDb() {
+  const insertedCodes: Array<{ id: string; email: string; codeHash: string; expiresAt: string }> = [];
+
+  return {
+    insertedCodes,
+    db: {
+      prepare(sql: string) {
+        return {
+          bind(...values: unknown[]) {
+            return {
+              async first<T>() {
+                if (sql.includes("FROM email_verification_codes")) {
+                  return null as T | null;
+                }
+
+                return null;
+              },
+              async run(): Promise<D1RunResult> {
+                if (sql.includes("INSERT INTO email_verification_codes")) {
+                  insertedCodes.push({
+                    id: String(values[0]),
+                    email: String(values[1]),
+                    codeHash: String(values[2]),
+                    expiresAt: String(values[3]),
+                  });
+                  return { meta: { changes: 1 } };
+                }
+
+                return { meta: { changes: 0 } };
+              },
+            };
+          },
+        };
+      },
+    },
+  };
+}
+
 function createFakeR2() {
   const store = new Map<string, { bytes: Uint8Array; contentType: string }>();
 
@@ -334,6 +372,63 @@ test("POST /api/auth/dev-login returns session for seeded user", async () => {
   assert.equal(result.body.user.email, "demo@example.com");
   assert.equal(result.body.user.creditBalance, 20);
   assert.match(response.headers.get("set-cookie") ?? "", /sparkpost_session=/);
+});
+
+test("POST /api/auth/send-code sends verification email when debug mode is disabled", async () => {
+  const worker = await loadWorker();
+  const verificationDb = createVerificationDb();
+  const originalFetch = globalThis.fetch;
+  const sentRequests: Array<{ url: string; body: Record<string, unknown> }> = [];
+
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url === "https://api.resend.com/emails") {
+      sentRequests.push({
+        url,
+        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+      });
+
+      return new Response(JSON.stringify({ id: "email_123" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    throw new Error(`Unexpected fetch in send-code smoke test: ${url}`);
+  };
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://sparkpost.test/api/auth/send-code", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ email: "demo@example.com" }),
+      }),
+      {
+        SPARKPOST_DB: verificationDb.db,
+        SESSION_SECRET: "workers-smoke-secret",
+        EMAIL_PROVIDER: "resend",
+        EMAIL_FROM: "SparkPost <no-reply@example.com>",
+        EMAIL_SUBJECT_PREFIX: "[SparkPost]",
+        RESEND_API_KEY: "resend_test_key",
+      },
+    );
+
+    const result = await readJsonResponse<{ ok: boolean; email: string; expiresAt: string; debugCode?: string }>(response);
+
+    assert.equal(result.status, 200);
+    assert.equal(result.body.ok, true);
+    assert.equal(result.body.email, "demo@example.com");
+    assert.equal(result.body.debugCode, undefined);
+    assert.equal(verificationDb.insertedCodes.length, 1);
+    assert.equal(sentRequests.length, 1);
+    assert.equal(sentRequests[0]?.body.from, "SparkPost <no-reply@example.com>");
+    assert.deepEqual(sentRequests[0]?.body.to, ["demo@example.com"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("GET /api/assets/* returns stored image bytes from R2", async () => {

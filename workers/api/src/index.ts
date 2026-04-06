@@ -23,6 +23,10 @@ export interface Env {
     } | null>;
   };
   SESSION_SECRET?: string;
+  EMAIL_PROVIDER?: string;
+  EMAIL_FROM?: string;
+  EMAIL_SUBJECT_PREFIX?: string;
+  RESEND_API_KEY?: string;
   IMAGE_BACKEND?: string;
   IMAGE_API_KEY?: string;
   IMAGE_MODEL?: string;
@@ -100,8 +104,13 @@ class ImageGenerationConfigError extends Error {}
 class ImageGenerationAuthError extends Error {}
 class ImageGenerationCreditsError extends Error {}
 class ImageGenerationProviderError extends Error {}
+class EmailDeliveryConfigError extends Error {}
+class EmailDeliveryProviderError extends Error {}
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DEFAULT_EMAIL_PROVIDER = "resend";
+const DEFAULT_EMAIL_SUBJECT_PREFIX = "[SparkPost]";
+const DEFAULT_RESEND_BASE_URL = "https://api.resend.com";
 const DEFAULT_IMAGE_BACKEND = "official";
 const DEFAULT_IMAGE_MODEL = "dall-e-3";
 const DEFAULT_IMAGE_BASE_URL = "https://api.openai.com/v1";
@@ -153,6 +162,73 @@ const getImageConfig = (env: Env) => {
     status:
       ["official", "relay"].includes(backend) && apiKey.length > 0 ? "available" : "unavailable",
   };
+};
+
+const getEmailConfig = (env: Env) => {
+  const provider = (env.EMAIL_PROVIDER ?? DEFAULT_EMAIL_PROVIDER).trim().toLowerCase();
+  const from = env.EMAIL_FROM?.trim() ?? "";
+  const subjectPrefix = env.EMAIL_SUBJECT_PREFIX?.trim() || DEFAULT_EMAIL_SUBJECT_PREFIX;
+  const resendApiKey = env.RESEND_API_KEY?.trim() ?? "";
+
+  if (!from) {
+    throw new EmailDeliveryConfigError("EMAIL_FROM is required for verification emails.");
+  }
+
+  if (provider !== "resend") {
+    throw new EmailDeliveryConfigError(`Unsupported email provider: ${provider}`);
+  }
+
+  if (!resendApiKey) {
+    throw new EmailDeliveryConfigError("RESEND_API_KEY is required for verification emails.");
+  }
+
+  return {
+    provider,
+    from,
+    subjectPrefix,
+    resendApiKey,
+    resendBaseUrl: DEFAULT_RESEND_BASE_URL,
+  };
+};
+
+const formatVerificationCodeHtml = (code: string) => `<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:24px;background:#0b0d14;color:#f5f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+    <div style="max-width:560px;margin:0 auto;padding:32px;border-radius:24px;background:#111522;border:1px solid rgba(255,255,255,0.08);">
+      <p style="margin:0 0 12px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#7f8aa3;">SparkPost</p>
+      <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;">Your verification code</h1>
+      <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#b7c0d4;">Use the code below to continue signing in. It expires in 10 minutes.</p>
+      <div style="margin:0 0 24px;padding:18px 20px;border-radius:18px;background:#171d2d;border:1px solid rgba(255,255,255,0.08);font-size:32px;font-weight:700;letter-spacing:0.3em;text-align:center;color:#ffffff;">
+        ${code}
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.7;color:#7f8aa3;">If you did not request this code, you can safely ignore this email.</p>
+    </div>
+  </body>
+</html>`;
+
+const sendVerificationCodeEmail = async (email: string, code: string, env: Env) => {
+  const emailConfig = getEmailConfig(env);
+  const response = await fetch(`${emailConfig.resendBaseUrl}/emails`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${emailConfig.resendApiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      from: emailConfig.from,
+      to: [email],
+      subject: `${emailConfig.subjectPrefix} Your verification code`,
+      html: formatVerificationCodeHtml(code),
+      text: `Your SparkPost verification code is ${code}. It expires in 10 minutes.`,
+    }),
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new EmailDeliveryProviderError(
+      `Verification email delivery failed with status ${response.status}${responseText ? `: ${responseText}` : ""}`
+    );
+  }
 };
 
 const getCorsHeaders = (request: Request) => {
@@ -434,7 +510,12 @@ const issueVerificationCode = async (email: string, env: Env) => {
      VALUES (?, ?, ?, ?, 0, ?, ?)`,
   ).bind(crypto.randomUUID(), email, codeHash, expiresAt.toISOString(), now.toISOString(), now.toISOString()).run();
 
-  return { ok: true as const, expiresAt, ...(shouldExposeDebugCode(env) ? { debugCode: code } : {}) };
+  if (shouldExposeDebugCode(env)) {
+    return { ok: true as const, expiresAt, debugCode: code };
+  }
+
+  await sendVerificationCodeEmail(email, code, env);
+  return { ok: true as const, expiresAt };
 };
 
 const verifyCodeAndProvisionUser = async (email: string, code: string, env: Env) => {
@@ -879,11 +960,18 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
       if (!bodyResult.ok) return json({ error: bodyResult.error }, { status: 400 });
       const input = validateSendCodeInput(bodyResult.body);
       if (!input.ok) return json({ error: input.error }, { status: 400 });
-      const result = await issueVerificationCode(input.email, env);
-      if (!result.ok) {
-        return json({ error: "Please wait before requesting another verification code.", retryAfterSeconds: result.retryAfterSeconds }, { status: 429, headers: { "Retry-After": String(result.retryAfterSeconds) } });
+      try {
+        const result = await issueVerificationCode(input.email, env);
+        if (!result.ok) {
+          return json({ error: "Please wait before requesting another verification code.", retryAfterSeconds: result.retryAfterSeconds }, { status: 429, headers: { "Retry-After": String(result.retryAfterSeconds) } });
+        }
+        return json({ ok: true, email: input.email, expiresAt: result.expiresAt.toISOString(), ...(result.debugCode ? { debugCode: result.debugCode } : {}) });
+      } catch (error) {
+        if (error instanceof EmailDeliveryConfigError || error instanceof EmailDeliveryProviderError) {
+          return json({ error: error.message }, { status: 503 });
+        }
+        throw error;
       }
-      return json({ ok: true, email: input.email, expiresAt: result.expiresAt.toISOString(), ...(result.debugCode ? { debugCode: result.debugCode } : {}) });
     },
   },
   {

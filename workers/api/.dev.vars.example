@@ -10,3 +10,7 @@ SIGNUP_BONUS_CREDITS=20
 IMAGE_BACKEND=official
 IMAGE_MODEL=dall-e-3
 IMAGE_API_KEY=replace_me_for_image_generation
+EMAIL_PROVIDER=resend
+EMAIL_FROM=SparkPost <no-reply@example.com>
+EMAIL_SUBJECT_PREFIX=[SparkPost]
+RESEND_API_KEY=replace_me_for_email_delivery
