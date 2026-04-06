@@ -227,7 +227,7 @@ const copy: Record<Locale, Copy> = {
     verifyCodeFailed: "校验验证码失败。",
     logoutFailed: "退出登录失败。",
     generateFailed: "图片生成失败。",
-    i2iNotice: "图生图区域暂时保留视觉位，当前真实链路优先支持文生图。",
+    i2iNotice: "图生图已接入参考图链路，可通过 @R1、@R2 引用已上传的参考图。",
     inspireNotice: "灵感按钮暂时保留视觉入口，后续再接入真实能力。",
     enhanceNotice: "扩写按钮暂时保留视觉入口，后续再接入真实能力。",
   },
@@ -322,7 +322,7 @@ const copy: Record<Locale, Copy> = {
     verifyCodeFailed: "Unable to verify the code.",
     logoutFailed: "Unable to log out.",
     generateFailed: "Unable to generate image.",
-    i2iNotice: "The image-to-image panel is visually preserved, but the current real backend path supports text-to-image only.",
+    i2iNotice: "Image-to-image is now wired to the reference pipeline. Use @R1, @R2, and more to refer to uploaded images.",
     inspireNotice: "This inspiration control keeps its visual position for now and will be wired later.",
     enhanceNotice: "This enhancement control keeps its visual position for now and will be wired later.",
   },
@@ -573,21 +573,25 @@ export default function Home() {
       setGenerationNotice({ type: "error", text: t.enterPrompt });
       return;
     }
-    if (mode === "i2i") {
-      setGenerationNotice({ type: "info", text: t.i2iNotice });
+    if (mode === "i2i" && uploadedImages.length === 0) {
+      setGenerationNotice({ type: "error", text: t.uploadHint });
       return;
     }
     setIsGeneratingImage(true);
     setGeneratedImageUrl(null);
     setGenerationTask(null);
     setPreviewLoadFailed(false);
-    try {
-      const response = await fetchApi("/api/generate/image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ prompt: currentPrompt }),
-      });
+      try {
+        const response = await fetchApi("/api/generate/image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            mode,
+            prompt: currentPrompt,
+            referenceImages: mode === "i2i" ? uploadedImages : [],
+          }),
+        });
       const data = (await response.json().catch(() => null)) as GenerateImageResponse | null;
       if (!response.ok) {
         const errorText = data && "error" in data && typeof data.error === "string" ? data.error : t.generateFailed;
@@ -610,7 +614,7 @@ export default function Home() {
     } finally {
       setIsGeneratingImage(false);
     }
-  }, [currentPrompt, mode, t.enterPrompt, t.generateFailed, t.generateSuccess, t.i2iNotice, t.imagePreviewUnavailable, t.unexpectedPayload]);
+  }, [currentPrompt, mode, t.enterPrompt, t.generateFailed, t.generateSuccess, t.imagePreviewUnavailable, t.unexpectedPayload, t.uploadHint, uploadedImages]);
 
   useEffect(() => {
     if (user && pendingGenerateAfterLogin && !isGeneratingImage) {

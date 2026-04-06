@@ -329,6 +329,84 @@ test("POST /api/generate/image stores asset in R2 and returns Worker asset URL",
   }
 });
 
+test("POST /api/generate/image supports image-to-image requests", async () => {
+  const worker = await loadWorker();
+  const state: FakeState = {
+    user: {
+      id: "user-1",
+      email: "demo@example.com",
+      createdAt: new Date().toISOString(),
+      emailVerifiedAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+      creditBalance: 20,
+    },
+    creditBalance: 20,
+    generatedTask: null,
+    generatedAssetUrl: null,
+  };
+  const fakeR2 = createFakeR2();
+  const secret = "workers-smoke-secret";
+  const originalFetch = globalThis.fetch;
+  const referenceImage = "data:image/png;base64," + Buffer.from("source-image", "utf8").toString("base64");
+
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url === "https://api.openai.com/v1/images/edits") {
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              b64_json: Buffer.from("edited-image-binary", "utf8").toString("base64"),
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }
+
+    throw new Error(`Unexpected fetch in smoke test: ${url}`);
+  };
+
+  try {
+    const session = createSessionToken(state.user.id, state.user.email, secret);
+    const response = await worker.fetch(
+      new Request("https://sparkpost.test/api/generate/image", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `sparkpost_session=${session}`,
+        },
+        body: JSON.stringify({
+          mode: "i2i",
+          prompt: "continue the lighting language from @R1",
+          referenceImages: [referenceImage],
+        }),
+      }),
+      {
+        SPARKPOST_DB: createFakeDb(state),
+        SPARKPOST_R2: fakeR2.bucket,
+        SESSION_SECRET: secret,
+        IMAGE_API_KEY: "test-key",
+      },
+    );
+
+    const result = await readJsonResponse<{ ok: boolean; task: GeneratedTask & { remainingCredits: number; assets: Array<{ fileUrl: string }> } }>(response);
+
+    assert.equal(result.status, 200);
+    assert.equal(result.body.ok, true);
+    assert.equal(result.body.task.status, "succeeded");
+    assert.equal(result.body.task.costCredits, 10);
+    assert.equal(result.body.task.remainingCredits, 10);
+    assert.equal(fakeR2.store.size, 1);
+    assert.match(result.body.task.assets[0].fileUrl, /\/api\/assets\/generated\//);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("POST /api/auth/dev-login returns session for seeded user", async () => {
   const worker = await loadWorker();
   const state: FakeState = {
