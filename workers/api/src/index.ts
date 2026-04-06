@@ -662,7 +662,8 @@ const callOfficialImageProvider = async (prompt: string, env: Env): Promise<Prov
     | null;
 
   if (!response.ok) {
-    throw new ImageGenerationProviderError(body?.error?.message || "Image provider request failed.");
+    console.error("Image provider request failed.", { status: response.status, body });
+    throw new ImageGenerationProviderError("Image generation provider request failed.");
   }
 
   const imageData = body?.data?.[0];
@@ -968,7 +969,8 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
         return json({ ok: true, email: input.email, expiresAt: result.expiresAt.toISOString(), ...(result.debugCode ? { debugCode: result.debugCode } : {}) });
       } catch (error) {
         if (error instanceof EmailDeliveryConfigError || error instanceof EmailDeliveryProviderError) {
-          return json({ error: error.message }, { status: 503 });
+          console.error("Verification email delivery failed.", error);
+          return json({ error: "Verification email service is temporarily unavailable." }, { status: 503 });
         }
         throw error;
       }
@@ -1028,7 +1030,8 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
           return json({ error: error.message }, { status: 403 });
         }
         if (error instanceof ImageGenerationConfigError || error instanceof ImageGenerationProviderError) {
-          return json({ error: error.message }, { status: 503 });
+          console.error("Image generation failed.", error);
+          return json({ error: "Image generation service is temporarily unavailable." }, { status: 503 });
         }
         throw error;
       }
