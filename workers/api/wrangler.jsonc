@@ -21,7 +21,7 @@
   "r2_buckets": [
     {
       "binding": "SPARKPOST_R2",
-      "bucket_name": "sparkpost-assets"
+      "bucket_name": "sparkpost"
     }
   ]
 }
