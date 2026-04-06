@@ -165,7 +165,7 @@ const copy: Record<Locale, Copy> = {
     comingSoon: "即将支持",
     authTitle: "验证后继续渲染",
     authBody: "你的灵感已暂存。完成一次快速邮箱验证后，系统会继续当前操作。",
-    authHint: "开发环境下如果后端返回 debug code，这里会自动填入。",
+    authHint: "验证码将发送至你的邮箱，请查收后继续完成验证。",
     sendCode: "获取安全码",
     sendingCode: "发送中...",
     verify: "验证并进入",
@@ -213,7 +213,7 @@ const copy: Record<Locale, Copy> = {
     enterPrompt: "请先输入 Prompt。",
     enterSameEmail: "请输入接收验证码的同一邮箱。",
     enterCode: "请输入验证码。",
-    sentCode: "验证码已发送到 {email}.{expires}{debug}",
+    sentCode: "验证码已发送到 {email}.{expires}",
     requestTooFast: "请求过快，请在 {time} 后重试。",
     verifyTooFast: "验证受限，请在 {time} 后重试。",
     signedInNewNotice: "账户已创建，欢迎进入 SparkPost。",
@@ -260,7 +260,7 @@ const copy: Record<Locale, Copy> = {
     comingSoon: "Coming soon",
     authTitle: "Verify to continue",
     authBody: "Your prompt is preserved. After a quick email verification, the pending action continues automatically.",
-    authHint: "In development, the debug code is autofilled here when the backend returns it.",
+    authHint: "We will send the verification code to your email so you can continue securely.",
     sendCode: "Get Code",
     sendingCode: "Sending...",
     verify: "Verify & Continue",
@@ -308,7 +308,7 @@ const copy: Record<Locale, Copy> = {
     enterPrompt: "Enter a prompt first.",
     enterSameEmail: "Use the same email address that received the code.",
     enterCode: "Enter the verification code.",
-    sentCode: "Verification code sent to {email}.{expires}{debug}",
+    sentCode: "Verification code sent to {email}.{expires}",
     requestTooFast: "Request too fast. Please wait {time}.",
     verifyTooFast: "Verification limited. Please wait {time}.",
     signedInNewNotice: "Account created. Welcome to SparkPost.",
@@ -599,7 +599,6 @@ export default function Home() {
         text: formatTemplate(t.sentCode, {
           email,
           expires: expiresAt ? ` ${new Date(expiresAt).toLocaleTimeString()}.` : "",
-          debug: debugCode ? ` Debug code: ${debugCode}.` : "",
         }),
       });
       codeRef.current?.focus();
