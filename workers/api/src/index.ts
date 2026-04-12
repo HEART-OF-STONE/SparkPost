@@ -27,12 +27,15 @@ export interface Env {
   EMAIL_FROM?: string;
   EMAIL_SUBJECT_PREFIX?: string;
   RESEND_API_KEY?: string;
-  IMAGE_BACKEND?: string;
-  IMAGE_API_KEY?: string;
-  IMAGE_MODEL?: string;
-  IMAGE_BASE_URL?: string;
-  TEXT_TO_IMAGE_COST?: string;
-  IMAGE_TO_IMAGE_COST?: string;
+    IMAGE_BACKEND?: string;
+    IMAGE_API_KEY?: string;
+    IMAGE_MODEL?: string;
+    IMAGE_BASE_URL?: string;
+    OPENAI_IMAGE_API_KEY?: string;
+    RELAY_IMAGE_API_KEY?: string;
+    RELAY_IMAGE_BASE_URL?: string;
+    TEXT_TO_IMAGE_COST?: string;
+    IMAGE_TO_IMAGE_COST?: string;
   DEV_AUTH_DEBUG_CODE?: string;
   AUTH_CODE_TTL_MINUTES?: string;
   AUTH_CODE_COOLDOWN_SECONDS?: string;
@@ -115,7 +118,7 @@ const DEFAULT_EMAIL_SUBJECT_PREFIX = "[SparkPost]";
 const DEFAULT_RESEND_BASE_URL = "https://api.resend.com";
 const DEFAULT_IMAGE_BACKEND = "official";
 const DEFAULT_IMAGE_MODEL = "dall-e-3";
-const DEFAULT_IMAGE_BASE_URL = "https://api.openai.com/v1";
+const DEFAULT_OPENAI_IMAGE_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_TEXT_TO_IMAGE_COST = 10;
 const DEFAULT_IMAGE_TO_IMAGE_COST = 10;
 const DEFAULT_CODE_TTL_MINUTES = 10;
@@ -151,21 +154,38 @@ const getAuthConfig = (env: Env) => ({
 
 const getImageConfig = (env: Env) => {
   const backend = env.IMAGE_BACKEND ?? DEFAULT_IMAGE_BACKEND;
-  const apiKey = env.IMAGE_API_KEY ?? "";
   const model = env.IMAGE_MODEL ?? DEFAULT_IMAGE_MODEL;
-  const baseUrl = (env.IMAGE_BASE_URL ?? DEFAULT_IMAGE_BASE_URL).replace(/\/$/, "");
   const textToImageCost = getNumberEnv(env.TEXT_TO_IMAGE_COST, DEFAULT_TEXT_TO_IMAGE_COST);
   const imageToImageCost = getNumberEnv(env.IMAGE_TO_IMAGE_COST, DEFAULT_IMAGE_TO_IMAGE_COST);
+  const openAiApiKey = env.OPENAI_IMAGE_API_KEY?.trim() || env.IMAGE_API_KEY?.trim() || "";
+  const relayApiKey = env.RELAY_IMAGE_API_KEY?.trim() || env.IMAGE_API_KEY?.trim() || "";
+  const relayBaseUrl = (env.RELAY_IMAGE_BASE_URL?.trim() || env.IMAGE_BASE_URL?.trim() || "").replace(/\/$/, "");
+
+  const providerConfig =
+    backend === "relay"
+      ? {
+          apiKey: relayApiKey,
+          baseUrl: relayBaseUrl,
+        }
+      : {
+          apiKey: openAiApiKey,
+          baseUrl: DEFAULT_OPENAI_IMAGE_BASE_URL,
+        };
 
   return {
     backend,
-    apiKey,
+    apiKey: providerConfig.apiKey,
     model,
-    baseUrl,
+    baseUrl: providerConfig.baseUrl,
     textToImageCost,
     imageToImageCost,
     status:
-      ["official", "relay"].includes(backend) && apiKey.length > 0 ? "available" : "unavailable",
+      (
+        (backend === "official" && providerConfig.apiKey.length > 0) ||
+        (backend === "relay" && providerConfig.apiKey.length > 0 && providerConfig.baseUrl.length > 0)
+      )
+        ? "available"
+        : "unavailable",
   };
 };
 
