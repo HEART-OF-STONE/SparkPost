@@ -19,6 +19,15 @@ type GeneratedTask = {
   costCredits: number;
 };
 
+type FakeCreditTransaction = {
+  id: string;
+  type: string;
+  amount: number;
+  balanceAfter: number;
+  remark: string | null;
+  createdAt: string;
+};
+
 type FakeState = {
   user: {
     id: string;
@@ -31,6 +40,8 @@ type FakeState = {
   creditBalance: number;
   generatedTask: GeneratedTask | null;
   generatedAssetUrl: string | null;
+  hasCheckedInToday?: boolean;
+  creditTransactions?: FakeCreditTransaction[];
 };
 
 function createSessionToken(userId: string, email: string, secret: string) {
@@ -62,11 +73,24 @@ function createFakeDb(state: FakeState) {
                 return { balance: state.creditBalance } as T;
               }
 
+              if (sql.includes("FROM daily_check_ins")) {
+                return state.hasCheckedInToday ? ({ id: "checkin-1" } as T) : null;
+              }
+
               if (sql.includes("FROM generation_tasks WHERE id = ? LIMIT 1")) {
                 return state.generatedTask as T;
               }
 
               return null;
+            },
+            async all<T>() {
+              if (sql.includes("FROM credit_transactions")) {
+                return {
+                  results: (state.creditTransactions ?? []) as T[],
+                };
+              }
+
+              return { results: [] as T[] };
             },
               async run(): Promise<D1RunResult> {
                 if (sql.includes("INSERT INTO generation_tasks")) {
@@ -98,6 +122,27 @@ function createFakeDb(state: FakeState) {
               }
 
               if (sql.includes("INSERT INTO credit_transactions")) {
+                const isCheckInTransaction = sql.includes("'daily_check_in'");
+                const nextTransaction: FakeCreditTransaction = {
+                  id: String(values[0]),
+                  type: sql.includes("'signup_bonus'")
+                    ? "signup_bonus"
+                    : sql.includes("'daily_check_in'")
+                      ? "daily_check_in"
+                      : sql.includes("'image_to_image'")
+                        ? "image_to_image"
+                        : "text_to_image",
+                  amount: Number(values[2]),
+                  balanceAfter: Number(values[3]),
+                  remark: typeof values[4] === "string" && isCheckInTransaction ? String(values[4]) : typeof values[5] === "string" ? String(values[5]) : null,
+                  createdAt: String(isCheckInTransaction ? values[5] : values[6]),
+                };
+                state.creditTransactions = [nextTransaction, ...(state.creditTransactions ?? [])];
+                return { meta: { changes: 1 } };
+              }
+
+              if (sql.includes("INSERT INTO daily_check_ins")) {
+                state.hasCheckedInToday = true;
                 return { meta: { changes: 1 } };
               }
 
@@ -147,14 +192,17 @@ function createVerificationDb() {
       prepare(sql: string) {
         return {
           bind(...values: unknown[]) {
-            return {
-              async first<T>() {
-                if (sql.includes("FROM email_verification_codes")) {
-                  return null as T | null;
-                }
+          return {
+            async first<T>() {
+              if (sql.includes("FROM email_verification_codes")) {
+                return null as T | null;
+              }
 
-                return null;
-              },
+              return null;
+            },
+            async all<T>() {
+              return { results: [] as T[] };
+            },
               async run(): Promise<D1RunResult> {
                 if (sql.includes("INSERT INTO email_verification_codes")) {
                   insertedCodes.push({
@@ -243,6 +291,8 @@ test("GET /api/health reports D1 and R2 availability", async () => {
       creditBalance: 20,
       generatedTask: null,
       generatedAssetUrl: null,
+      hasCheckedInToday: false,
+      creditTransactions: [],
     }),
     SPARKPOST_R2: createFakeR2().bucket,
   });
@@ -268,6 +318,8 @@ test("POST /api/generate/image stores asset in R2 and returns Worker asset URL",
     creditBalance: 20,
     generatedTask: null,
     generatedAssetUrl: null,
+    hasCheckedInToday: false,
+    creditTransactions: [],
   };
   const fakeR2 = createFakeR2();
   const secret = "workers-smoke-secret";
@@ -352,6 +404,8 @@ test("POST /api/generate/image supports image-to-image requests", async () => {
     creditBalance: 20,
     generatedTask: null,
     generatedAssetUrl: null,
+    hasCheckedInToday: false,
+    creditTransactions: [],
   };
   const fakeR2 = createFakeR2();
   const secret = "workers-smoke-secret";
@@ -453,6 +507,8 @@ test("POST /api/auth/dev-login returns session for seeded user", async () => {
     creditBalance: 20,
     generatedTask: null,
     generatedAssetUrl: null,
+    hasCheckedInToday: false,
+    creditTransactions: [],
   };
 
   const response = await worker.fetch(
@@ -482,6 +538,112 @@ test("POST /api/auth/dev-login returns session for seeded user", async () => {
   assert.equal(result.body.user.email, "demo@example.com");
   assert.equal(result.body.user.creditBalance, 20);
   assert.match(response.headers.get("set-cookie") ?? "", /sparkpost_session=/);
+});
+
+test("GET /api/credits/summary returns balance and check-in state", async () => {
+  const worker = await loadWorker();
+  const secret = "workers-smoke-secret";
+  const state: FakeState = {
+    user: {
+      id: "user-1",
+      email: "demo@example.com",
+      createdAt: new Date().toISOString(),
+      emailVerifiedAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+      creditBalance: 35,
+    },
+    creditBalance: 35,
+    generatedTask: null,
+    generatedAssetUrl: null,
+    hasCheckedInToday: false,
+    creditTransactions: [
+      {
+        id: "tx-1",
+        type: "text_to_image",
+        amount: -10,
+        balanceAfter: 35,
+        remark: "Prompt A",
+        createdAt: new Date().toISOString(),
+      },
+    ],
+  };
+
+  const session = createSessionToken(state.user.id, state.user.email, secret);
+  const response = await worker.fetch(
+    new Request("https://sparkpost.test/api/credits/summary", {
+      headers: {
+        cookie: `sparkpost_session=${session}`,
+      },
+    }),
+    {
+      SPARKPOST_DB: createFakeDb(state),
+      SESSION_SECRET: secret,
+      DAILY_CHECK_IN_CREDITS: "20",
+    },
+  );
+
+  const result = await readJsonResponse<{
+    ok: boolean;
+    creditBalance: number;
+    hasCheckedInToday: boolean;
+    dailyCheckInCredits: number;
+    usageLast7Days: number[];
+  }>(response);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, true);
+  assert.equal(result.body.creditBalance, 35);
+  assert.equal(result.body.hasCheckedInToday, false);
+  assert.equal(result.body.dailyCheckInCredits, 20);
+  assert.equal(result.body.usageLast7Days.length, 7);
+});
+
+test("POST /api/credits/check-in awards credits once per day", async () => {
+  const worker = await loadWorker();
+  const secret = "workers-smoke-secret";
+  const state: FakeState = {
+    user: {
+      id: "user-1",
+      email: "demo@example.com",
+      createdAt: new Date().toISOString(),
+      emailVerifiedAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+      creditBalance: 20,
+    },
+    creditBalance: 20,
+    generatedTask: null,
+    generatedAssetUrl: null,
+    hasCheckedInToday: false,
+    creditTransactions: [],
+  };
+
+  const session = createSessionToken(state.user.id, state.user.email, secret);
+  const response = await worker.fetch(
+    new Request("https://sparkpost.test/api/credits/check-in", {
+      method: "POST",
+      headers: {
+        cookie: `sparkpost_session=${session}`,
+      },
+    }),
+    {
+      SPARKPOST_DB: createFakeDb(state),
+      SESSION_SECRET: secret,
+      DAILY_CHECK_IN_CREDITS: "20",
+    },
+  );
+
+  const result = await readJsonResponse<{
+    ok: boolean;
+    awardedCredits: number;
+    creditBalance: number;
+    hasCheckedInToday: boolean;
+  }>(response);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, true);
+  assert.equal(result.body.awardedCredits, 20);
+  assert.equal(result.body.creditBalance, 40);
+  assert.equal(result.body.hasCheckedInToday, true);
 });
 
 test("POST /api/auth/send-code sends verification email when debug mode is disabled", async () => {

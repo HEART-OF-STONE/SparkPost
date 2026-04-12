@@ -39,6 +39,35 @@ type ImageTaskResult = {
 };
 type GenerateImageResponse = { ok: true; task: ImageTaskResult } | { error: string };
 type PromptAssistResponse = { ok: true; prompt: string; provider: string; model: string } | { error: string };
+type TransactionItem = {
+  id: number | string;
+  type: "earned" | "consumed";
+  title: string;
+  amount: number;
+  date: string;
+};
+type CreditSummaryResponse =
+  | {
+      ok: true;
+      creditBalance: number;
+      hasCheckedInToday: boolean;
+      dailyCheckInCredits: number;
+      currentPlan: "free";
+      usageLast7Days: number[];
+    }
+  | { error: string };
+type CreditTransactionsResponse = { ok: true; items: TransactionItem[] } | { error: string };
+type CreditCheckInResponse =
+  | {
+      ok: true;
+      awardedCredits: number;
+      creditBalance: number;
+      hasCheckedInToday: boolean;
+      dailyCheckInCredits: number;
+      currentPlan: "free";
+      usageLast7Days: number[];
+    }
+  | { error: string };
 
 type Copy = {
   brand: string;
@@ -357,6 +386,21 @@ const createLocalPreviewUser = (): AuthUser => ({
   creditBalance: 20,
 });
 
+const shouldUseLocalPreview = () => {
+  if (typeof window === "undefined") return false;
+  const url = new URL(window.location.href);
+  const isLocalHost = url.hostname === "127.0.0.1" || url.hostname === "localhost";
+  return isLocalHost && url.searchParams.get("preview") === "1";
+};
+
+function getTransactionIcon(transaction: TransactionItem) {
+  const normalized = transaction.title.toLowerCase();
+  if (transaction.type === "earned") {
+    return normalized.includes("sign") || normalized.includes("签到") ? <CalendarIcon /> : <CreditCardIcon />;
+  }
+  return <ImageIcon />;
+}
+
 const noticeClasses = (type: Notice["type"]) =>
   type === "error"
     ? "border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-100"
@@ -374,6 +418,12 @@ const UploadIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="n
 const PlayIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="6 3 20 12 6 21 6 3" /></svg>;
 const SunIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2" /><path d="M12 20v2" /><path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" /><path d="M2 12h2" /><path d="M20 12h2" /><path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" /></svg>;
 const MoonIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" /></svg>;
+const CalendarIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2" /><line x1="16" x2="16" y1="2" y2="6" /><line x1="8" x2="8" y1="2" y2="6" /><line x1="3" x2="21" y1="10" y2="10" /><path d="M8 14h.01" /><path d="M12 14h.01" /><path d="M16 14h.01" /><path d="M8 18h.01" /><path d="M12 18h.01" /><path d="M16 18h.01" /></svg>;
+const ClockIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>;
+const CreditCardIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2" /><line x1="2" x2="22" y1="10" y2="10" /></svg>;
+const CheckCircleIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>;
+const ArrowLeftIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>;
+const FilterIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>;
 
 function NoticeBanner({ notice }: { notice: Notice }) {
   return <div className={`rounded-xl border px-3 py-2.5 text-sm leading-6 ${noticeClasses(notice.type)}`}>{notice.text}</div>;
@@ -420,6 +470,15 @@ export default function Home() {
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [showLoginPanel, setShowLoginPanel] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
+  const [hasCheckedIn, setHasCheckedIn] = useState(false);
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
+  const [activeBillingTab, setActiveBillingTab] = useState<"topup" | "history">("topup");
+  const [historyFilter, setHistoryFilter] = useState<"all" | "consumed" | "earned">("all");
+  const [creditHistory, setCreditHistory] = useState<TransactionItem[]>([]);
+  const [usageLast7Days, setUsageLast7Days] = useState<number[]>(Array(7).fill(0));
+  const [dailyCheckInCredits, setDailyCheckInCredits] = useState(20);
   const [pendingGenerateAfterLogin, setPendingGenerateAfterLogin] = useState(false);
   const [cooldownEndsAt, setCooldownEndsAt] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -447,13 +506,72 @@ export default function Home() {
   const resultStatus: ResultStatus = generationTask ? "success" : generationNotice?.type === "error" ? "error" : "empty";
   const cooldownActive = useMemo(() => cooldownEndsAt !== null && timeLeft > 0, [cooldownEndsAt, timeLeft]);
   const accountInitials = user?.email.slice(0, 2).toUpperCase() ?? "SP";
-  const currentCost = 10;
+  const currentCost = mode === "i2i" ? 15 : 10;
   const currentPrompt = prompts[mode];
   const canRender = !!currentPrompt.trim() && !isGeneratingImage;
   const referenceUploadInputId = user ? "workspace-reference-upload" : "landing-reference-upload";
   const i2iPromptPlaceholder = locale === "zh"
     ? "输入 @ 引用参考图，例如让 @R2 延续 @R1 的构图。"
     : "Type @ to reference uploaded images, e.g. redraw @R1 in the style of @R2.";
+  const billingCopy = useMemo(
+    () =>
+      locale === "zh"
+        ? {
+            walletTitle: "钱包与订阅",
+            currentCredits: "当前可用积分",
+            checkIn: `领取今日奖励 +${dailyCheckInCredits} 积分`,
+            checkedIn: `今日已签到 (+${dailyCheckInCredits} 积分)`,
+            getCredits: "获取积分",
+            history: "流水明细",
+            dashboardTitle: "账单与订阅中心",
+            backToWorkspace: "返回工作台",
+            overview: "数据总览",
+            transactionHistory: "积分流水",
+            filterAll: "全部记录",
+            filterConsumed: "仅看消耗",
+            filterEarned: "仅看获得",
+            currentPlan: "当前方案",
+            freePlan: "免费基础版",
+            upgradePlan: "升级至专业版",
+            usageLast7Days: "近 7 日消耗趋势",
+            insufficientCredits: `积分不足，本次渲染需要 ${currentCost} 积分。`,
+            checkInSuccess: `签到成功，获得 ${dailyCheckInCredits} 积分。`,
+            noHistory: "暂无相关记录",
+            billingCenter: "账单与订阅中心",
+            starterPack: "轻量创作包",
+            creatorPack: "进阶灵感包",
+            proPack: "专业生产力",
+            entriesLabel: "条记录",
+          }
+        : {
+            walletTitle: "Wallet & Subscription",
+            currentCredits: "Available Credits",
+            checkIn: `Claim Daily +${dailyCheckInCredits} Credits`,
+            checkedIn: `Checked in (+${dailyCheckInCredits} Credits)`,
+            getCredits: "Get Credits",
+            history: "History",
+            dashboardTitle: "Billing & Subscription",
+            backToWorkspace: "Back to Workspace",
+            overview: "Overview",
+            transactionHistory: "Transactions",
+            filterAll: "All",
+            filterConsumed: "Consumed",
+            filterEarned: "Earned",
+            currentPlan: "Current Plan",
+            freePlan: "Free Tier",
+            upgradePlan: "Upgrade to Pro",
+            usageLast7Days: "Usage (Last 7 Days)",
+            insufficientCredits: `Insufficient credits. This render requires ${currentCost} credits.`,
+            checkInSuccess: `Check-in successful. +${dailyCheckInCredits} credits.`,
+            noHistory: "No transactions yet.",
+            billingCenter: "Billing & Subscription",
+            starterPack: "Starter Pack",
+            creatorPack: "Creator Pack",
+            proPack: "Pro Studio",
+            entriesLabel: "entries",
+          },
+    [currentCost, dailyCheckInCredits, locale],
+  );
 
   useEffect(() => {
     const saved = window.localStorage.getItem("sparkpost-locale");
@@ -489,18 +607,49 @@ export default function Home() {
   useEffect(() => {
     const controller = new AbortController();
     async function loadSession() {
+      if (shouldUseLocalPreview()) {
+        const previewUser = createLocalPreviewUser();
+        setUser(previewUser);
+        setEmail(previewUser.email);
+        setAuthNotice({
+          type: "info",
+          text:
+            locale === "zh"
+              ? "本地预览模式已启用，当前工作台使用模拟账户。"
+              : "Local preview mode is enabled with a mock workspace account.",
+        });
+        if (!controller.signal.aborted) setIsLoadingSession(false);
+        return;
+      }
+
       try {
         const response = await fetchApi("/api/me", { cache: "no-store", signal: controller.signal });
         if (!response.ok) throw new Error(t.sessionLoadFailed);
         const data = (await response.json()) as MeResponse;
-        setUser(data.user);
-        if (data.user) setEmail(data.user.email);
+        if (data.user) {
+          setUser(data.user);
+          setEmail(data.user.email);
+          return;
+        }
+
+        if (shouldUseLocalPreview()) {
+          const previewUser = createLocalPreviewUser();
+          setUser(previewUser);
+          setEmail(previewUser.email);
+          setAuthNotice({
+            type: "info",
+            text:
+              locale === "zh"
+                ? "本地预览模式已启用，当前工作台使用模拟账户。"
+                : "Local preview mode is enabled with a mock workspace account.",
+          });
+          return;
+        }
+
+        setUser(null);
       } catch (error) {
         if (!controller.signal.aborted) {
-          const isLocalPreviewHost =
-            typeof window !== "undefined" && (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost");
-
-          if (isLocalPreviewHost) {
+          if (shouldUseLocalPreview()) {
             const previewUser = createLocalPreviewUser();
             setUser(previewUser);
             setEmail(previewUser.email);
@@ -570,6 +719,48 @@ export default function Home() {
     if (data.user) setEmail(data.user.email);
   }, [t.sessionRefreshFailed]);
 
+  const loadCreditSummary = useCallback(async () => {
+    if (!user) return;
+    const response = await fetchApi("/api/credits/summary", { cache: "no-store" });
+    const data = (await response.json().catch(() => null)) as CreditSummaryResponse | null;
+    if (!response.ok || !data || !("ok" in data) || data.ok !== true) {
+      throw new Error(locale === "zh" ? "无法加载积分概览。" : "Unable to load credits summary.");
+    }
+    setUser((current) => (current ? { ...current, creditBalance: data.creditBalance } : current));
+    setHasCheckedIn(data.hasCheckedInToday);
+    setDailyCheckInCredits(data.dailyCheckInCredits);
+    setUsageLast7Days(data.usageLast7Days);
+  }, [locale, user]);
+
+  const loadCreditHistory = useCallback(async () => {
+    if (!user) return;
+    const response = await fetchApi(
+      `/api/credits/transactions?filter=${historyFilter}&limit=50&locale=${locale}`,
+      { cache: "no-store" },
+    );
+    const data = (await response.json().catch(() => null)) as CreditTransactionsResponse | null;
+    if (!response.ok || !data || !("ok" in data) || data.ok !== true) {
+      throw new Error(locale === "zh" ? "无法加载积分流水。" : "Unable to load transaction history.");
+    }
+    setCreditHistory(data.items);
+  }, [historyFilter, locale, user]);
+
+  useEffect(() => {
+    if (!user) {
+      setHasCheckedIn(false);
+      setCreditHistory([]);
+      setUsageLast7Days(Array(7).fill(0));
+      return;
+    }
+
+    void loadCreditSummary().catch(() => {});
+  }, [loadCreditSummary, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    void loadCreditHistory().catch(() => {});
+  }, [loadCreditHistory, user]);
+
   const generateImage = useCallback(async () => {
     setGenerationNotice(null);
     if (!currentPrompt.trim()) {
@@ -578,6 +769,12 @@ export default function Home() {
     }
     if (mode === "i2i" && uploadedImages.length === 0) {
       setGenerationNotice({ type: "error", text: t.uploadHint });
+      return;
+    }
+    if (user && user.creditBalance < currentCost) {
+      setGenerationNotice({ type: "error", text: billingCopy.insufficientCredits });
+      setActiveBillingTab("topup");
+      setIsDrawerOpen(true);
       return;
     }
     setIsGeneratingImage(true);
@@ -617,7 +814,7 @@ export default function Home() {
     } finally {
       setIsGeneratingImage(false);
     }
-  }, [currentPrompt, mode, t.enterPrompt, t.generateFailed, t.generateSuccess, t.imagePreviewUnavailable, t.unexpectedPayload, t.uploadHint, uploadedImages]);
+  }, [billingCopy.insufficientCredits, currentCost, currentPrompt, mode, t.enterPrompt, t.generateFailed, t.generateSuccess, t.imagePreviewUnavailable, t.unexpectedPayload, t.uploadHint, uploadedImages, user]);
 
   useEffect(() => {
     if (user && pendingGenerateAfterLogin && !isGeneratingImage) {
@@ -725,11 +922,16 @@ export default function Home() {
       setUser(null);
       setCode("");
       setShowAccountMenu(false);
+      setShowDashboard(false);
+      setIsDrawerOpen(false);
       setShowLoginPanel(false);
       setPendingGenerateAfterLogin(false);
       setGenerationTask(null);
       setGeneratedImageUrl(null);
       setPreviewLoadFailed(false);
+      setHasCheckedIn(false);
+      setCreditHistory([]);
+      setUsageLast7Days(Array(7).fill(0));
       setAuthNotice({ type: "info", text: t.signedOutNotice });
     } catch (error) {
       setAuthNotice({ type: "error", text: error instanceof Error ? error.message : t.logoutFailed });
@@ -748,6 +950,32 @@ export default function Home() {
     setShowLoginPanel(true);
     setPendingGenerateAfterLogin(true);
     setAuthNotice({ type: "info", text: t.loginToContinue });
+  }
+
+  async function handleCheckIn() {
+    if (!user || hasCheckedIn || isCheckingIn) return;
+
+    setIsCheckingIn(true);
+    try {
+      const response = await fetchApi("/api/credits/check-in", { method: "POST" });
+      const data = (await response.json().catch(() => null)) as CreditCheckInResponse | null;
+      if (!response.ok || !data || !("ok" in data) || data.ok !== true) {
+        throw new Error(locale === "zh" ? "签到失败，请稍后重试。" : "Check-in failed. Please try again.");
+      }
+      setUser((current) => (current ? { ...current, creditBalance: data.creditBalance } : current));
+      setHasCheckedIn(data.hasCheckedInToday);
+      setDailyCheckInCredits(data.dailyCheckInCredits);
+      setUsageLast7Days(data.usageLast7Days);
+      setGenerationNotice({ type: "success", text: billingCopy.checkInSuccess });
+      await loadCreditHistory();
+    } catch (error) {
+      setGenerationNotice({
+        type: "error",
+        text: error instanceof Error ? error.message : locale === "zh" ? "签到失败，请稍后重试。" : "Check-in failed. Please try again.",
+      });
+    } finally {
+      setIsCheckingIn(false);
+    }
   }
 
   function handleModeSwitch(nextMode: Mode) {
@@ -1106,6 +1334,10 @@ export default function Home() {
     </div>
   );
 
+  const historyItems = creditHistory;
+  const drawerHistoryItems = historyItems.slice(0, 5);
+  const usageMax = Math.max(...usageLast7Days, 1);
+
   return (
     <div className={isDark ? "dark" : ""}>
       <main className={`flex min-h-screen flex-col selection:bg-cyan-500/30 ${isDark ? "bg-[#000] text-[#EDEDED]" : "bg-gray-50 text-gray-900"}`}>
@@ -1150,10 +1382,17 @@ export default function Home() {
 
             {user ? (
               <div className="flex items-center gap-3">
-                <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium ${isDark ? "bg-white/5 border-white/10" : "bg-gray-100 border-gray-200"}`}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveBillingTab("topup");
+                    setIsDrawerOpen(true);
+                  }}
+                  className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-colors ${isDark ? "bg-white/5 border-white/10 hover:bg-white/10" : "bg-gray-100 border-gray-200 hover:bg-gray-200"}`}
+                >
                   <div className={isDark ? "text-cyan-400" : "text-cyan-600"}><SparklesIcon /></div>
                   <span className={isDark ? "text-white" : "text-gray-900"}>{user.creditBalance} {t.credits}</span>
-                </div>
+                </button>
                 <div className="relative" ref={menuRef}>
                   <button type="button" onClick={() => setShowAccountMenu((current) => !current)} className={`flex items-center justify-center h-8 w-8 rounded-full border text-xs font-medium transition-colors shadow-sm ${isDark ? "bg-[#111] border-white/10 text-gray-300 hover:bg-[#222]" : "bg-gray-200 border-gray-300 text-gray-700 hover:bg-gray-300"}`}>
                     {accountInitials}
@@ -1165,6 +1404,17 @@ export default function Home() {
                         <div className={`text-sm font-semibold mt-1 ${isDark ? "text-white" : "text-gray-900"}`}>{user.creditBalance} {t.credits}</div>
                       </div>
                       <div className="p-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowAccountMenu(false);
+                              setShowDashboard(true);
+                            }}
+                            className={`mb-1 flex w-full items-center gap-2 text-left rounded-lg px-3 py-2 text-xs transition-colors ${isDark ? "text-[#CCC] hover:bg-white/10 hover:text-white" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}`}
+                          >
+                            <CreditCardIcon />
+                            {billingCopy.billingCenter}
+                          </button>
                         <button type="button" onClick={() => void handleLogout()} className={`w-full text-left rounded-lg px-3 py-2 text-xs transition-colors ${isDark ? "text-[#CCC] hover:bg-white/10 hover:text-white" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}`}>
                           {t.signOut}
                         </button>
@@ -1340,6 +1590,182 @@ export default function Home() {
             </main>
           </div>
         )}
+
+        <div
+          className={`fixed inset-0 z-[105] bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isDrawerOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
+          onClick={() => setIsDrawerOpen(false)}
+        />
+        <div className={`fixed top-0 right-0 z-[110] flex h-full w-full transform flex-col border-l shadow-2xl transition-transform duration-300 ease-out sm:w-[420px] ${isDrawerOpen ? "translate-x-0" : "translate-x-full"} ${isDark ? "border-white/10 bg-[#111]" : "border-gray-200 bg-white"}`}>
+          <div className={`flex items-center justify-between border-b p-6 ${isDark ? "border-white/5" : "border-gray-100"}`}>
+            <h2 className={`flex items-center gap-2 text-lg font-bold tracking-wide ${isDark ? "text-white" : "text-gray-900"}`}>
+              <span className={isDark ? "text-cyan-400" : "text-cyan-600"}><SparklesIcon /></span>
+              {billingCopy.walletTitle}
+            </h2>
+            <button type="button" onClick={() => setIsDrawerOpen(false)} className={`rounded-full p-2 transition-colors ${isDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"}`}>
+              <CloseIcon />
+            </button>
+          </div>
+
+          <div className={`border-b p-8 ${isDark ? "border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent" : "border-gray-100 bg-gradient-to-b from-gray-50 to-transparent"}`}>
+            <div className={`text-center text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>{billingCopy.currentCredits}</div>
+            <div className={`mt-2 text-center text-6xl font-mono font-bold tracking-tighter ${isDark ? "text-white" : "text-gray-900"}`}>{user?.creditBalance ?? 0}</div>
+            <div className={`mt-6 overflow-hidden transition-all duration-300 ${hasCheckedIn ? "max-h-12 opacity-85" : "max-h-20 opacity-100"}`}>
+                {hasCheckedIn ? (
+                  <div className={`flex items-center justify-center gap-1.5 rounded-xl border py-3 text-xs font-medium ${isDark ? "border-green-400/20 bg-green-400/10 text-green-400" : "border-green-200 bg-green-50 text-green-600"}`}>
+                    <CheckCircleIcon />
+                    {billingCopy.checkedIn}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleCheckIn()}
+                    disabled={!user || isCheckingIn}
+                    className={`flex w-full items-center justify-center gap-2 rounded-xl py-4 font-bold transition-all ${!user || isCheckingIn ? (isDark ? "cursor-not-allowed border border-white/5 bg-white/5 text-slate-500" : "cursor-not-allowed border border-gray-200 bg-gray-100 text-gray-400") : "border border-cyan-400/50 bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:from-cyan-400 hover:to-blue-500"}`}
+                  >
+                    <CalendarIcon />
+                    {isCheckingIn ? t.checking : billingCopy.checkIn}
+                  </button>
+                )}
+            </div>
+          </div>
+
+          <div className={`flex gap-8 border-b px-8 pt-4 ${isDark ? "border-white/5 bg-transparent" : "border-gray-100 bg-white"}`}>
+            <button type="button" onClick={() => setActiveBillingTab("topup")} className={`relative pb-4 text-sm font-bold transition-colors ${activeBillingTab === "topup" ? (isDark ? "text-white" : "text-gray-900") : (isDark ? "text-slate-500 hover:text-slate-300" : "text-gray-500 hover:text-gray-700")}`}>
+              <span className="mr-2 inline-block align-text-bottom"><CreditCardIcon /></span>
+              {billingCopy.getCredits}
+              {activeBillingTab === "topup" ? <span className="absolute bottom-0 left-0 h-[2px] w-full rounded-t-full bg-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.8)]" /> : null}
+            </button>
+            <button type="button" onClick={() => setActiveBillingTab("history")} className={`relative pb-4 text-sm font-bold transition-colors ${activeBillingTab === "history" ? (isDark ? "text-white" : "text-gray-900") : (isDark ? "text-slate-500 hover:text-slate-300" : "text-gray-500 hover:text-gray-700")}`}>
+              <span className="mr-2 inline-block align-text-bottom"><ClockIcon /></span>
+              {billingCopy.history}
+              {activeBillingTab === "history" ? <span className="absolute bottom-0 left-0 h-[2px] w-full rounded-t-full bg-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.8)]" /> : null}
+            </button>
+          </div>
+
+          <div className={`flex-1 overflow-y-auto p-6 ${isDark ? "bg-transparent" : "bg-gray-50"}`}>
+            {activeBillingTab === "topup" ? (
+              <div className="space-y-4 pb-10">
+                {[
+                  { pts: 500, price: "$4.99", label: billingCopy.starterPack, popular: false },
+                  { pts: 1200, price: "$9.99", label: billingCopy.creatorPack, popular: true },
+                  { pts: 3000, price: "$19.99", label: billingCopy.proPack, popular: false },
+                ].map((plan) => (
+                  <div key={plan.price} className={`relative flex items-center justify-between rounded-2xl border p-5 transition-all ${plan.popular ? (isDark ? "border-cyan-500/40 bg-cyan-400/10" : "border-cyan-200 bg-cyan-50") : (isDark ? "border-white/5 bg-white/[0.02]" : "border-gray-200 bg-white")}`}>
+                    {plan.popular ? <div className="absolute -top-3 left-5 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 px-3 py-1 text-[10px] font-bold tracking-wider text-white shadow-lg">Popular</div> : null}
+                    <div>
+                      <div className={`mb-1 flex items-center gap-1.5 text-xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}><span className={plan.popular ? (isDark ? "text-cyan-400" : "text-cyan-600") : "text-gray-400"}><SparklesIcon /></span>{plan.pts}</div>
+                      <div className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>{plan.label}</div>
+                    </div>
+                    <div className={`font-mono text-xl ${isDark ? "text-white" : "text-gray-900"}`}>{plan.price}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {drawerHistoryItems.length > 0 ? drawerHistoryItems.map((item) => (
+                  <div key={item.id} className={`flex items-center justify-between rounded-lg border-b px-2 py-3 transition-colors ${isDark ? "border-white/5 hover:bg-white/[0.03]" : "border-gray-100 hover:bg-gray-100"}`}>
+                    <div className="flex items-center gap-3">
+                      <div className={`flex h-9 w-9 items-center justify-center rounded-full border ${item.type === "earned" ? (isDark ? "border-green-400/20 bg-green-400/10 text-green-400" : "border-green-200 bg-green-50 text-green-600") : (isDark ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-400" : "border-cyan-200 bg-cyan-50 text-cyan-600")}`}>
+                        {getTransactionIcon(item)}
+                      </div>
+                      <div>
+                        <div className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>{item.title}</div>
+                        <div className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>{formatDate(item.date, locale)}</div>
+                      </div>
+                    </div>
+                    <div className={`font-mono text-base font-bold ${item.type === "earned" ? "text-green-500" : isDark ? "text-white" : "text-gray-900"}`}>{item.amount > 0 ? `+${item.amount}` : item.amount}</div>
+                  </div>
+                )) : (
+                  <div className={`rounded-xl border px-4 py-6 text-center text-sm ${isDark ? "border-white/5 text-slate-400" : "border-gray-200 text-gray-500"}`}>{billingCopy.noHistory}</div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className={`fixed inset-0 z-[200] overflow-y-auto transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${showDashboard ? "translate-y-0 opacity-100" : "translate-y-12 opacity-0 pointer-events-none"} ${isDark ? "bg-[#000]" : "bg-gray-50"}`}>
+          <header className={`sticky top-0 z-10 flex h-16 items-center border-b px-6 backdrop-blur-xl ${isDark ? "border-white/10 bg-[#000]/60" : "border-gray-200 bg-white/70"}`}>
+            <button type="button" onClick={() => setShowDashboard(false)} className={`flex items-center gap-2 text-sm font-medium transition-colors ${isDark ? "text-slate-400 hover:text-white" : "text-gray-500 hover:text-gray-900"}`}>
+              <ArrowLeftIcon />
+              {billingCopy.backToWorkspace}
+            </button>
+            <div className={`mx-auto text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{billingCopy.dashboardTitle}</div>
+            <div className="w-[120px]" />
+          </header>
+
+          <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 p-8 lg:grid-cols-3">
+            <div className="flex flex-col gap-6">
+              <h3 className={`mb-2 text-xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{billingCopy.overview}</h3>
+              <div className={`rounded-2xl border p-6 shadow-sm ${isDark ? "border-white/5 bg-[#111]" : "border-gray-200 bg-white"}`}>
+                <div className={`mb-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>{billingCopy.currentCredits}</div>
+                <div className={`mb-6 text-5xl font-mono font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{user?.creditBalance ?? 0}</div>
+                <button type="button" onClick={() => { setShowDashboard(false); setActiveBillingTab("topup"); setIsDrawerOpen(true); }} className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 font-semibold transition-colors ${isDark ? "bg-white text-black hover:bg-slate-200" : "bg-gray-900 text-white hover:bg-black"}`}><CreditCardIcon />{billingCopy.getCredits}</button>
+              </div>
+              <div className={`rounded-2xl border p-6 shadow-sm ${isDark ? "border-white/5 bg-[#111]" : "border-gray-200 bg-white"}`}>
+                <div className={`mb-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>{billingCopy.currentPlan}</div>
+                <div className={`mb-2 text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{billingCopy.freePlan}</div>
+                <div className={`mb-6 text-xs leading-relaxed ${isDark ? "text-slate-500" : "text-gray-500"}`}>{locale === "zh" ? "包含基础速度引擎与每日赠送积分，适合轻量创作验证。" : "Includes the base runtime and daily free credits for lightweight creation."}</div>
+                <button type="button" className={`w-full rounded-xl border py-3 font-semibold transition-colors ${isDark ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20" : "border-cyan-200 bg-cyan-50 text-cyan-600 hover:bg-cyan-100"}`}>{billingCopy.upgradePlan}</button>
+              </div>
+              <div className={`rounded-2xl border p-6 shadow-sm ${isDark ? "border-white/5 bg-[#111]" : "border-gray-200 bg-white"}`}>
+                <div className={`mb-6 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>{billingCopy.usageLast7Days}</div>
+                <div className="flex h-24 items-end justify-between gap-2">
+                  {usageLast7Days.map((value, index) => {
+                    const height = Math.max((value / usageMax) * 100, value > 0 ? 10 : 4);
+                    return (
+                      <div key={`${value}-${index}`} className={`group relative w-full rounded-t-sm ${isDark ? "bg-cyan-900/30" : "bg-cyan-100"}`} style={{ height: `${height}%` }}>
+                        <div className={`absolute inset-0 rounded-t-sm opacity-0 transition-opacity group-hover:opacity-100 ${isDark ? "bg-cyan-400" : "bg-cyan-500"}`} />
+                        <div className={`pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 rounded px-2 py-1 text-[10px] opacity-0 transition-opacity group-hover:opacity-100 ${isDark ? "bg-white text-black" : "bg-gray-900 text-white"}`}>-{value}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className={`mt-2 flex justify-between font-mono text-[10px] ${isDark ? "text-slate-500" : "text-gray-400"}`}><span>{locale === "zh" ? "7天前" : "7 days ago"}</span><span>{locale === "zh" ? "今天" : "Today"}</span></div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-2 flex flex-col gap-6">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{billingCopy.transactionHistory}</h3>
+                <div className={`flex items-center rounded-lg border p-1 ${isDark ? "border-white/5 bg-[#111]" : "border-gray-200 bg-gray-100"}`}>
+                  <span className={`px-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}><FilterIcon /></span>
+                  {(["all", "consumed", "earned"] as const).map((filter) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      onClick={() => setHistoryFilter(filter)}
+                      className={`rounded-md px-4 py-1.5 text-xs font-medium transition-colors ${historyFilter === filter ? (isDark ? "bg-white/10 text-white shadow-sm" : "bg-white text-gray-900 shadow-sm") : (isDark ? "text-slate-400 hover:text-slate-200" : "text-gray-500 hover:text-gray-900")}`}
+                    >
+                      {filter === "all" ? billingCopy.filterAll : filter === "consumed" ? billingCopy.filterConsumed : billingCopy.filterEarned}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className={`overflow-hidden rounded-2xl border shadow-sm ${isDark ? "border-white/5 bg-[#111]" : "border-gray-200 bg-white"}`}>
+                {historyItems.length > 0 ? (
+                  <>
+                    <div className={`divide-y ${isDark ? "divide-white/5" : "divide-gray-100"}`}>
+                      {historyItems.map((item) => (
+                        <div key={item.id} className={`flex items-center justify-between p-4 sm:px-6 transition-colors ${isDark ? "hover:bg-white/[0.02]" : "hover:bg-gray-50"}`}>
+                          <div>
+                            <div className={`text-sm font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>{item.title}</div>
+                            <div className={`mt-0.5 text-xs font-mono ${isDark ? "text-slate-500" : "text-gray-500"}`}>{formatDate(item.date, locale)}</div>
+                          </div>
+                          <div className={`font-mono text-base font-bold ${item.type === "earned" ? "text-green-500" : isDark ? "text-white" : "text-gray-900"}`}>{item.amount > 0 ? `+${item.amount}` : item.amount}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className={`flex items-center justify-between border-t p-4 text-xs ${isDark ? "border-white/5 text-slate-500" : "border-gray-100 text-gray-500"}`}>
+                      <span>{historyItems.length} {billingCopy.entriesLabel}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className={`p-12 text-center text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>{billingCopy.noHistory}</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
 
         {showMentionMenu && mentionMenuPos && filteredMentionOptions.length > 0 ? (
           <div

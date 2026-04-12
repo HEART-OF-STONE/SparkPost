@@ -3,6 +3,7 @@ export interface Env {
     prepare: (sql: string) => {
       bind: (...values: unknown[]) => {
         first: <T = unknown>() => Promise<T | null>;
+        all: <T = unknown>() => Promise<{ results?: T[] }>;
         run: () => Promise<{ meta?: { changes?: number } }>;
       };
     };
@@ -55,6 +56,7 @@ export interface Env {
   AUTH_VERIFY_CODE_LOCKOUT_SECONDS?: string;
   AUTH_SESSION_TTL_DAYS?: string;
   SIGNUP_BONUS_CREDITS?: string;
+  DAILY_CHECK_IN_CREDITS?: string;
 }
 
 type JsonRecord = Record<string, unknown>;
@@ -127,6 +129,31 @@ type GenerationTaskRow = {
   costCredits: number;
 };
 
+type CreditTransactionRow = {
+  id: string;
+  type: string;
+  amount: number;
+  balanceAfter: number;
+  remark: string | null;
+  createdAt: string;
+};
+
+type CreditTransactionItem = {
+  id: string;
+  type: "earned" | "consumed";
+  title: string;
+  amount: number;
+  date: string;
+};
+
+type CreditSummaryResponse = {
+  creditBalance: number;
+  hasCheckedInToday: boolean;
+  dailyCheckInCredits: number;
+  currentPlan: "free";
+  usageLast7Days: number[];
+};
+
 class ImageGenerationConfigError extends Error {}
 class ImageGenerationAuthError extends Error {}
 class ImageGenerationCreditsError extends Error {}
@@ -157,6 +184,8 @@ const DEFAULT_VERIFY_CODE_MAX_ATTEMPTS = 5;
 const DEFAULT_VERIFY_CODE_LOCKOUT_SECONDS = 15 * 60;
 const DEFAULT_SESSION_TTL_DAYS = 7;
 const DEFAULT_SIGNUP_BONUS_CREDITS = 20;
+const DEFAULT_DAILY_CHECK_IN_CREDITS = 20;
+const DEFAULT_CREDIT_TIMEZONE = "Asia/Shanghai";
 const SESSION_COOKIE_NAME = "sparkpost_session";
 const SESSION_COOKIE_PATH = "/";
 const GENERATED_ASSET_PREFIX = "generated";
@@ -180,6 +209,7 @@ const getAuthConfig = (env: Env) => ({
   ),
   sessionTtlDays: getNumberEnv(env.AUTH_SESSION_TTL_DAYS, DEFAULT_SESSION_TTL_DAYS),
   signupBonusCredits: getNumberEnv(env.SIGNUP_BONUS_CREDITS, DEFAULT_SIGNUP_BONUS_CREDITS),
+  dailyCheckInCredits: getNumberEnv(env.DAILY_CHECK_IN_CREDITS, DEFAULT_DAILY_CHECK_IN_CREDITS),
 });
 
 const getImageConfig = (env: Env) => {
@@ -394,6 +424,200 @@ const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const isValidEmail = (email: string) => email.length <= 320 && EMAIL_REGEX.test(email);
 const normalizePrompt = (prompt: string) => prompt.trim();
 const REFERENCE_TOKEN_REGEX = /@R(\d+)\b/gi;
+
+const getCreditDateKey = (date: Date, timeZone = DEFAULT_CREDIT_TIMEZONE) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    return date.toISOString().slice(0, 10);
+  }
+
+  return `${year}-${month}-${day}`;
+};
+
+const mapCreditTransactionTitle = (transactionType: string, remark: string | null, locale: "zh" | "en" = "zh") => {
+  const normalizedType = transactionType.trim().toLowerCase();
+
+  if (normalizedType === "signup_bonus") {
+    return locale === "zh" ? "新用户赠送积分" : "Signup bonus";
+  }
+
+  if (normalizedType === "daily_check_in") {
+    return locale === "zh" ? "每日签到" : "Daily check-in";
+  }
+
+  if (normalizedType === "text_to_image") {
+    return locale === "zh" ? "文生图消耗" : "Text-to-image";
+  }
+
+  if (normalizedType === "image_to_image") {
+    return locale === "zh" ? "图生图消耗" : "Image-to-image";
+  }
+
+  if (normalizedType === "topup") {
+    return remark || (locale === "zh" ? "充值套餐" : "Top-up");
+  }
+
+  return remark || (locale === "zh" ? "积分变动" : "Credit update");
+};
+
+const mapCreditTransactionItem = (
+  row: CreditTransactionRow,
+  locale: "zh" | "en" = "zh",
+): CreditTransactionItem => ({
+  id: row.id,
+  type: row.amount >= 0 ? "earned" : "consumed",
+  title: mapCreditTransactionTitle(row.type, row.remark, locale),
+  amount: row.amount,
+  date: row.createdAt,
+});
+
+const getCreditSummaryForUser = async (userId: string, env: Env): Promise<CreditSummaryResponse> => {
+  if (!env.SPARKPOST_DB) {
+    throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
+  }
+
+  const authConfig = getAuthConfig(env);
+  const todayKey = getCreditDateKey(new Date());
+  const account = await env.SPARKPOST_DB.prepare(
+    `SELECT balance FROM credit_accounts WHERE user_id = ? LIMIT 1`,
+  ).bind(userId).first<{ balance: number }>();
+
+  const checkIn = await env.SPARKPOST_DB.prepare(
+    `SELECT id FROM daily_check_ins WHERE user_id = ? AND check_in_date = ? LIMIT 1`,
+  ).bind(userId, todayKey).first<{ id: string }>();
+
+  const transactions = await env.SPARKPOST_DB.prepare(
+    `SELECT created_at AS createdAt, amount
+     FROM credit_transactions
+     WHERE user_id = ?
+     ORDER BY created_at DESC
+     LIMIT 200`,
+  ).bind(userId).all<{ createdAt: string; amount: number }>();
+
+  const today = new Date();
+  const dayKeys = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - (6 - index));
+    return getCreditDateKey(date);
+  });
+  const usageMap = new Map(dayKeys.map((key) => [key, 0]));
+
+  for (const item of transactions.results ?? []) {
+    const key = getCreditDateKey(new Date(item.createdAt));
+    if (!usageMap.has(key)) continue;
+    if (item.amount < 0) {
+      usageMap.set(key, (usageMap.get(key) ?? 0) + Math.abs(item.amount));
+    }
+  }
+
+  return {
+    creditBalance: account?.balance ?? 0,
+    hasCheckedInToday: Boolean(checkIn),
+    dailyCheckInCredits: authConfig.dailyCheckInCredits,
+    currentPlan: "free",
+    usageLast7Days: dayKeys.map((key) => usageMap.get(key) ?? 0),
+  };
+};
+
+const getCreditTransactionsForUser = async (
+  userId: string,
+  env: Env,
+  options: { filter: "all" | "earned" | "consumed"; limit: number; locale: "zh" | "en" },
+) => {
+  if (!env.SPARKPOST_DB) {
+    throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
+  }
+
+  const clauses = ["user_id = ?"];
+  const values: unknown[] = [userId];
+
+  if (options.filter === "earned") {
+    clauses.push("amount >= 0");
+  } else if (options.filter === "consumed") {
+    clauses.push("amount < 0");
+  }
+
+  clauses.push("1 = 1");
+  values.push(options.limit);
+
+  const result = await env.SPARKPOST_DB.prepare(
+    `SELECT id, type, amount, balance_after AS balanceAfter, remark, created_at AS createdAt
+     FROM credit_transactions
+     WHERE ${clauses.join(" AND ")}
+     ORDER BY created_at DESC
+     LIMIT ?`,
+  ).bind(...values).all<CreditTransactionRow>();
+
+  return (result.results ?? []).map((row) => mapCreditTransactionItem(row, options.locale));
+};
+
+const performDailyCheckInForUser = async (userId: string, env: Env) => {
+  if (!env.SPARKPOST_DB) {
+    throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
+  }
+
+  const authConfig = getAuthConfig(env);
+  const now = new Date();
+  const todayKey = getCreditDateKey(now);
+  const existingCheckIn = await env.SPARKPOST_DB.prepare(
+    `SELECT id FROM daily_check_ins WHERE user_id = ? AND check_in_date = ? LIMIT 1`,
+  ).bind(userId, todayKey).first<{ id: string }>();
+
+  const account = await env.SPARKPOST_DB.prepare(
+    `SELECT balance FROM credit_accounts WHERE user_id = ? LIMIT 1`,
+  ).bind(userId).first<{ balance: number }>();
+
+  if (!account) {
+    throw new ImageGenerationAuthError("Authenticated user has no credit account.");
+  }
+
+  if (existingCheckIn) {
+    return {
+      awardedCredits: 0,
+      summary: await getCreditSummaryForUser(userId, env),
+    };
+  }
+
+  const awardedCredits = authConfig.dailyCheckInCredits;
+  const nextBalance = account.balance + awardedCredits;
+
+  await env.SPARKPOST_DB.prepare(
+    `INSERT INTO daily_check_ins (id, user_id, check_in_date, reward_credits, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).bind(crypto.randomUUID(), userId, todayKey, awardedCredits, now.toISOString()).run();
+
+  await env.SPARKPOST_DB.prepare(
+    `UPDATE credit_accounts SET balance = ?, updated_at = ? WHERE user_id = ?`,
+  ).bind(nextBalance, now.toISOString(), userId).run();
+
+  await env.SPARKPOST_DB.prepare(
+    `INSERT INTO credit_transactions (
+       id, user_id, type, amount, balance_after, related_task_id, remark, created_at
+     ) VALUES (?, ?, 'daily_check_in', ?, ?, NULL, ?, ?)`,
+  ).bind(
+    crypto.randomUUID(),
+    userId,
+    awardedCredits,
+    nextBalance,
+    "Daily check-in",
+    now.toISOString(),
+  ).run();
+
+  return {
+    awardedCredits,
+    summary: await getCreditSummaryForUser(userId, env),
+  };
+};
 
 const getMentionedReferenceIndexes = (prompt: string, referenceCount: number) => {
   const mentioned = new Set<number>();
@@ -1111,6 +1335,21 @@ const verifyCodeAndProvisionUser = async (email: string, code: string, env: Env)
       `INSERT INTO credit_accounts (id, user_id, balance, currency, created_at, updated_at)
        VALUES (?, ?, ?, 'credits', ?, ?)`,
     ).bind(crypto.randomUUID(), user.id, isNewUser ? authConfig.signupBonusCredits : 0, now.toISOString(), now.toISOString()).run();
+
+    if (isNewUser && authConfig.signupBonusCredits > 0) {
+      await env.SPARKPOST_DB.prepare(
+        `INSERT INTO credit_transactions (
+           id, user_id, type, amount, balance_after, related_task_id, remark, created_at
+         ) VALUES (?, ?, 'signup_bonus', ?, ?, NULL, ?, ?)`,
+      ).bind(
+        crypto.randomUUID(),
+        user.id,
+        authConfig.signupBonusCredits,
+        authConfig.signupBonusCredits,
+        "Signup bonus",
+        now.toISOString(),
+      ).run();
+    }
   }
 
   const creditAccount = await env.SPARKPOST_DB.prepare(
@@ -1621,6 +1860,52 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
       const authenticatedUser = await getAuthenticatedUser(request, env);
       if (!authenticatedUser.ok) return authenticatedUser.response;
       return json({ user: authenticatedUser.user });
+    },
+  },
+  {
+    method: "GET",
+    pathname: "/api/credits/summary",
+    handler: async (request, env) => {
+      const authenticatedUser = await getAuthenticatedUser(request, env);
+      if (!authenticatedUser.ok) return authenticatedUser.response;
+      if (!authenticatedUser.user) return json({ error: "Authentication required." }, { status: 401 });
+
+      const summary = await getCreditSummaryForUser(authenticatedUser.user.id, env);
+      return json({ ok: true, ...summary });
+    },
+  },
+  {
+    method: "GET",
+    pathname: "/api/credits/transactions",
+    handler: async (request, env, url) => {
+      const authenticatedUser = await getAuthenticatedUser(request, env);
+      if (!authenticatedUser.ok) return authenticatedUser.response;
+      if (!authenticatedUser.user) return json({ error: "Authentication required." }, { status: 401 });
+
+      const filter = url.searchParams.get("filter");
+      const limit = Number.parseInt(url.searchParams.get("limit") ?? "50", 10);
+      const locale = url.searchParams.get("locale") === "en" ? "en" : "zh";
+      const normalizedFilter =
+        filter === "earned" || filter === "consumed" || filter === "all" ? filter : "all";
+      const transactions = await getCreditTransactionsForUser(authenticatedUser.user.id, env, {
+        filter: normalizedFilter,
+        limit: Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 200) : 50,
+        locale,
+      });
+
+      return json({ ok: true, items: transactions });
+    },
+  },
+  {
+    method: "POST",
+    pathname: "/api/credits/check-in",
+    handler: async (request, env) => {
+      const authenticatedUser = await getAuthenticatedUser(request, env);
+      if (!authenticatedUser.ok) return authenticatedUser.response;
+      if (!authenticatedUser.user) return json({ error: "Authentication required." }, { status: 401 });
+
+      const result = await performDailyCheckInForUser(authenticatedUser.user.id, env);
+      return json({ ok: true, awardedCredits: result.awardedCredits, ...result.summary });
     },
   },
   {
