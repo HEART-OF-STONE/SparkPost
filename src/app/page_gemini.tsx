@@ -25,6 +25,8 @@ type Copy = {
   resultTitle: string; resultEmptyTitle: string; resultEmptyBody: string; latest: string; taskTitle: string; taskId: string; model: string; cost: string; createdAt: string; completedAt: string; accountTitle: string;
   ctaPrimary: string; ctaSecondary: string;
   sessionLoadFailed: string; sessionRefreshFailed: string; enterEmail: string; enterPrompt: string; enterSameEmail: string; enterCode: string; sentCode: string; requestTooFast: string; verifyTooFast: string; signedInNewNotice: string; signedInExistingNotice: string; signedOutNotice: string; loginToContinue: string; generateSuccess: string; unexpectedPayload: string; imagePreviewUnavailable: string;
+  walletTitle: string; currentCredits: string; checkInBtn: string; checkedInBtn: string; getCredits: string; history: string; checkInSuccess: string;
+  dashboardTitle: string; backToWorkspace: string; overview: string; transactionHistory: string; filterAll: string; filterConsumed: string; filterEarned: string; currentPlan: string; freePlan: string; upgradePlan: string; usageLast7Days: string;
 };
 
 const copy: Record<Locale, Copy> = {
@@ -48,7 +50,9 @@ const copy: Record<Locale, Copy> = {
     workspaceEyebrow: "SparkPost Studio", workspaceTitle: "工作台", workspaceBody: "主界面聚焦 prompt、生成动作、结果预览和任务信息。", runtimeTitle: "系统状态", runtimeBody: "实时反馈底层服务与接口可用性。", notesTitle: "说明", notesItems: ["专注于效率，去除冗余视觉干扰。", "若 Provider 异常，系统将在此暴露错误详情。"],
     resultTitle: "画布", resultEmptyTitle: "等待引擎指令", resultEmptyBody: "提交 prompt 后，生成结果将在此画布中渲染。", latest: "输出", taskTitle: "任务属性", taskId: "Task ID", model: "底层模型", cost: "算力消耗", createdAt: "创建时间", completedAt: "完成时间", accountTitle: "账户",
     ctaPrimary: "立即渲染", ctaSecondary: "了解更多",
-    sessionLoadFailed: "会话加载失败", sessionRefreshFailed: "会话刷新失败", enterEmail: "请提供邮箱地址", enterPrompt: "请先输入 Prompt", enterSameEmail: "请使用接收验证码的邮箱", enterCode: "请输入验证码", sentCode: "已发送至 {email} {expires}{debug}", requestTooFast: "请求受限，请等待 {time}", verifyTooFast: "验证受限，请等待 {time}", signedInNewNotice: "账户已创建，欢迎加入 SparkPost", signedInExistingNotice: "身份已确认，欢迎回来", signedOutNotice: "已安全退出 SparkPost", loginToContinue: "请验证身份以启动引擎", generateSuccess: "渲染完成，产出 {count} 项资产", unexpectedPayload: "接口响应异常", imagePreviewUnavailable: "资产已生成但无法在此预览"
+    sessionLoadFailed: "会话加载失败", sessionRefreshFailed: "会话刷新失败", enterEmail: "请提供邮箱地址", enterPrompt: "请先输入 Prompt", enterSameEmail: "请使用接收验证码的邮箱", enterCode: "请输入验证码", sentCode: "已发送至 {email} {expires}{debug}", requestTooFast: "请求受限，请等待 {time}", verifyTooFast: "验证受限，请等待 {time}", signedInNewNotice: "账户已创建，欢迎加入 SparkPost", signedInExistingNotice: "身份已确认，欢迎回来", signedOutNotice: "已安全退出 SparkPost", loginToContinue: "请验证身份以启动引擎", generateSuccess: "渲染完成，产出 {count} 项资产", unexpectedPayload: "接口响应异常", imagePreviewUnavailable: "资产已生成但无法在此预览",
+    walletTitle: "钱包与订阅", currentCredits: "当前可用积分", checkInBtn: "领取今日奖励 +20 积分", checkedInBtn: "今日已签到 (+20 积分)", getCredits: "获取积分", history: "流水明细", checkInSuccess: "签到成功！获得 20 积分。",
+    dashboardTitle: "账单与订阅中心", backToWorkspace: "返回工作台", overview: "数据总览", transactionHistory: "积分流水", filterAll: "全部记录", filterConsumed: "仅看消耗", filterEarned: "仅看获得", currentPlan: "当前方案", freePlan: "免费基础版", upgradePlan: "升级至专业版", usageLast7Days: "近 7 日消耗趋势"
   },
   en: {
     signIn: "Sign In", signOut: "Log Out", close: "Close", generate: "Generate Image", generating: "Generating...", credits: "Credits",
@@ -70,7 +74,9 @@ const copy: Record<Locale, Copy> = {
     workspaceEyebrow: "SparkPost Studio", workspaceTitle: "Studio", workspaceBody: "Focused purely on composition, generation, and task details.", runtimeTitle: "System Status", runtimeBody: "Real-time feedback on underlying services.", notesTitle: "Notes", notesItems: ["Optimized for efficiency, removing visual noise.", "Provider issues will be surfaced here clearly."],
     resultTitle: "Canvas", resultEmptyTitle: "Awaiting Instructions", resultEmptyBody: "Submit a prompt to render the output on this canvas.", latest: "Output", taskTitle: "Properties", taskId: "Task ID", model: "Base Model", cost: "Compute Cost", createdAt: "Created", completedAt: "Completed", accountTitle: "Account",
     ctaPrimary: "Render Now", ctaSecondary: "Learn More",
-    sessionLoadFailed: "Failed to load session", sessionRefreshFailed: "Failed to refresh session", enterEmail: "Provide an email address", enterPrompt: "Enter a prompt first", enterSameEmail: "Use the email that received the code", enterCode: "Enter the code", sentCode: "Sent to {email} {expires}{debug}", requestTooFast: "Rate limited, wait {time}", verifyTooFast: "Verification limited, wait {time}", signedInNewNotice: "Account created, welcome to SparkPost", signedInExistingNotice: "Identity confirmed, welcome back", signedOutNotice: "Safely signed out from SparkPost", loginToContinue: "Verify identity to start engine", generateSuccess: "Render complete, generated {count} asset(s)", unexpectedPayload: "Unexpected API response", imagePreviewUnavailable: "Asset created but preview failed"
+    sessionLoadFailed: "Failed to load session", sessionRefreshFailed: "Failed to refresh session", enterEmail: "Provide an email address", enterPrompt: "Enter a prompt first", enterSameEmail: "Use the email that received the code", enterCode: "Enter the code", sentCode: "Sent to {email} {expires}{debug}", requestTooFast: "Rate limited, wait {time}", verifyTooFast: "Verification limited, wait {time}", signedInNewNotice: "Account created, welcome to SparkPost", signedInExistingNotice: "Identity confirmed, welcome back", signedOutNotice: "Safely signed out from SparkPost", loginToContinue: "Verify identity to start engine", generateSuccess: "Render complete, generated {count} asset(s)", unexpectedPayload: "Unexpected API response", imagePreviewUnavailable: "Asset created but preview failed",
+    walletTitle: "Wallet & Subscription", currentCredits: "Available Credits", checkInBtn: "Claim Daily +20 Credits", checkedInBtn: "Checked in (+20 Credits)", getCredits: "Get Credits", history: "History", checkInSuccess: "Check-in successful! +20 Credits.",
+    dashboardTitle: "Billing & Subscription", backToWorkspace: "Back to Workspace", overview: "Overview", transactionHistory: "Transactions", filterAll: "All", filterConsumed: "Consumed", filterEarned: "Earned", currentPlan: "Current Plan", freePlan: "Free Tier", upgradePlan: "Upgrade to Pro", usageLast7Days: "Usage (Last 7 Days)"
   }
 };
 
@@ -123,6 +129,13 @@ export default function App() {
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [isInspiring, setIsInspiring] = useState(false);
 
+  // === 积分抽屉与全屏面板相关状态 ===
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
+  const [hasCheckedIn, setHasCheckedIn] = useState(false);
+  const [activeTab, setActiveTab] = useState<'topup'|'history'>('topup');
+  const [historyFilter, setHistoryFilter] = useState<'all'|'consumed'|'earned'>('all');
+
   const emailRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -132,6 +145,28 @@ export default function App() {
   const t = copy[locale];
   const authStatus: AuthStatus = isLoadingSession ? "checking" : user ? "signedIn" : "signedOut";
   const cooldownActive = useMemo(() => cooldownEndsAt !== null && timeLeft > 0, [cooldownEndsAt, timeLeft]);
+
+  // 模拟签到
+  const handleCheckIn = () => {
+    if (!hasCheckedIn && user) {
+      setUser({ ...user, creditBalance: user.creditBalance + 20 });
+      setHasCheckedIn(true);
+      setGenerationNotice({ type: 'success', text: t.checkInSuccess });
+    }
+  };
+
+  // 模拟积分明细数据
+  const mockHistory = useMemo(() => [
+    { id: 1, type: 'earned', title: locale === 'zh' ? '每日签到' : 'Daily Check-in', amount: 20, date: '2023-10-27 09:00:00' },
+    { id: 2, type: 'consumed', title: locale === 'zh' ? '图生图消耗' : 'I2I Generation', amount: -15, date: '2023-10-26 14:32:11' },
+    { id: 3, type: 'consumed', title: locale === 'zh' ? '文生图消耗' : 'T2I Generation', amount: -10, date: '2023-10-26 10:15:00' },
+    { id: 4, type: 'earned', title: locale === 'zh' ? '充值套餐' : 'Starter Pack', amount: 500, date: '2023-10-25 18:20:00' },
+  ], [locale]);
+
+  const filteredHistory = useMemo(() => mockHistory.filter(item => {
+    if (historyFilter === 'all') return true;
+    return item.type === historyFilter;
+  }), [mockHistory, historyFilter]);
 
   const handleModeSwitch = (newMode: 't2i' | 'i2i') => {
     setMode(newMode);
@@ -145,9 +180,7 @@ export default function App() {
   const getBadgeHTML = (img: string, idx: number, isDark: boolean) => {
     const bg = isDark ? '#222' : '#ecfeff';
     const border = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(6,182,212,0.3)';
-    // 【终极重构：消灭双光标与光标巨大化 Bug】
-    // 1. 绝对不要在根 span 上写任何 margin。
-    // 2. 绝对不要使用 flex, align-items。全部使用纯正的 inline-block 和 vertical-align: middle。
+    // 【终极重构：保留原生 inline-block，拒绝双光标】
     return `<span class="mention-badge" contenteditable="false" data-img="${img}" style="display: inline-block; vertical-align: middle; user-select: none;"><span style="display: inline-block; height: 22px; line-height: 20px; padding: 0 6px; border-radius: 4px; background: ${bg}; border: 1px solid ${border}; box-sizing: border-box; white-space: nowrap;"><img src="${img}" style="display: inline-block; width: 14px; height: 14px; border-radius: 2px; object-fit: cover; vertical-align: middle; margin-right: 4px; pointer-events: none;" /><span style="display: inline-block; font-size: 11px; font-weight: bold; color: #06b6d4; vertical-align: middle; pointer-events: none; margin-bottom: 1px;">@R${idx + 1}</span></span></span>`;
   };
 
@@ -399,7 +432,9 @@ export default function App() {
 
     const cost = mode === 't2i' ? 10 : 15;
     if (user && user.creditBalance < cost) {
+      // 积分不足，拦截并拉起抽屉
       setGenerationNotice({ type: "error", text: locale === 'zh' ? `⚠️ 积分不足，本次渲染需要 ${cost} 积分` : `⚠️ Insufficient credits, requires ${cost} credits` });
+      setIsDrawerOpen(true);
       return;
     }
 
@@ -464,7 +499,7 @@ export default function App() {
         createdAt: new Date().toISOString(),
         emailVerifiedAt: new Date().toISOString(),
         lastLoginAt: new Date().toISOString(),
-        creditBalance: 50
+        creditBalance: 50 // 默认送50分
       });
       setCode("");
       setCooldownEndsAt(null);
@@ -478,6 +513,8 @@ export default function App() {
     setCode("");
     setShowAccountMenu(false);
     setShowLoginPanel(false);
+    setShowDashboard(false);
+    setIsDrawerOpen(false);
     setPendingGenerateAfterLogin(false);
     setGenerationTask(null);
     setGeneratedImageUrl(null);
@@ -506,6 +543,12 @@ export default function App() {
     Image: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>,
     Sun: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>,
     Moon: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>,
+    Calendar: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>,
+    Clock: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+    CreditCard: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>,
+    CheckCircle: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
+    ArrowLeft: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>,
+    Filter: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
   };
 
   const NoticeBanner = ({ notice }: { notice: Notice }) => {
@@ -569,7 +612,7 @@ export default function App() {
       <div className="min-h-screen bg-gray-50 dark:bg-[#000] text-gray-900 dark:text-[#EDEDED] font-sans flex flex-col selection:bg-cyan-500/30 scroll-smooth transition-colors duration-300">
         
         {/* 顶部导航 */}
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-gray-200 dark:border-white/10 px-6 bg-white/70 dark:bg-black/50 backdrop-blur-md sticky top-0 z-50 transition-colors duration-300">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-gray-200 dark:border-white/10 px-6 bg-white/70 dark:bg-black/50 backdrop-blur-md sticky top-0 z-40 transition-colors duration-300">
           <div className="flex items-center gap-3 group cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
             <div className="relative flex h-8 w-8 items-center justify-center rounded-xl bg-white dark:bg-[#0A0A0A] border border-gray-200 dark:border-white/10 shadow-sm transition-transform duration-300 group-hover:scale-105 overflow-hidden">
               <div className="absolute h-5 w-5 rounded-full border border-cyan-400/40 animate-ping" style={{ animationDuration: '3s' }} />
@@ -601,10 +644,11 @@ export default function App() {
 
             {user ? (
               <div className="flex items-center gap-3">
-                <div className="hidden sm:flex items-center gap-1.5 bg-gray-100 dark:bg-white/5 px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/10 text-xs font-medium">
-                  <div className="text-cyan-600 dark:text-cyan-400"><Icons.Zap /></div>
-                  <span className="text-gray-900 dark:text-white">{user.creditBalance} {t.credits}</span>
-                </div>
+                {/* 积分抽屉触发器 */}
+                <button onClick={() => setIsDrawerOpen(true)} className="hidden sm:flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/10 text-xs font-medium transition-colors group cursor-pointer">
+                  <div className="text-cyan-600 dark:text-cyan-400 group-hover:animate-pulse"><Icons.Zap /></div>
+                  <span className="text-gray-900 dark:text-white font-bold">{user.creditBalance} {t.credits}</span>
+                </button>
                 <div className="relative" ref={menuRef}>
                   <button type="button" onClick={() => setShowAccountMenu((curr) => !curr)} className="flex items-center justify-center h-8 w-8 rounded-full bg-gray-200 dark:bg-[#111] border border-gray-300 dark:border-white/10 text-gray-700 dark:text-gray-300 text-xs font-medium transition-colors hover:bg-gray-300 dark:hover:bg-[#222] shadow-sm">
                     {accountInitials}
@@ -613,13 +657,13 @@ export default function App() {
                     <div className="absolute right-0 top-[calc(100%+12px)] z-50 w-56 rounded-xl border border-gray-200 dark:border-white/10 bg-white/95 dark:bg-[#0A0A0A]/95 backdrop-blur-xl shadow-2xl overflow-hidden transform origin-top-right transition-all animate-in fade-in zoom-in-95">
                       <div className="p-4 border-b border-gray-100 dark:border-white/10">
                         <div className="text-xs text-gray-500 dark:text-[#888] truncate">{user.email}</div>
-                        <div className="text-sm font-semibold mt-1 text-gray-900 dark:text-white flex items-center gap-1.5">
-                          <span className="text-cyan-600 dark:text-cyan-400"><Icons.Zap /></span> {user.creditBalance} {t.credits}
-                        </div>
                       </div>
                       <div className="p-1.5">
-                        <button type="button" onClick={() => void handleLogout()} className="w-full text-left rounded-lg px-3 py-2 text-xs text-gray-600 dark:text-[#CCC] hover:bg-gray-100 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-colors">
-                          {t.signOut}
+                        <button type="button" onClick={() => { setShowAccountMenu(false); setShowDashboard(true); }} className="w-full flex items-center gap-2 text-left rounded-lg px-3 py-2 text-xs text-gray-600 dark:text-[#CCC] hover:bg-gray-100 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-colors">
+                          <Icons.CreditCard /> {t.dashboardTitle}
+                        </button>
+                        <button type="button" onClick={() => void handleLogout()} className="w-full flex items-center gap-2 text-left rounded-lg px-3 py-2 text-xs text-gray-600 dark:text-[#CCC] hover:bg-gray-100 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-colors">
+                           <Icons.X /> {t.signOut}
                         </button>
                       </div>
                     </div>
@@ -633,6 +677,258 @@ export default function App() {
             )}
           </div>
         </header>
+
+        {/* --- 快捷入口：积分收纳抽屉 (Drawer) --- */}
+        <div
+            className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-[105] transition-opacity duration-300 ${
+            isDrawerOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+            }`}
+            onClick={() => setIsDrawerOpen(false)}
+        />
+        <div
+            className={`fixed top-0 right-0 w-full sm:w-[420px] h-full bg-white dark:bg-[#111] border-l border-gray-200 dark:border-white/10 z-[110] transform transition-transform duration-300 ease-out shadow-2xl flex flex-col ${
+            isDrawerOpen ? 'translate-x-0' : 'translate-x-full'
+            }`}
+        >
+            <div className="flex justify-between items-center p-6 border-b border-gray-100 dark:border-white/5">
+            <h2 className="text-lg font-bold flex items-center gap-2 tracking-wide text-gray-900 dark:text-white">
+                <div className="text-cyan-600 dark:text-cyan-400"><Icons.Sparkles /></div>
+                {t.walletTitle}
+            </h2>
+            <button
+                onClick={() => setIsDrawerOpen(false)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-full transition-colors text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+            >
+                <Icons.X />
+            </button>
+            </div>
+
+            <div className="p-8 flex flex-col items-center border-b border-gray-100 dark:border-white/5 bg-gradient-to-b from-gray-50 dark:from-white/[0.02] to-transparent">
+              <span className="text-gray-500 dark:text-gray-400 text-sm mb-2 font-medium">{t.currentCredits}</span>
+              <div className="text-6xl font-mono font-bold mb-2 text-gray-900 dark:text-white tracking-tighter drop-shadow-md">
+                  {user?.creditBalance || 0}
+              </div>
+
+              {/* 签到收纳区 */}
+              <div className={`w-full overflow-hidden transition-all duration-500 ease-in-out ${hasCheckedIn ? 'max-h-12 mt-2 opacity-80' : 'max-h-20 mt-6 opacity-100'}`}>
+                {hasCheckedIn ? (
+                   <div className="flex items-center justify-center gap-1.5 text-green-600 dark:text-green-400 text-xs font-medium py-3 bg-green-50 dark:bg-green-400/10 rounded-xl border border-green-200 dark:border-green-400/20">
+                      <Icons.CheckCircle /> {t.checkedInBtn}
+                   </div>
+                ) : (
+                  <button
+                    onClick={handleCheckIn}
+                    disabled={!user}
+                    className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-300 ${
+                    !user
+                        ? 'bg-gray-100 dark:bg-white/5 text-gray-400 dark:text-gray-500 cursor-not-allowed border border-gray-200 dark:border-white/5'
+                        : 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-[0_0_20px_rgba(6,182,212,0.3)] animate-pulse hover:animate-none border border-cyan-400/50 cursor-pointer'
+                    }`}
+                  >
+                    <Icons.Calendar />
+                    {t.checkInBtn}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex border-b border-gray-100 dark:border-white/5 px-8 pt-4 gap-8 bg-white dark:bg-transparent">
+            <button
+                onClick={() => setActiveTab('topup')}
+                className={`pb-4 text-sm font-bold transition-colors relative ${
+                activeTab === 'topup' ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-400'
+                }`}
+            >
+                <span className="inline-block mr-2 align-text-bottom"><Icons.CreditCard /></span>
+                {t.getCredits}
+                {activeTab === 'topup' && (
+                <span className="absolute bottom-0 left-0 w-full h-[2px] bg-cyan-500 dark:bg-cyan-400 rounded-t-full shadow-[0_0_10px_rgba(6,182,212,0.8)]" />
+                )}
+            </button>
+            <button
+                onClick={() => setActiveTab('history')}
+                className={`pb-4 text-sm font-bold transition-colors relative ${
+                activeTab === 'history' ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-400'
+                }`}
+            >
+                <span className="inline-block mr-2 align-text-bottom"><Icons.Clock /></span>
+                {t.history}
+                {activeTab === 'history' && (
+                <span className="absolute bottom-0 left-0 w-full h-[2px] bg-cyan-500 dark:bg-cyan-400 rounded-t-full shadow-[0_0_10px_rgba(6,182,212,0.8)]" />
+                )}
+            </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 scrollbar-hide relative bg-gray-50 dark:bg-transparent">
+            {activeTab === 'topup' ? (
+                <div className="space-y-4 pb-10">
+                {[
+                    { pts: 500, price: '$4.99', popular: false, desc: locale === 'zh' ? '轻度创作包' : 'Starter Pack' },
+                    { pts: 1200, price: '$9.99', popular: true, desc: locale === 'zh' ? '进阶灵感包' : 'Creator Pack' },
+                    { pts: 3000, price: '$19.99', popular: false, desc: locale === 'zh' ? '专业生产力' : 'Pro Studio' },
+                ].map((plan, idx) => (
+                    <div
+                    key={idx}
+                    className={`relative p-5 rounded-2xl border flex justify-between items-center cursor-pointer transition-all duration-300 group ${
+                        plan.popular
+                        ? 'border-cyan-500/50 bg-cyan-50 dark:bg-cyan-400/10 hover:bg-cyan-100 dark:hover:bg-cyan-400/20'
+                        : 'border-gray-200 dark:border-white/5 bg-white dark:bg-white/[0.02] hover:bg-gray-50 dark:hover:bg-white/[0.05] hover:border-gray-300 dark:hover:border-white/20'
+                    }`}
+                    >
+                    {plan.popular && (
+                        <div className="absolute -top-3 left-5 bg-gradient-to-r from-cyan-400 to-blue-500 text-[10px] font-bold px-3 py-1 rounded-full text-white tracking-wider shadow-lg">
+                        🔥 Popular
+                        </div>
+                    )}
+                    <div>
+                        <div className="text-gray-900 dark:text-white font-bold text-xl flex items-center gap-1.5 mb-1">
+                        <span className={plan.popular ? "text-cyan-500 dark:text-cyan-400" : "text-gray-400"}><Icons.Sparkles /></span>
+                        {plan.pts}
+                        </div>
+                        <div className="text-xs text-gray-500">{plan.desc}</div>
+                    </div>
+                    <div className="text-gray-900 dark:text-white font-mono text-xl group-hover:scale-105 transition-transform">
+                        {plan.price}
+                    </div>
+                    </div>
+                ))}
+                </div>
+            ) : (
+                <div className="space-y-1">
+                {hasCheckedIn && (
+                    <div className="flex justify-between items-center py-3 px-2 border-b border-gray-100 dark:border-white/5 hover:bg-gray-100 dark:hover:bg-white/[0.02] rounded-lg transition-colors">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-cyan-100 dark:bg-cyan-400/10 flex items-center justify-center text-cyan-600 dark:text-cyan-400">
+                        <Icons.Calendar />
+                        </div>
+                        <div>
+                        <div className="text-sm font-medium text-gray-900 dark:text-white">Daily Check-in</div>
+                        <div className="text-xs text-gray-500">Just now</div>
+                        </div>
+                    </div>
+                    <div className="text-green-500 dark:text-green-400 font-mono text-base font-bold">+20</div>
+                    </div>
+                )}
+                {/* 流水明细列表 */}
+                <div className="flex justify-between items-center py-3 px-2 border-b border-gray-100 dark:border-white/5 hover:bg-gray-100 dark:hover:bg-white/[0.02] rounded-lg transition-colors">
+                    <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-white/5 flex items-center justify-center text-gray-400">
+                        <Icons.Image />
+                    </div>
+                    <div>
+                        <div className="text-sm font-medium text-gray-900 dark:text-white">Image Generation</div>
+                        <div className="text-xs text-gray-500">2 hours ago</div>
+                    </div>
+                    </div>
+                    <div className="text-gray-900 dark:text-white font-mono text-base font-medium">-10</div>
+                </div>
+                </div>
+            )}
+            <div className="sticky bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-gray-50 dark:from-[#111] to-transparent pointer-events-none" />
+            </div>
+        </div>
+
+        {/* ==================== 深度入口：全屏账单与订阅中心 (Dashboard) ==================== */}
+        <div 
+          className={`fixed inset-0 bg-gray-50 dark:bg-[#000] z-[200] overflow-y-auto transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${showDashboard ? 'translate-y-0 opacity-100' : 'translate-y-12 opacity-0 pointer-events-none'}`}
+        >
+          <header className="h-16 shrink-0 flex items-center px-6 border-b border-gray-200 dark:border-white/10 bg-white/70 dark:bg-[#000]/60 backdrop-blur-xl sticky top-0 z-10">
+             <button onClick={() => setShowDashboard(false)} className="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
+                 <Icons.ArrowLeft /> {t.backToWorkspace}
+             </button>
+             <div className="mx-auto font-bold text-lg text-gray-900 dark:text-white">{t.dashboardTitle}</div>
+             <div className="w-[100px]"></div>
+          </header>
+          
+          <div className="max-w-6xl mx-auto p-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="flex flex-col gap-6">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{t.overview}</h3>
+                  
+                  <div className="bg-white dark:bg-[#111] border border-gray-200 dark:border-white/5 rounded-2xl p-6 shadow-sm">
+                     <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">{t.currentCredits}</div>
+                     <div className="text-5xl font-mono font-bold text-gray-900 dark:text-white mb-6">{user?.creditBalance || 0}</div>
+                     <button onClick={() => { setShowDashboard(false); setIsDrawerOpen(true); setActiveTab('topup'); }} className="w-full py-3 bg-gray-900 dark:bg-white text-white dark:text-black rounded-xl font-semibold hover:bg-black dark:hover:bg-gray-200 transition-colors">
+                        {t.getCredits}
+                     </button>
+                  </div>
+
+                  <div className="bg-white dark:bg-[#111] border border-gray-200 dark:border-white/5 rounded-2xl p-6 shadow-sm">
+                     <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">{t.currentPlan}</div>
+                     <div className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{t.freePlan}</div>
+                     <div className="text-xs text-gray-500 dark:text-[#888] mb-6 leading-relaxed">包含基础速度引擎与每日限量额度。</div>
+                     <button className="w-full py-3 bg-cyan-50 dark:bg-cyan-400/10 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-400/20 rounded-xl font-semibold hover:bg-cyan-100 dark:hover:bg-cyan-400/20 transition-colors">
+                        {t.upgradePlan}
+                     </button>
+                  </div>
+
+                  <div className="bg-white dark:bg-[#111] border border-gray-200 dark:border-white/5 rounded-2xl p-6 shadow-sm">
+                     <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-6">{t.usageLast7Days}</div>
+                     <div className="flex items-end justify-between h-24 gap-2">
+                         {[30, 70, 45, 90, 20, 60, 100].map((h, i) => (
+                             <div key={i} className="w-full bg-cyan-100 dark:bg-cyan-900/30 rounded-t-sm relative group cursor-crosshair" style={{ height: `${h}%` }}>
+                                 <div className="absolute inset-0 bg-cyan-500 dark:bg-cyan-400 opacity-0 group-hover:opacity-100 rounded-t-sm transition-opacity" />
+                                 <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-900 dark:bg-white text-white dark:text-black text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10 transition-opacity">
+                                     -{Math.floor(h * 1.5)}
+                                 </div>
+                             </div>
+                         ))}
+                     </div>
+                     <div className="flex justify-between text-[10px] text-gray-400 mt-2 font-mono">
+                         <span>7 days ago</span>
+                         <span>Today</span>
+                     </div>
+                  </div>
+              </div>
+
+              <div className="lg:col-span-2 flex flex-col gap-6">
+                  <div className="flex justify-between items-center mb-2">
+                      <h3 className="text-xl font-bold text-gray-900 dark:text-white">{t.transactionHistory}</h3>
+                      <div className="flex bg-gray-100 dark:bg-[#111] p-1 rounded-lg border border-gray-200 dark:border-white/5">
+                          <button onClick={() => setHistoryFilter('all')} className={`px-4 py-1.5 text-xs font-medium rounded-md transition-colors ${historyFilter === 'all' ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-[#CCC]'}`}>{t.filterAll}</button>
+                          <button onClick={() => setHistoryFilter('consumed')} className={`px-4 py-1.5 text-xs font-medium rounded-md transition-colors ${historyFilter === 'consumed' ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-[#CCC]'}`}>{t.filterConsumed}</button>
+                          <button onClick={() => setHistoryFilter('earned')} className={`px-4 py-1.5 text-xs font-medium rounded-md transition-colors ${historyFilter === 'earned' ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-[#CCC]'}`}>{t.filterEarned}</button>
+                      </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-[#111] border border-gray-200 dark:border-white/5 rounded-2xl shadow-sm overflow-hidden">
+                      {filteredHistory.length > 0 ? (
+                          <div className="divide-y divide-gray-100 dark:divide-white/5">
+                              {filteredHistory.map((item) => (
+                                  <div key={item.id} className="flex justify-between items-center p-4 sm:px-6 hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                                      <div className="flex items-center gap-4">
+                                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${item.type === 'earned' ? 'bg-green-100 dark:bg-green-400/10 text-green-600 dark:text-green-400' : 'bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400'}`}>
+                                              {item.type === 'earned' ? (item.title.includes('充值') ? <Icons.CreditCard /> : <Icons.Calendar />) : <Icons.Image />}
+                                          </div>
+                                          <div>
+                                              <div className="text-sm font-semibold text-gray-900 dark:text-white">{item.title}</div>
+                                              <div className="text-xs text-gray-500 dark:text-[#888] font-mono mt-0.5">{item.date}</div>
+                                          </div>
+                                      </div>
+                                      <div className={`font-mono text-base font-bold ${item.type === 'earned' ? 'text-green-500 dark:text-green-400' : 'text-gray-900 dark:text-white'}`}>
+                                          {item.amount > 0 ? `+${item.amount}` : item.amount}
+                                      </div>
+                                  </div>
+                              ))}
+                          </div>
+                      ) : (
+                          <div className="p-12 text-center text-gray-500 dark:text-gray-400 text-sm">
+                              暂无相关记录
+                          </div>
+                      )}
+                      
+                      {filteredHistory.length > 0 && (
+                          <div className="p-4 border-t border-gray-100 dark:border-white/5 flex items-center justify-between text-xs text-gray-500">
+                              <span>Showing 1 to {filteredHistory.length} of 148 entries</span>
+                              <div className="flex gap-1">
+                                  <button className="px-3 py-1 border border-gray-200 dark:border-white/10 rounded hover:bg-gray-50 dark:hover:bg-white/5">Previous</button>
+                                  <button className="px-3 py-1 border border-gray-200 dark:border-white/10 rounded hover:bg-gray-50 dark:hover:bg-white/5">Next</button>
+                              </div>
+                          </div>
+                      )}
+                  </div>
+              </div>
+          </div>
+        </div>
 
         <main className="flex-1 flex flex-col relative w-full">
           {!user ? (
@@ -672,21 +968,21 @@ export default function App() {
               {/* 2. Feature Grid (功能特性介绍) */}
               <section className="py-24 px-6 w-full max-w-6xl mx-auto relative border-t border-gray-200 dark:border-white/5">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="p-8 rounded-2xl bg-white dark:bg-[#0A0A0A] border border-gray-200 dark:border-white/5 hover:border-cyan-500/30 transition-colors shadow-sm dark:shadow-none group">
+                  <div className="p-8 rounded-2xl bg-white dark:bg-[#111] border border-gray-200 dark:border-white/5 hover:border-cyan-500/30 transition-colors shadow-sm dark:shadow-none group">
                     <div className="w-12 h-12 rounded-xl bg-cyan-50 dark:bg-cyan-500/10 border border-cyan-100 dark:border-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                       <Icons.Brain />
                     </div>
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">{t.feature1Title}</h3>
                     <p className="text-sm text-gray-600 dark:text-[#888] leading-relaxed">{t.feature1Desc}</p>
                   </div>
-                  <div className="p-8 rounded-2xl bg-white dark:bg-[#0A0A0A] border border-gray-200 dark:border-white/5 hover:border-purple-500/30 transition-colors shadow-sm dark:shadow-none group">
+                  <div className="p-8 rounded-2xl bg-white dark:bg-[#111] border border-gray-200 dark:border-white/5 hover:border-purple-500/30 transition-colors shadow-sm dark:shadow-none group">
                     <div className="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-500/10 border border-purple-100 dark:border-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                       <Icons.Zap />
                     </div>
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">{t.feature2Title}</h3>
                     <p className="text-sm text-gray-600 dark:text-[#888] leading-relaxed">{t.feature2Desc}</p>
                   </div>
-                  <div className="p-8 rounded-2xl bg-white dark:bg-[#0A0A0A] border border-gray-200 dark:border-white/5 hover:border-green-500/30 transition-colors shadow-sm dark:shadow-none group">
+                  <div className="p-8 rounded-2xl bg-white dark:bg-[#111] border border-gray-200 dark:border-white/5 hover:border-green-500/30 transition-colors shadow-sm dark:shadow-none group">
                     <div className="w-12 h-12 rounded-xl bg-green-50 dark:bg-green-500/10 border border-green-100 dark:border-green-500/20 text-green-600 dark:text-green-400 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                       <Icons.Shield />
                     </div>
@@ -703,9 +999,9 @@ export default function App() {
                   <p className="text-gray-600 dark:text-[#888] text-sm max-w-xl mx-auto">{t.playgroundDesc}</p>
                 </div>
 
-                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0A0A0A] shadow-xl flex flex-col md:flex-row overflow-hidden min-h-[450px]">
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#111] shadow-xl flex flex-col md:flex-row overflow-hidden min-h-[450px]">
                   {/* 左侧控制台 */}
-                  <div className="w-full md:w-[380px] border-b md:border-b-0 md:border-r border-gray-200 dark:border-white/10 p-6 flex flex-col bg-gray-50 dark:bg-[#050505]">
+                  <div className="w-full md:w-[380px] border-b md:border-b-0 md:border-r border-gray-200 dark:border-white/10 p-6 flex flex-col bg-gray-50 dark:bg-[#0A0A0A]">
                     
                     <div className="flex bg-white dark:bg-[#111] p-1 rounded-xl border border-gray-200 dark:border-white/5 mb-5 shadow-sm dark:shadow-none">
                       <button onClick={() => handleModeSwitch('t2i')} className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-all ${mode === 't2i' ? 'bg-gray-100 dark:bg-[#222] text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-[#666] hover:text-gray-900 dark:hover:text-[#CCC]'}`}>
@@ -745,7 +1041,7 @@ export default function App() {
                             )}
                           </div>
                         ) : (
-                          <div onClick={() => !isGeneratingImage && fileInputRef.current?.click()} className={`relative border-2 border-dashed border-gray-300 dark:border-white/10 rounded-xl h-24 flex flex-col items-center justify-center text-gray-500 transition-all group bg-gray-50 dark:bg-transparent ${isGeneratingImage ? 'opacity-50 cursor-not-allowed' : 'hover:border-cyan-500/40 hover:bg-cyan-50 dark:hover:bg-cyan-500/5 hover:text-cyan-600 dark:hover:text-cyan-400 cursor-pointer'}`}>
+                          <div onClick={() => !isGeneratingImage && fileInputRef.current?.click()} className={`relative border-2 border-dashed border-gray-300 dark:border-white/10 rounded-xl h-24 flex flex-col items-center justify-center text-gray-500 transition-all group bg-gray-50 dark:bg-transparent ${isGeneratingImage ? 'opacity-50 cursor-not-allowed' : 'hover:border-cyan-500/40 hover:bg-cyan-50 dark:hover:bg-white/5 hover:text-cyan-600 dark:hover:text-cyan-400 cursor-pointer'}`}>
                             <Icons.Upload />
                             <span className="text-[11px] mt-2 group-hover:text-cyan-600 dark:group-hover:text-cyan-400">Click to upload up to 5 images</span>
                           </div>
@@ -824,18 +1120,18 @@ export default function App() {
             // ================= 已登录：专业工作台视图 (Generation Studio) =================
             <div className="flex-1 flex overflow-hidden w-full">
               {/* 左侧控制台 */}
-              <aside className="w-full md:w-[380px] flex shrink-0 flex-col border-r border-gray-200 dark:border-white/10 bg-white dark:bg-[#050505] overflow-y-auto">
+              <aside className="w-full md:w-[380px] flex shrink-0 flex-col border-r border-gray-200 dark:border-white/10 bg-white dark:bg-[#0A0A0A] overflow-y-auto">
                 <div className="p-6 flex flex-col gap-6 flex-1">
                   
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 rounded-xl border border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-[#0A0A0A]">
+                    <div className="p-3 rounded-xl border border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-[#111]">
                       <div className="text-[10px] text-gray-500 dark:text-[#666] uppercase tracking-wider mb-2">Provider</div>
                       <div className="flex items-center gap-2 text-xs font-medium text-gray-900 dark:text-white">
                         <span className={`w-2 h-2 rounded-full ${systemStatus === 'available' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : systemStatus === 'unavailable' ? 'bg-red-500' : 'bg-gray-500'}`} />
                         {systemStatus === "available" ? t.providerAvailable : systemStatus === "unavailable" ? t.providerUnavailable : t.providerUnknown}
                       </div>
                     </div>
-                    <div className="p-3 rounded-xl border border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-[#0A0A0A]">
+                    <div className="p-3 rounded-xl border border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-[#111]">
                       <div className="text-[10px] text-gray-500 dark:text-[#666] uppercase tracking-wider mb-2">Status</div>
                       <div className="flex items-center gap-2 text-xs font-medium text-gray-900 dark:text-white">
                         <span className={`w-2 h-2 rounded-full ${isGeneratingImage ? 'bg-cyan-500 animate-pulse shadow-[0_0_8px_rgba(6,182,212,0.6)]' : 'bg-green-500'}`} />
@@ -882,7 +1178,7 @@ export default function App() {
                           )}
                         </div>
                       ) : (
-                        <div onClick={() => !isGeneratingImage && fileInputRef.current?.click()} className={`relative border-2 border-dashed border-gray-300 dark:border-white/10 rounded-xl h-24 flex flex-col items-center justify-center text-gray-500 transition-all group bg-gray-50 dark:bg-transparent ${isGeneratingImage ? 'opacity-50 cursor-not-allowed' : 'hover:border-cyan-500/40 hover:bg-cyan-50 dark:hover:bg-cyan-500/5 hover:text-cyan-600 dark:hover:text-cyan-400 cursor-pointer'}`}>
+                        <div onClick={() => !isGeneratingImage && fileInputRef.current?.click()} className={`relative border-2 border-dashed border-gray-300 dark:border-white/10 rounded-xl h-24 flex flex-col items-center justify-center text-gray-500 transition-all group bg-gray-50 dark:bg-transparent ${isGeneratingImage ? 'opacity-50 cursor-not-allowed' : 'hover:border-cyan-500/40 hover:bg-cyan-50 dark:hover:bg-white/5 hover:text-cyan-600 dark:hover:text-cyan-400 cursor-pointer'}`}>
                           <Icons.Upload />
                           <span className="text-[11px] mt-2 group-hover:text-cyan-600 dark:group-hover:text-cyan-400">Click to upload up to 5 images</span>
                         </div>
@@ -913,7 +1209,7 @@ export default function App() {
                           contentEditable={!isGeneratingImage}
                           onInput={(e) => handleEditorInput(e, 't2i')}
                           onFocus={(e) => { activeEditorRef.current = e.currentTarget; }}
-                          className="prompt-editor w-full flex-1 rounded-xl border border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-[#0A0A0A] p-4 text-sm leading-relaxed text-gray-900 dark:text-white outline-none transition-colors focus:border-cyan-500/50 dark:focus:border-white/20 shadow-sm dark:shadow-none overflow-y-auto disabled:opacity-50" 
+                          className="prompt-editor w-full flex-1 rounded-xl border border-gray-200 dark:border-white/5 bg-white dark:bg-[#000] p-4 text-sm leading-relaxed text-gray-900 dark:text-white outline-none transition-colors focus:border-cyan-500/50 dark:focus:border-white/20 shadow-sm dark:shadow-none overflow-y-auto disabled:opacity-50" 
                           data-placeholder={t.workspacePromptPlaceholder} 
                           style={{ minHeight: '140px', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}
                         />
@@ -926,7 +1222,7 @@ export default function App() {
                           onMouseMove={handleEditorMouseMove}
                           onMouseLeave={handleEditorMouseLeave}
                           onFocus={(e) => { activeEditorRef.current = e.currentTarget; }}
-                          className="prompt-editor w-full flex-1 rounded-xl border border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-[#0A0A0A] p-4 text-sm leading-[26px] text-gray-900 dark:text-white outline-none transition-colors focus:border-cyan-500/50 dark:focus:border-white/20 shadow-sm dark:shadow-none overflow-y-auto disabled:opacity-50" 
+                          className="prompt-editor w-full flex-1 rounded-xl border border-gray-200 dark:border-white/5 bg-white dark:bg-[#000] p-4 text-sm leading-[26px] text-gray-900 dark:text-white outline-none transition-colors focus:border-cyan-500/50 dark:focus:border-white/20 shadow-sm dark:shadow-none overflow-y-auto disabled:opacity-50" 
                           data-placeholder={t.i2iPromptPlaceholder} 
                           style={{ minHeight: '140px', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}
                         />
@@ -954,7 +1250,7 @@ export default function App() {
                   {generationTask && (
                     <div className="mt-2 pt-6 border-t border-gray-200 dark:border-white/5">
                       <div className="text-xs font-semibold text-gray-900 dark:text-white uppercase tracking-wider mb-4">{t.taskTitle}</div>
-                      <div className="space-y-3 text-xs bg-gray-50 dark:bg-[#0A0A0A] p-4 rounded-xl border border-gray-200 dark:border-white/5">
+                      <div className="space-y-3 text-xs bg-gray-50 dark:bg-[#000] p-4 rounded-xl border border-gray-200 dark:border-white/5">
                         <div className="flex justify-between items-center"><span className="text-gray-500 dark:text-[#666]">{t.taskId}</span><span className="text-gray-700 dark:text-[#CCC] font-mono">{generationTask.id.substring(0,8)}...</span></div>
                         <div className="flex justify-between items-center"><span className="text-gray-500 dark:text-[#666]">{t.model}</span><span className="text-gray-700 dark:text-[#CCC] bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded">{generationTask.model || "-"}</span></div>
                         <div className="flex justify-between items-center">
