@@ -683,6 +683,15 @@ const getMimeTypeFromDataUrl = (value: string) => {
   return match?.[1] ?? "image/png";
 };
 
+const getBase64PayloadFromDataUrl = (value: string) => {
+  const match = value.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
+  if (!match?.[1]) {
+    throw new ImageGenerationProviderError("Reference image payload is invalid.");
+  }
+
+  return match[1];
+};
+
 const fetchRemoteImageBytes = async (url: string) => {
   const response = await fetch(url);
   if (!response.ok) {
@@ -745,32 +754,31 @@ const callOfficialImageEditProvider = async (
   }
 
   const endpoint = getImageEditEndpoint(imageConfig);
-  const primaryPayload: JsonRecord = {
-    model: imageConfig.model,
-    prompt,
-    images: referenceImages.map((imageUrl) => ({
-      image_url: imageUrl,
-    })),
-  };
-  const fallbackPayload: JsonRecord | null =
-    referenceImages.length === 1
-      ? {
-          model: imageConfig.model,
-          prompt,
-          image: {
-            image_url: referenceImages[0],
-          },
-        }
-      : null;
+  const buildMultipartPayload = (fieldName: "image" | "image[]") => {
+    const formData = new FormData();
+    formData.set("model", imageConfig.model);
+    formData.set("prompt", prompt);
 
-  const executeRequest = async (payload: JsonRecord) => {
+    referenceImages.forEach((imageUrl, index) => {
+      const mimeType = getMimeTypeFromDataUrl(imageUrl);
+      const extension = getFileExtensionFromMimeType(mimeType);
+      const bytes = decodeBase64Image(getBase64PayloadFromDataUrl(imageUrl));
+      const file = new File([bytes], `reference-${index + 1}.${extension}`, {
+        type: mimeType,
+      });
+      formData.append(fieldName, file);
+    });
+
+    return formData;
+  };
+
+  const executeRequest = async (payload: FormData) => {
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
         Authorization: `Bearer ${imageConfig.apiKey}`,
       },
-      body: JSON.stringify(payload),
+      body: payload,
     });
 
     const body = (await response.json().catch(() => null)) as
@@ -780,9 +788,9 @@ const callOfficialImageEditProvider = async (
     return { response, body };
   };
 
-  let { response, body } = await executeRequest(primaryPayload);
-  if (!response.ok && fallbackPayload) {
-    const fallbackResult = await executeRequest(fallbackPayload);
+  let { response, body } = await executeRequest(buildMultipartPayload("image"));
+  if (!response.ok && referenceImages.length > 1) {
+    const fallbackResult = await executeRequest(buildMultipartPayload("image[]"));
     response = fallbackResult.response;
     body = fallbackResult.body;
   }

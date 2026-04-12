@@ -353,8 +353,15 @@ test("POST /api/generate/image supports image-to-image requests", async () => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     if (url === "https://api.openai.com/v1/images/edits") {
       const request = input instanceof Request ? input : new Request(url, init);
-      const payload = request ? (await request.json()) as { images?: Array<{ image_url?: string }>; image?: { image_url?: string } } : null;
-      assert.equal(payload?.images?.[0]?.image_url, referenceImage);
+      const formData = await request.formData();
+      assert.equal(formData.get("model"), "dall-e-3");
+      assert.equal(formData.get("prompt"), "continue the lighting language from @R1");
+      const files = formData.getAll("image");
+      assert.equal(files.length, 1);
+      const uploadedImage = files[0];
+      assert.ok(uploadedImage instanceof File);
+      assert.equal(uploadedImage.type, "image/png");
+      assert.equal(await uploadedImage.text(), "source-image");
       return new Response(
         JSON.stringify({
           data: [
