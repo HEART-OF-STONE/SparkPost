@@ -349,9 +349,12 @@ test("POST /api/generate/image supports image-to-image requests", async () => {
   const originalFetch = globalThis.fetch;
   const referenceImage = "data:image/png;base64," + Buffer.from("source-image", "utf8").toString("base64");
 
-  globalThis.fetch = async (input: RequestInfo | URL) => {
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     if (url === "https://api.openai.com/v1/images/edits") {
+      const request = input instanceof Request ? input : new Request(url, init);
+      const payload = request ? (await request.json()) as { images?: Array<{ image_url?: string }>; image?: { image_url?: string } } : null;
+      assert.equal(payload?.images?.[0]?.image_url, referenceImage);
       return new Response(
         JSON.stringify({
           data: [

@@ -748,14 +748,18 @@ const callOfficialImageEditProvider = async (
   const primaryPayload: JsonRecord = {
     model: imageConfig.model,
     prompt,
-    images: referenceImages,
+    images: referenceImages.map((imageUrl) => ({
+      image_url: imageUrl,
+    })),
   };
   const fallbackPayload: JsonRecord | null =
     referenceImages.length === 1
       ? {
           model: imageConfig.model,
           prompt,
-          image: referenceImages[0],
+          image: {
+            image_url: referenceImages[0],
+          },
         }
       : null;
 
