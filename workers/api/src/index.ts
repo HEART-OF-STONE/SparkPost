@@ -95,6 +95,7 @@ type GenerationTaskRow = {
   id: string;
   status: string;
   prompt: string;
+  compiledPrompt: string | null;
   createdAt: string;
   completedAt: string | null;
   model: string | null;
@@ -273,6 +274,179 @@ const json = (body: JsonRecord, init: ResponseInit = {}) =>
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const isValidEmail = (email: string) => email.length <= 320 && EMAIL_REGEX.test(email);
 const normalizePrompt = (prompt: string) => prompt.trim();
+const REFERENCE_TOKEN_REGEX = /@R(\d+)\b/gi;
+
+const getMentionedReferenceIndexes = (prompt: string, referenceCount: number) => {
+  const mentioned = new Set<number>();
+  for (const match of prompt.matchAll(REFERENCE_TOKEN_REGEX)) {
+    const rawIndex = Number.parseInt(match[1] ?? "", 10);
+    if (Number.isFinite(rawIndex) && rawIndex >= 1 && rawIndex <= referenceCount) {
+      mentioned.add(rawIndex);
+    }
+  }
+  return Array.from(mentioned);
+};
+
+const getFallbackReferenceRole = (index: number) => {
+  if (index === 1) return "Primary subject and composition anchor.";
+  if (index === 2) return "Secondary style, pose, or mood reference.";
+  if (index === 3) return "Support details, materials, or color palette reference.";
+  if (index === 4) return "Lighting, camera, or background atmosphere reference.";
+  return "Low-priority supporting reference unless explicitly requested.";
+};
+
+const getMatchedReferenceIndex = (pattern: RegExp, prompt: string, referenceCount: number) => {
+  const match = pattern.exec(prompt);
+  pattern.lastIndex = 0;
+  if (!match) {
+    return null;
+  }
+
+  const rawIndex = Number.parseInt(match[1] ?? "", 10);
+  if (!Number.isFinite(rawIndex) || rawIndex < 1 || rawIndex > referenceCount) {
+    return null;
+  }
+
+  return rawIndex;
+};
+
+const getMatchedReferencePair = (pattern: RegExp, prompt: string, referenceCount: number) => {
+  const match = pattern.exec(prompt);
+  pattern.lastIndex = 0;
+  if (!match) {
+    return null;
+  }
+
+  const leftIndex = Number.parseInt(match[1] ?? "", 10);
+  const rightIndex = Number.parseInt(match[2] ?? "", 10);
+  if (
+    !Number.isFinite(leftIndex) ||
+    !Number.isFinite(rightIndex) ||
+    leftIndex < 1 ||
+    rightIndex < 1 ||
+    leftIndex > referenceCount ||
+    rightIndex > referenceCount
+  ) {
+    return null;
+  }
+
+  return { leftIndex, rightIndex };
+};
+
+const getImageToImageIntentHints = (prompt: string, referenceCount: number) => {
+  const hints: string[] = [];
+
+  const replacementPair = getMatchedReferencePair(
+    /@R(\d+).*?(?:换成|改成|替换成|替换为|变成).*?@R(\d+)/i,
+    prompt,
+    referenceCount,
+  );
+  if (replacementPair) {
+    hints.push(
+      `Treat R${replacementPair.leftIndex} as the original subject that should stay identifiable, and borrow the requested replacement traits from R${replacementPair.rightIndex}.`,
+    );
+  }
+
+  const styleReference = getMatchedReferenceIndex(
+    /(?:参考|按照|用|沿用|借鉴)\s*@R(\d+).*?(?:风格|画风|配色|氛围|质感|材质)/i,
+    prompt,
+    referenceCount,
+  );
+  if (styleReference) {
+    hints.push(`Use R${styleReference} as the dominant style, color, and rendering reference.`);
+  }
+
+  const poseReference = getMatchedReferenceIndex(
+    /(?:参考|按照|用|沿用|借鉴)\s*@R(\d+).*?(?:姿势|动作|构图|机位|角度|表情)/i,
+    prompt,
+    referenceCount,
+  );
+  if (poseReference) {
+    hints.push(`Follow the pose, composition, or camera language from R${poseReference}.`);
+  }
+
+  const preserveReference = getMatchedReferenceIndex(
+    /(?:保留|保持|沿用|维持)\s*@R(\d+).*?(?:主体|轮廓|人设|角色|脸|特征|构图|服装|元素|细节)?/i,
+    prompt,
+    referenceCount,
+  );
+  if (preserveReference) {
+    hints.push(`Preserve the key identity, silhouette, and recognizable subject cues from R${preserveReference}.`);
+  }
+
+  const blendPair = getMatchedReferencePair(/(?:融合|结合|混合).*?@R(\d+).*?@R(\d+)/i, prompt, referenceCount);
+  if (blendPair) {
+    hints.push(
+      `Blend the strengths of R${blendPair.leftIndex} and R${blendPair.rightIndex} in a controlled way instead of averaging all references equally.`,
+    );
+  }
+
+  if (/(光影|灯光|lighting)/i.test(prompt)) {
+    hints.push("Pay close attention to the requested lighting direction, contrast, and atmosphere.");
+  }
+
+  if (/(背景|场景|环境|background|scene)/i.test(prompt)) {
+    hints.push("Keep the final background coherent with the requested environment instead of overfitting to every reference.");
+  }
+
+  if (/(一致|统一|coherent|consistent)/i.test(prompt)) {
+    hints.push("Favor one coherent final image and avoid visual conflicts between references.");
+  }
+
+  return hints;
+};
+
+// 中文说明：
+// 这里不会直接把用户原始提示词裸传给图生图模型，而是先做一层“提示词编译”。
+// 目标不是替用户重写创意，而是把 @R1 / @R2 这类引用、以及“参考 / 保留 / 换成 / 融合”
+// 这类中文动作词翻译成更稳定的英文控制指令，让模型更清楚每张参考图扮演什么角色。
+
+// 中文说明：
+// 这里把用户在前端输入的 @R1 / @R2 之类标记，编译成更适合图生图模型理解的专业提示词。
+// 目标不是替用户改写创意，而是把“哪张图扮演什么角色”表达得更清楚。
+const compileImageToImagePrompt = (userPrompt: string, referenceCount: number) => {
+  const normalizedPrompt = normalizePrompt(userPrompt);
+  const mentionedReferences = getMentionedReferenceIndexes(normalizedPrompt, referenceCount);
+  const effectiveReferences =
+    mentionedReferences.length > 0
+      ? mentionedReferences
+      : Array.from({ length: referenceCount }, (_, index) => index + 1);
+
+  const referenceGuide = Array.from({ length: referenceCount }, (_, index) => {
+    const refIndex = index + 1;
+    const isExplicitlyMentioned = mentionedReferences.includes(refIndex);
+    const role = isExplicitlyMentioned
+      ? "Explicitly referenced by the user. Follow any requested transfer, replacement, or blend involving this image."
+      : getFallbackReferenceRole(refIndex);
+    return `- R${refIndex}: ${role}`;
+  }).join("\n");
+
+  const priorityLine =
+    mentionedReferences.length > 0
+      ? `Prioritize the explicitly referenced images in this order: ${effectiveReferences.map((index) => `R${index}`).join(", ")}. Treat unmentioned references as lower-priority support.`
+      : `No explicit @R token was provided. Use R1 as the primary reference and treat R2-R${referenceCount} as supporting references in descending priority.`;
+  const intentHints = getImageToImageIntentHints(normalizedPrompt, referenceCount);
+  const intentGuide =
+    intentHints.length > 0
+      ? ["Interpretation hints:", ...intentHints.map((hint) => `- ${hint}`)]
+      : [
+          "Interpretation hints:",
+          "- If the user does not clearly assign roles, keep R1 as the main subject anchor and use the remaining references as secondary style or detail support.",
+        ];
+
+  return [
+    "You are performing professional image-to-image generation with uploaded reference images.",
+    "Interpret every @R# token in the user intent as a direct pointer to the matching uploaded reference image.",
+    priorityLine,
+    "Preserve only the attributes the user wants to keep, and transfer only the attributes the user explicitly asks to change.",
+    "When multiple references are present, keep the result coherent and avoid averaging everything blindly.",
+    ...intentGuide,
+    "Reference guide:",
+    referenceGuide,
+    "User intent:",
+    normalizedPrompt,
+  ].join("\n");
+};
 
 const getCookieValue = (cookieHeader: string | null, name: string) => {
   if (!cookieHeader) {
@@ -906,6 +1080,7 @@ const generateTextToImageForUser = async (request: Request, userId: string, prom
 
   const imageConfig = getImageConfig(env);
   const now = new Date();
+  const compiledPrompt = prompt;
   const creditAccount = await env.SPARKPOST_DB.prepare(
     `SELECT balance FROM credit_accounts WHERE user_id = ? LIMIT 1`,
   ).bind(userId).first<{ balance: number }>();
@@ -921,12 +1096,20 @@ const generateTextToImageForUser = async (request: Request, userId: string, prom
   const taskId = crypto.randomUUID();
   await env.SPARKPOST_DB.prepare(
     `INSERT INTO generation_tasks (
-       id, user_id, task_type, status, prompt, model, cost_credits, created_at
-     ) VALUES (?, ?, 'text_to_image', 'running', ?, ?, ?, ?)`,
-  ).bind(taskId, userId, prompt, imageConfig.model, imageConfig.textToImageCost, now.toISOString()).run();
+       id, user_id, task_type, status, prompt, compiled_prompt, model, cost_credits, created_at
+     ) VALUES (?, ?, 'text_to_image', 'running', ?, ?, ?, ?, ?)`,
+  ).bind(
+    taskId,
+    userId,
+    prompt,
+    compiledPrompt,
+    imageConfig.model,
+    imageConfig.textToImageCost,
+    now.toISOString(),
+  ).run();
 
   try {
-    const providerResult = await generateProviderImage(prompt, env);
+    const providerResult = await generateProviderImage(compiledPrompt, env);
     const storedAsset = await persistGeneratedAsset(request, env, userId, taskId, providerResult);
     const completedAt = new Date();
     const remainingCredits = creditAccount.balance - imageConfig.textToImageCost;
@@ -959,10 +1142,10 @@ const generateTextToImageForUser = async (request: Request, userId: string, prom
       `UPDATE generation_tasks SET status = 'succeeded', model = ?, completed_at = ? WHERE id = ?`,
     ).bind(providerResult.model, completedAt.toISOString(), taskId).run();
 
-    const task = await env.SPARKPOST_DB.prepare(
-      `SELECT id, status, prompt, created_at AS createdAt, completed_at AS completedAt, model, cost_credits AS costCredits
-       FROM generation_tasks WHERE id = ? LIMIT 1`,
-    ).bind(taskId).first<GenerationTaskRow>();
+      const task = await env.SPARKPOST_DB.prepare(
+       `SELECT id, status, prompt, compiled_prompt AS compiledPrompt, created_at AS createdAt, completed_at AS completedAt, model, cost_credits AS costCredits
+        FROM generation_tasks WHERE id = ? LIMIT 1`,
+      ).bind(taskId).first<GenerationTaskRow>();
 
     return {
       id: task?.id ?? taskId,
@@ -1003,6 +1186,7 @@ const generateImageToImageForUser = async (
 
   const imageConfig = getImageConfig(env);
   const now = new Date();
+  const compiledPrompt = compileImageToImagePrompt(prompt, referenceImages.length);
   const creditAccount = await env.SPARKPOST_DB.prepare(
     `SELECT balance FROM credit_accounts WHERE user_id = ? LIMIT 1`,
   ).bind(userId).first<{ balance: number }>();
@@ -1018,20 +1202,21 @@ const generateImageToImageForUser = async (
   const taskId = crypto.randomUUID();
   await env.SPARKPOST_DB.prepare(
     `INSERT INTO generation_tasks (
-       id, user_id, task_type, status, prompt, model, cost_credits, input_image_url, created_at
-     ) VALUES (?, ?, 'image_to_image', 'running', ?, ?, ?, ?, ?)`,
-  ).bind(
-    taskId,
-    userId,
-    prompt,
-    imageConfig.model,
-    imageConfig.imageToImageCost,
-    `inline:${getMimeTypeFromDataUrl(referenceImages[0])}`,
-    now.toISOString(),
-  ).run();
+       id, user_id, task_type, status, prompt, compiled_prompt, model, cost_credits, input_image_url, created_at
+     ) VALUES (?, ?, 'image_to_image', 'running', ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      taskId,
+      userId,
+      prompt,
+      compiledPrompt,
+      imageConfig.model,
+      imageConfig.imageToImageCost,
+      `inline:${getMimeTypeFromDataUrl(referenceImages[0])}`,
+      now.toISOString(),
+    ).run();
 
   try {
-    const providerResult = await generateProviderImage(prompt, env, {
+    const providerResult = await generateProviderImage(compiledPrompt, env, {
       mode: "i2i",
       referenceImages,
     });
@@ -1067,10 +1252,10 @@ const generateImageToImageForUser = async (
       `UPDATE generation_tasks SET status = 'succeeded', model = ?, completed_at = ? WHERE id = ?`,
     ).bind(providerResult.model, completedAt.toISOString(), taskId).run();
 
-    const task = await env.SPARKPOST_DB.prepare(
-      `SELECT id, status, prompt, created_at AS createdAt, completed_at AS completedAt, model, cost_credits AS costCredits
-       FROM generation_tasks WHERE id = ? LIMIT 1`,
-    ).bind(taskId).first<GenerationTaskRow>();
+      const task = await env.SPARKPOST_DB.prepare(
+       `SELECT id, status, prompt, compiled_prompt AS compiledPrompt, created_at AS createdAt, completed_at AS completedAt, model, cost_credits AS costCredits
+        FROM generation_tasks WHERE id = ? LIMIT 1`,
+      ).bind(taskId).first<GenerationTaskRow>();
 
     return {
       id: task?.id ?? taskId,
