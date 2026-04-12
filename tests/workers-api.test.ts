@@ -556,6 +556,8 @@ test("POST /api/prompt/inspire returns provider prompt text", async () => {
       assert.equal(body.model, "deepseek-chat");
       assert.equal(body.messages[0]?.role, "system");
       assert.equal(body.messages[1]?.role, "user");
+      assert.match(body.messages[1]?.content ?? "", /Task:\s*\nCreate a stronger text-to-image prompt/i);
+      assert.match(body.messages[1]?.content ?? "", /User input:\s*\n科技产品海报/);
       return new Response(
         JSON.stringify({
           choices: [
@@ -617,7 +619,9 @@ test("POST /api/prompt/enhance returns rewritten prompt text", async () => {
         messages: Array<{ role: string; content: string }>;
       };
       assert.equal(body.model, "MiniMax-Text-01");
-      assert.equal(body.messages[1]?.content, "将@R1 的人物替换@R2的人物");
+      assert.match(body.messages[1]?.content ?? "", /Task:\s*\nRewrite the user's image-to-image prompt/i);
+      assert.match(body.messages[1]?.content ?? "", /keep @R# markers intact/i);
+      assert.match(body.messages[1]?.content ?? "", /User input:\s*\n将@R1 的人物替换@R2的人物/);
       return new Response(
         JSON.stringify({
           choices: [

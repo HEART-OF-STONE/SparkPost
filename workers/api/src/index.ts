@@ -515,16 +515,95 @@ const getImageToImageIntentHints = (prompt: string, referenceCount: number) => {
   return hints;
 };
 
+// 中文注释：
+// 这里把文本模型辅助功能的固定规则尽量前置并保持稳定，用户输入永远放在最后。
+// 这样后续接 DeepSeek 时，系统提示词和固定前缀更容易形成“相同前缀”，从而提高缓存命中率。
 const getPromptAssistSystemPrompt = (action: PromptAssistAction, mode: "t2i" | "i2i") => {
   if (action === "inspire") {
     return mode === "i2i"
-      ? "You help creative users quickly shape image-to-image prompts. Return a concise, production-ready prompt that clearly describes subject, style transfer intent, composition, and constraints. Do not include explanations, markdown, numbering, or extra commentary."
-      : "You help creative users quickly shape text-to-image prompts. Return a concise, production-ready prompt with subject, environment, lighting, style, and quality cues. Do not include explanations, markdown, numbering, or extra commentary.";
+      ? [
+          "You are SparkPost Prompt Assist.",
+          "Your job is to turn rough image-to-image intentions into concise production-ready prompts.",
+          "Always return prompt text only.",
+          "Do not use markdown, bullet lists, headings, numbering, quotes, or explanations.",
+          "Keep any @R# markers intact when they are useful for the user's instruction.",
+          "Prefer one compact prompt with clear subject, composition, transfer intent, constraints, and quality cues.",
+        ].join(" ")
+      : [
+          "You are SparkPost Prompt Assist.",
+          "Your job is to turn rough text-to-image ideas into concise production-ready prompts.",
+          "Always return prompt text only.",
+          "Do not use markdown, bullet lists, headings, numbering, quotes, or explanations.",
+          "Prefer one compact prompt with clear subject, environment, lighting, style, camera, and quality cues.",
+        ].join(" ");
   }
 
   return mode === "i2i"
-    ? "You rewrite rough image-to-image prompts into polished, professional prompts. Preserve the user's intent, keep any @R# reference markers intact, and improve clarity, structure, and creative precision. Return only the final prompt text."
-    : "You rewrite rough text-to-image prompts into polished, professional prompts. Preserve intent, improve clarity and specificity, and return only the final prompt text.";
+    ? [
+        "You are SparkPost Prompt Assist.",
+        "Rewrite rough image-to-image prompts into polished professional prompts.",
+        "Always return prompt text only.",
+        "Do not use markdown, bullet lists, headings, numbering, quotes, or explanations.",
+        "Preserve the user's core intent.",
+        "Keep any @R# reference markers intact.",
+        "Improve clarity, structure, editability, and creative precision without changing the requested outcome.",
+      ].join(" ")
+    : [
+        "You are SparkPost Prompt Assist.",
+        "Rewrite rough text-to-image prompts into polished professional prompts.",
+        "Always return prompt text only.",
+        "Do not use markdown, bullet lists, headings, numbering, quotes, or explanations.",
+        "Preserve the user's core intent while improving clarity, specificity, and renderability.",
+      ].join(" ");
+};
+
+const getPromptAssistUserPrompt = (action: PromptAssistAction, prompt: string, mode: "t2i" | "i2i") => {
+  const fixedPrefix =
+    action === "inspire"
+      ? mode === "i2i"
+        ? [
+            "Task:",
+            "Create a stronger image-to-image prompt from the user's rough idea.",
+            "Output contract:",
+            "- output a single prompt only",
+            "- keep useful @R# markers",
+            "- make the wording direct and production-ready",
+            "- avoid extra commentary",
+            "User input:",
+          ].join("\n")
+        : [
+            "Task:",
+            "Create a stronger text-to-image prompt from the user's rough idea.",
+            "Output contract:",
+            "- output a single prompt only",
+            "- make the wording direct and production-ready",
+            "- avoid extra commentary",
+            "User input:",
+          ].join("\n")
+      : mode === "i2i"
+        ? [
+            "Task:",
+            "Rewrite the user's image-to-image prompt into a cleaner professional version.",
+            "Output contract:",
+            "- output a single prompt only",
+            "- preserve the original intent",
+            "- keep @R# markers intact",
+            "- improve clarity and controllability",
+            "- avoid extra commentary",
+            "User input:",
+          ].join("\n")
+        : [
+            "Task:",
+            "Rewrite the user's text-to-image prompt into a cleaner professional version.",
+            "Output contract:",
+            "- output a single prompt only",
+            "- preserve the original intent",
+            "- improve clarity and controllability",
+            "- avoid extra commentary",
+            "User input:",
+          ].join("\n");
+
+  return `${fixedPrefix}\n${prompt.trim()}`;
 };
 
 const extractPromptAssistText = (body: unknown) => {
@@ -570,7 +649,7 @@ const callPromptAssistProvider = async (
       temperature: action === "inspire" ? 0.9 : 0.6,
       messages: [
         { role: "system", content: getPromptAssistSystemPrompt(action, mode) },
-        { role: "user", content: prompt },
+        { role: "user", content: getPromptAssistUserPrompt(action, prompt, mode) },
       ],
     }),
   });
