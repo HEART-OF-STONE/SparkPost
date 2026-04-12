@@ -541,6 +541,132 @@ test("POST /api/auth/send-code sends verification email when debug mode is disab
   }
 });
 
+test("POST /api/prompt/inspire returns provider prompt text", async () => {
+  const worker = await loadWorker();
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url === "https://api.deepseek.com/v1/chat/completions") {
+      const request = input instanceof Request ? input : new Request(url, init);
+      const body = (await request.json()) as {
+        model: string;
+        messages: Array<{ role: string; content: string }>;
+      };
+      assert.equal(body.model, "deepseek-chat");
+      assert.equal(body.messages[0]?.role, "system");
+      assert.equal(body.messages[1]?.role, "user");
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: "A moody cinematic portrait with rain-soaked neon reflections and restrained contrast.",
+              },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }
+
+    throw new Error(`Unexpected fetch in prompt inspire smoke test: ${url}`);
+  };
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://sparkpost.test/api/prompt/inspire", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          mode: "t2i",
+          prompt: "科技产品海报",
+        }),
+      }),
+      {
+        DEEPSEEK_API_KEY: "deepseek-test-key",
+      },
+    );
+
+    const result = await readJsonResponse<{ ok: boolean; prompt: string; provider: string; model: string }>(response);
+    assert.equal(result.status, 200);
+    assert.equal(result.body.ok, true);
+    assert.equal(result.body.provider, "deepseek");
+    assert.equal(result.body.model, "deepseek-chat");
+    assert.match(result.body.prompt, /cinematic portrait/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("POST /api/prompt/enhance returns rewritten prompt text", async () => {
+  const worker = await loadWorker();
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url === "https://minimax.example.com/v1/chat/completions") {
+      const request = input instanceof Request ? input : new Request(url, init);
+      const body = (await request.json()) as {
+        model: string;
+        messages: Array<{ role: string; content: string }>;
+      };
+      assert.equal(body.model, "MiniMax-Text-01");
+      assert.equal(body.messages[1]?.content, "将@R1 的人物替换@R2的人物");
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: "Preserve @R1 as the main subject and replace the character styling with the identity cues from @R2.",
+              },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }
+
+    throw new Error(`Unexpected fetch in prompt enhance smoke test: ${url}`);
+  };
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://sparkpost.test/api/prompt/enhance", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          mode: "i2i",
+          prompt: "将@R1 的人物替换@R2的人物",
+        }),
+      }),
+      {
+        MINIMAX_API_KEY: "minimax-test-key",
+        MINIMAX_BASE_URL: "https://minimax.example.com/v1",
+      },
+    );
+
+    const result = await readJsonResponse<{ ok: boolean; prompt: string; provider: string; model: string }>(response);
+    assert.equal(result.status, 200);
+    assert.equal(result.body.ok, true);
+    assert.equal(result.body.provider, "minimax");
+    assert.equal(result.body.model, "MiniMax-Text-01");
+    assert.match(result.body.prompt, /Preserve @R1/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("GET /api/assets/* returns stored image bytes from R2", async () => {
   const worker = await loadWorker();
   const fakeR2 = createFakeR2();

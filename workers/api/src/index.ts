@@ -34,6 +34,18 @@ export interface Env {
     OPENAI_IMAGE_API_KEY?: string;
     RELAY_IMAGE_API_KEY?: string;
     RELAY_IMAGE_BASE_URL?: string;
+    OPENAI_API_KEY?: string;
+    DEEPSEEK_API_KEY?: string;
+    MINIMAX_API_KEY?: string;
+    GEMINI_API_KEY?: string;
+    ANTHROPIC_API_KEY?: string;
+    PROMPT_IDEA_PROVIDER?: string;
+    PROMPT_IDEA_MODEL?: string;
+    PROMPT_EXPAND_PROVIDER?: string;
+    PROMPT_EXPAND_MODEL?: string;
+    DEEPSEEK_BASE_URL?: string;
+    MINIMAX_BASE_URL?: string;
+    OPENAI_BASE_URL?: string;
     TEXT_TO_IMAGE_COST?: string;
     IMAGE_TO_IMAGE_COST?: string;
   DEV_AUTH_DEBUG_CODE?: string;
@@ -89,6 +101,16 @@ type ProviderResult = {
   model: string;
 };
 
+type PromptAssistAction = "inspire" | "enhance";
+
+type PromptAssistConfig = {
+  provider: string;
+  model: string;
+  apiKey: string;
+  baseUrl: string;
+  status: "available" | "unavailable";
+};
+
 type StoredAsset = {
   assetId: string;
   fileUrl: string;
@@ -109,6 +131,8 @@ class ImageGenerationConfigError extends Error {}
 class ImageGenerationAuthError extends Error {}
 class ImageGenerationCreditsError extends Error {}
 class ImageGenerationProviderError extends Error {}
+class PromptAssistConfigError extends Error {}
+class PromptAssistProviderError extends Error {}
 class EmailDeliveryConfigError extends Error {}
 class EmailDeliveryProviderError extends Error {}
 
@@ -119,6 +143,12 @@ const DEFAULT_RESEND_BASE_URL = "https://api.resend.com";
 const DEFAULT_IMAGE_BACKEND = "official";
 const DEFAULT_IMAGE_MODEL = "dall-e-3";
 const DEFAULT_OPENAI_IMAGE_BASE_URL = "https://api.openai.com/v1";
+const DEFAULT_OPENAI_TEXT_BASE_URL = "https://api.openai.com/v1";
+const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1";
+const DEFAULT_PROMPT_IDEA_PROVIDER = "deepseek";
+const DEFAULT_PROMPT_IDEA_MODEL = "deepseek-chat";
+const DEFAULT_PROMPT_EXPAND_PROVIDER = "minimax";
+const DEFAULT_PROMPT_EXPAND_MODEL = "MiniMax-Text-01";
 const DEFAULT_TEXT_TO_IMAGE_COST = 10;
 const DEFAULT_IMAGE_TO_IMAGE_COST = 10;
 const DEFAULT_CODE_TTL_MINUTES = 10;
@@ -189,6 +219,64 @@ const getImageConfig = (env: Env) => {
   };
 };
 
+const getPromptAssistConfig = (env: Env, action: PromptAssistAction): PromptAssistConfig => {
+  const provider =
+    (
+      action === "inspire"
+        ? env.PROMPT_IDEA_PROVIDER ?? DEFAULT_PROMPT_IDEA_PROVIDER
+        : env.PROMPT_EXPAND_PROVIDER ?? DEFAULT_PROMPT_EXPAND_PROVIDER
+    )
+      .trim()
+      .toLowerCase();
+  const model =
+    (
+      action === "inspire"
+        ? env.PROMPT_IDEA_MODEL ?? DEFAULT_PROMPT_IDEA_MODEL
+        : env.PROMPT_EXPAND_MODEL ?? DEFAULT_PROMPT_EXPAND_MODEL
+    ).trim();
+
+  const providerMap: Record<string, { apiKey: string; baseUrl: string }> = {
+    openai: {
+      apiKey: env.OPENAI_API_KEY?.trim() ?? "",
+      baseUrl: (env.OPENAI_BASE_URL?.trim() || DEFAULT_OPENAI_TEXT_BASE_URL).replace(/\/$/, ""),
+    },
+    deepseek: {
+      apiKey: env.DEEPSEEK_API_KEY?.trim() ?? "",
+      baseUrl: (env.DEEPSEEK_BASE_URL?.trim() || DEFAULT_DEEPSEEK_BASE_URL).replace(/\/$/, ""),
+    },
+    minimax: {
+      apiKey: env.MINIMAX_API_KEY?.trim() ?? "",
+      baseUrl: (env.MINIMAX_BASE_URL?.trim() || "").replace(/\/$/, ""),
+    },
+    gemini: {
+      apiKey: env.GEMINI_API_KEY?.trim() ?? "",
+      baseUrl: "",
+    },
+    anthropic: {
+      apiKey: env.ANTHROPIC_API_KEY?.trim() ?? "",
+      baseUrl: "",
+    },
+  };
+
+  const selectedProvider = providerMap[provider];
+  if (!selectedProvider) {
+    return { provider, model, apiKey: "", baseUrl: "", status: "unavailable" };
+  }
+
+  const status =
+    selectedProvider.apiKey && (provider === "gemini" || provider === "anthropic" ? true : selectedProvider.baseUrl)
+      ? "available"
+      : "unavailable";
+
+  return {
+    provider,
+    model,
+    apiKey: selectedProvider.apiKey,
+    baseUrl: selectedProvider.baseUrl,
+    status: status ? "available" : "unavailable",
+  };
+};
+
 const getEmailConfig = (env: Env) => {
   const provider = (env.EMAIL_PROVIDER ?? DEFAULT_EMAIL_PROVIDER).trim().toLowerCase();
   const from = env.EMAIL_FROM?.trim() ?? "";
@@ -214,6 +302,17 @@ const getEmailConfig = (env: Env) => {
     resendApiKey,
     resendBaseUrl: DEFAULT_RESEND_BASE_URL,
   };
+};
+
+const getPromptAssistEndpoint = (config: PromptAssistConfig) => {
+  if (["openai", "deepseek", "minimax"].includes(config.provider)) {
+    if (config.baseUrl.endsWith("/chat/completions")) {
+      return config.baseUrl;
+    }
+    return `${config.baseUrl}/chat/completions`;
+  }
+
+  throw new PromptAssistConfigError(`Unsupported prompt provider: ${config.provider}`);
 };
 
 const formatVerificationCodeHtml = (code: string) => `<!doctype html>
@@ -416,6 +515,84 @@ const getImageToImageIntentHints = (prompt: string, referenceCount: number) => {
   return hints;
 };
 
+const getPromptAssistSystemPrompt = (action: PromptAssistAction, mode: "t2i" | "i2i") => {
+  if (action === "inspire") {
+    return mode === "i2i"
+      ? "You help creative users quickly shape image-to-image prompts. Return a concise, production-ready prompt that clearly describes subject, style transfer intent, composition, and constraints. Do not include explanations, markdown, numbering, or extra commentary."
+      : "You help creative users quickly shape text-to-image prompts. Return a concise, production-ready prompt with subject, environment, lighting, style, and quality cues. Do not include explanations, markdown, numbering, or extra commentary.";
+  }
+
+  return mode === "i2i"
+    ? "You rewrite rough image-to-image prompts into polished, professional prompts. Preserve the user's intent, keep any @R# reference markers intact, and improve clarity, structure, and creative precision. Return only the final prompt text."
+    : "You rewrite rough text-to-image prompts into polished, professional prompts. Preserve intent, improve clarity and specificity, and return only the final prompt text.";
+};
+
+const extractPromptAssistText = (body: unknown) => {
+  if (!body || typeof body !== "object") {
+    return null;
+  }
+
+  if ("choices" in body && Array.isArray((body as { choices?: unknown[] }).choices)) {
+    const firstChoice = (body as { choices: Array<{ message?: { content?: unknown } }> }).choices[0];
+    const content = firstChoice?.message?.content;
+    if (typeof content === "string" && content.trim()) {
+      return content.trim();
+    }
+  }
+
+  return null;
+};
+
+const callPromptAssistProvider = async (
+  action: PromptAssistAction,
+  prompt: string,
+  mode: "t2i" | "i2i",
+  env: Env,
+) => {
+  const config = getPromptAssistConfig(env, action);
+  if (config.status !== "available") {
+    throw new PromptAssistConfigError("Prompt assist provider is not configured.");
+  }
+
+  if (!["openai", "deepseek", "minimax"].includes(config.provider)) {
+    throw new PromptAssistConfigError(`Prompt assist provider ${config.provider} is not supported yet.`);
+  }
+
+  const endpoint = getPromptAssistEndpoint(config);
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: config.model,
+      temperature: action === "inspire" ? 0.9 : 0.6,
+      messages: [
+        { role: "system", content: getPromptAssistSystemPrompt(action, mode) },
+        { role: "user", content: prompt },
+      ],
+    }),
+  });
+
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    console.error("Prompt assist provider request failed.", { action, status: response.status, body });
+    throw new PromptAssistProviderError("Prompt assist provider request failed.");
+  }
+
+  const text = extractPromptAssistText(body);
+  if (!text) {
+    throw new PromptAssistProviderError("Prompt assist provider returned no text.");
+  }
+
+  return {
+    prompt: text,
+    provider: config.provider,
+    model: config.model,
+  };
+};
+
 // 中文说明：
 // 这里不会直接把用户原始提示词裸传给图生图模型，而是先做一层“提示词编译”。
 // 目标不是替用户重写创意，而是把 @R1 / @R2 这类引用、以及“参考 / 保留 / 换成 / 融合”
@@ -613,6 +790,29 @@ const parseJsonBody = async (request: Request) => {
   } catch {
     return { ok: false as const, error: "Request body must be valid JSON." };
   }
+};
+
+const validatePromptAssistInput = (input: unknown) => {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return { ok: false as const, error: "Request body must be an object." };
+  }
+
+  const prompt = "prompt" in input ? input.prompt : undefined;
+  const mode = "mode" in input ? input.mode : undefined;
+
+  if (typeof prompt !== "string" || !prompt.trim()) {
+    return { ok: false as const, error: "Prompt is required." };
+  }
+
+  if (mode !== "t2i" && mode !== "i2i") {
+    return { ok: false as const, error: "Mode must be t2i or i2i." };
+  }
+
+  return {
+    ok: true as const,
+    prompt: normalizePrompt(prompt),
+    mode: mode as "t2i" | "i2i",
+  };
 };
 
 const validateSendCodeInput = (input: unknown) => {
@@ -1460,9 +1660,9 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
       return response;
     },
   },
-  {
-    method: "POST",
-    pathname: "/api/generate/image",
+    {
+      method: "POST",
+      pathname: "/api/generate/image",
     handler: async (request, env) => {
       const bodyResult = await parseJsonBody(request);
       if (!bodyResult.ok) return json({ error: bodyResult.error }, { status: 400 });
@@ -1498,13 +1698,55 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
         }
         throw error;
       }
+      },
     },
-  },
-  {
-    method: "GET",
-    pathname: "/api/generate/status",
-    handler: async (_request, env) => {
-      const imageConfig = getImageConfig(env);
+    {
+      method: "POST",
+      pathname: "/api/prompt/inspire",
+      handler: async (request, env) => {
+        const bodyResult = await parseJsonBody(request);
+        if (!bodyResult.ok) return json({ error: bodyResult.error }, { status: 400 });
+        const input = validatePromptAssistInput(bodyResult.body);
+        if (!input.ok) return json({ error: input.error }, { status: 400 });
+
+        try {
+          const result = await callPromptAssistProvider("inspire", input.prompt, input.mode, env);
+          return json({ ok: true, prompt: result.prompt, provider: result.provider, model: result.model });
+        } catch (error) {
+          if (error instanceof PromptAssistConfigError || error instanceof PromptAssistProviderError) {
+            console.error("Prompt inspire failed.", error);
+            return json({ error: "Prompt inspiration service is temporarily unavailable." }, { status: 503 });
+          }
+          throw error;
+        }
+      },
+    },
+    {
+      method: "POST",
+      pathname: "/api/prompt/enhance",
+      handler: async (request, env) => {
+        const bodyResult = await parseJsonBody(request);
+        if (!bodyResult.ok) return json({ error: bodyResult.error }, { status: 400 });
+        const input = validatePromptAssistInput(bodyResult.body);
+        if (!input.ok) return json({ error: input.error }, { status: 400 });
+
+        try {
+          const result = await callPromptAssistProvider("enhance", input.prompt, input.mode, env);
+          return json({ ok: true, prompt: result.prompt, provider: result.provider, model: result.model });
+        } catch (error) {
+          if (error instanceof PromptAssistConfigError || error instanceof PromptAssistProviderError) {
+            console.error("Prompt enhance failed.", error);
+            return json({ error: "Prompt enhancement service is temporarily unavailable." }, { status: 503 });
+          }
+          throw error;
+        }
+      },
+    },
+    {
+      method: "GET",
+      pathname: "/api/generate/status",
+      handler: async (_request, env) => {
+        const imageConfig = getImageConfig(env);
       return json({ status: imageConfig.status, model: imageConfig.model });
     },
   },
