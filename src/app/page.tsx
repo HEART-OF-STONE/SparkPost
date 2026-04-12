@@ -38,6 +38,7 @@ type ImageTaskResult = {
   }>;
 };
 type GenerateImageResponse = { ok: true; task: ImageTaskResult } | { error: string };
+type PromptAssistResponse = { ok: true; prompt: string; provider: string; model: string } | { error: string };
 
 type Copy = {
   brand: string;
@@ -415,6 +416,8 @@ export default function Home() {
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [isVerifyingCode, setIsVerifyingCode] = useState(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [isInspiring, setIsInspiring] = useState(false);
+  const [isEnhancing, setIsEnhancing] = useState(false);
   const [showLoginPanel, setShowLoginPanel] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [pendingGenerateAfterLogin, setPendingGenerateAfterLogin] = useState(false);
@@ -997,9 +1000,8 @@ export default function Home() {
     );
   }
 
-  function handleSoon(action: "inspire" | "enhance") {
-    setGenerationNotice({ type: "info", text: action === "inspire" ? t.inspireNotice : t.enhanceNotice });
-  }
+  const inspireButtonLabel = isInspiring ? (locale === "zh" ? "灵感生成中..." : "Generating ideas...") : t.inspire;
+  const enhanceButtonLabel = isEnhancing ? (locale === "zh" ? "扩写中..." : "Enhancing...") : t.enhance;
 
   const statusCards = [
     { label: t.provider, value: getDisplayImageModel(generationTask?.model) },
@@ -1021,6 +1023,68 @@ export default function Home() {
       label: `r${index + 1}`,
     }))
     .filter((option) => mentionQuery === "" || option.label.startsWith(mentionQuery));
+
+  function applyPromptValue(nextValue: string, targetMode: Mode) {
+    isTypingRef.current = false;
+    setPrompts((current) => ({ ...current, [targetMode]: nextValue }));
+
+    if (activeEditorRef.current && targetMode === mode) {
+      syncEditorHTML(nextValue, activeEditorRef.current, uploadedImages, targetMode);
+    }
+  }
+
+  async function handlePromptAssist(action: "inspire" | "enhance") {
+    setGenerationNotice(null);
+    if (!currentPrompt.trim()) {
+      setGenerationNotice({ type: "error", text: t.enterPrompt });
+      return;
+    }
+
+    const setPendingState = action === "inspire" ? setIsInspiring : setIsEnhancing;
+    const fallbackError = action === "inspire" ? t.inspireNotice : t.enhanceNotice;
+    const successText =
+      locale === "zh"
+        ? action === "inspire"
+          ? "已生成新的灵感提示词，可继续编辑或直接渲染。"
+          : "已完成智能扩写，可继续微调后渲染。"
+        : action === "inspire"
+          ? "A new inspiration prompt is ready. You can refine it or render directly."
+          : "Prompt enhanced successfully. You can fine-tune it before rendering.";
+
+    setPendingState(true);
+    try {
+      const response = await fetchApi(action === "inspire" ? "/api/prompt/inspire" : "/api/prompt/enhance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: currentPrompt, mode }),
+      });
+      const data = (await response.json().catch(() => null)) as PromptAssistResponse | null;
+
+      if (!response.ok) {
+        const errorText = data && "error" in data && typeof data.error === "string" ? data.error : fallbackError;
+        setGenerationNotice({ type: "error", text: errorText });
+        return;
+      }
+
+      if (!data || !("ok" in data) || data.ok !== true || typeof data.prompt !== "string") {
+        setGenerationNotice({ type: "error", text: t.unexpectedPayload });
+        return;
+      }
+
+      const normalizedPrompt = data.prompt.trim();
+      if (!normalizedPrompt) {
+        setGenerationNotice({ type: "error", text: t.unexpectedPayload });
+        return;
+      }
+
+      applyPromptValue(normalizedPrompt, mode);
+      setGenerationNotice({ type: "success", text: successText });
+    } catch (error) {
+      setGenerationNotice({ type: "error", text: error instanceof Error ? error.message : fallbackError });
+    } finally {
+      setPendingState(false);
+    }
+  }
 
   const renderSurface = generatedImageUrl && !previewLoadFailed ? (
     <div className={`relative h-full min-h-[320px] w-full overflow-hidden rounded-[1.5rem] border ${isDark ? "border-white/10 bg-black/50 shadow-[0_20px_80px_rgba(0,0,0,0.35)]" : "border-gray-200 bg-white shadow-[0_20px_80px_rgba(148,163,184,0.22)]"}`}>
@@ -1164,8 +1228,8 @@ export default function Home() {
                   <div className="mt-5 flex items-end justify-between gap-3">
                     <label htmlFor="landing-prompt" className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{t.promptLabel}</label>
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => handleSoon("inspire")} className={`rounded-md border px-2.5 py-1.5 text-[10px] transition ${isDark ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>{t.inspire}</button>
-                      <button type="button" onClick={() => handleSoon("enhance")} className={`rounded-md border px-2.5 py-1.5 text-[10px] transition ${isDark ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>{t.enhance}</button>
+                      <button type="button" disabled={isGeneratingImage || isInspiring || isEnhancing} onClick={() => void handlePromptAssist("inspire")} className={`rounded-md border px-2.5 py-1.5 text-[10px] transition disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>{inspireButtonLabel}</button>
+                      <button type="button" disabled={isGeneratingImage || isInspiring || isEnhancing} onClick={() => void handlePromptAssist("enhance")} className={`rounded-md border px-2.5 py-1.5 text-[10px] transition disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>{enhanceButtonLabel}</button>
                     </div>
                   </div>
 
@@ -1218,8 +1282,8 @@ export default function Home() {
                   <div className="flex items-end justify-between gap-3 mb-3">
                   <label htmlFor="workspace-prompt" className={`text-[11px] font-semibold uppercase tracking-[0.24em] ${isDark ? "text-slate-500" : "text-gray-500"}`}>{t.promptLabel}</label>
                   <div className="flex gap-2">
-                    <button type="button" onClick={() => handleSoon("inspire")} className={`rounded-md border px-2.5 py-1.5 text-[10px] transition ${isDark ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>{t.inspire}</button>
-                    <button type="button" onClick={() => handleSoon("enhance")} className={`rounded-md border px-2.5 py-1.5 text-[10px] transition ${isDark ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>{t.enhance}</button>
+                    <button type="button" disabled={isGeneratingImage || isInspiring || isEnhancing} onClick={() => void handlePromptAssist("inspire")} className={`rounded-md border px-2.5 py-1.5 text-[10px] transition disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>{inspireButtonLabel}</button>
+                    <button type="button" disabled={isGeneratingImage || isInspiring || isEnhancing} onClick={() => void handlePromptAssist("enhance")} className={`rounded-md border px-2.5 py-1.5 text-[10px] transition disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>{enhanceButtonLabel}</button>
                   </div>
                 </div>
 
