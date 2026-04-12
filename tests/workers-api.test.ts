@@ -68,19 +68,28 @@ function createFakeDb(state: FakeState) {
 
               return null;
             },
-            async run(): Promise<D1RunResult> {
-              if (sql.includes("INSERT INTO generation_tasks")) {
-                state.generatedTask = {
-                  id: String(values[0]),
-                  status: "running",
-                  prompt: String(values[2]),
-                  model: String(values[3]),
-                  costCredits: Number(values[4]),
-                  createdAt: String(values[5]),
-                  completedAt: null,
-                };
-                return { meta: { changes: 1 } };
-              }
+              async run(): Promise<D1RunResult> {
+                if (sql.includes("INSERT INTO generation_tasks")) {
+                  const includesCompiledPrompt = sql.includes("compiled_prompt");
+                  const promptIndex = 2;
+                  const modelIndex = includesCompiledPrompt ? 4 : 3;
+                  const costIndex = includesCompiledPrompt ? 5 : 4;
+                  const createdAtIndex = includesCompiledPrompt
+                    ? sql.includes("input_image_url")
+                      ? 7
+                      : 6
+                    : 5;
+                  state.generatedTask = {
+                    id: String(values[0]),
+                    status: "running",
+                    prompt: String(values[promptIndex]),
+                    model: String(values[modelIndex]),
+                    costCredits: Number(values[costIndex]),
+                    createdAt: String(values[createdAtIndex]),
+                    completedAt: null,
+                  };
+                  return { meta: { changes: 1 } };
+                }
 
               if (sql.includes("UPDATE credit_accounts SET balance = ?")) {
                 state.creditBalance = Number(values[0]);
@@ -348,6 +357,7 @@ test("POST /api/generate/image supports image-to-image requests", async () => {
   const secret = "workers-smoke-secret";
   const originalFetch = globalThis.fetch;
   const referenceImage = "data:image/png;base64," + Buffer.from("source-image", "utf8").toString("base64");
+  const styleReferenceImage = "data:image/png;base64," + Buffer.from("style-image", "utf8").toString("base64");
 
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
@@ -355,13 +365,25 @@ test("POST /api/generate/image supports image-to-image requests", async () => {
       const request = input instanceof Request ? input : new Request(url, init);
       const formData = await request.formData();
       assert.equal(formData.get("model"), "dall-e-3");
-      assert.equal(formData.get("prompt"), "continue the lighting language from @R1");
+      const compiledPrompt = formData.get("prompt");
+      assert.equal(typeof compiledPrompt, "string");
+      assert.match(String(compiledPrompt), /Reference guide:/);
+      assert.match(String(compiledPrompt), /R1: Explicitly referenced by the user/i);
+      assert.match(String(compiledPrompt), /R2: Explicitly referenced by the user/i);
+      assert.match(String(compiledPrompt), /Use R2 as the dominant style, color, and rendering reference\./);
+      assert.match(String(compiledPrompt), /Follow the pose, composition, or camera language from R2\./);
+      assert.match(String(compiledPrompt), /Preserve the key identity, silhouette, and recognizable subject cues from R1\./);
+      assert.match(String(compiledPrompt), /User intent:\r?\n参考@R2，将@R1换成@R2的风格姿势，并保留@R1的主体轮廓/);
       const files = formData.getAll("image");
-      assert.equal(files.length, 1);
+      assert.equal(files.length, 2);
       const uploadedImage = files[0];
       assert.ok(uploadedImage instanceof File);
       assert.equal(uploadedImage.type, "image/png");
       assert.equal(await uploadedImage.text(), "source-image");
+      const uploadedStyleImage = files[1];
+      assert.ok(uploadedStyleImage instanceof File);
+      assert.equal(uploadedStyleImage.type, "image/png");
+      assert.equal(await uploadedStyleImage.text(), "style-image");
       return new Response(
         JSON.stringify({
           data: [
@@ -391,8 +413,8 @@ test("POST /api/generate/image supports image-to-image requests", async () => {
         },
         body: JSON.stringify({
           mode: "i2i",
-          prompt: "continue the lighting language from @R1",
-          referenceImages: [referenceImage],
+          prompt: "参考@R2，将@R1换成@R2的风格姿势，并保留@R1的主体轮廓",
+          referenceImages: [referenceImage, styleReferenceImage],
         }),
       }),
       {
