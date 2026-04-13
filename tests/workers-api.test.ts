@@ -22,8 +22,14 @@ type GeneratedTask = {
 type FakeCreditTransaction = {
   id: string;
   type: string;
+  sourceType?: string | null;
   amount: number;
   balanceAfter: number;
+  remainingAmount?: number | null;
+  expiresAt?: string | null;
+  packageCode?: string | null;
+  paymentProvider?: string | null;
+  paymentSessionId?: string | null;
   remark: string | null;
   createdAt: string;
 };
@@ -84,15 +90,64 @@ function createFakeDb(state: FakeState) {
               return null;
             },
             async all<T>() {
+              if (sql.includes("COALESCE(remaining_amount") && sql.includes("FROM credit_transactions")) {
+                const userId = String(values[0]);
+                const expiresAt = values.length > 1 ? String(values[1]) : null;
+                const results = (state.creditTransactions ?? [])
+                  .filter(() => userId === state.user.id)
+                  .filter((item) => item.amount > 0)
+                  .map((item) => ({
+                    id: item.id,
+                    type: item.type,
+                    sourceType: item.sourceType ?? null,
+                    remainingAmount: item.remainingAmount ?? item.amount,
+                    expiresAt: item.expiresAt ?? null,
+                    createdAt: item.createdAt,
+                  }))
+                  .filter((item) => item.remainingAmount > 0)
+                  .filter((item) => {
+                    if (!sql.includes("expires_at IS NOT NULL")) return true;
+                    return (
+                      Boolean(item.expiresAt) &&
+                      new Date(item.expiresAt!).getTime() <= new Date(expiresAt ?? "").getTime()
+                    );
+                  });
+
+                return { results: results as T[] };
+              }
+
               if (sql.includes("FROM credit_transactions")) {
                 return {
-                  results: (state.creditTransactions ?? []) as T[],
+                  results: (state.creditTransactions ?? []).map((item) => ({
+                    ...item,
+                    sourceType: item.sourceType ?? null,
+                    remainingAmount: item.remainingAmount ?? (item.amount > 0 ? item.amount : null),
+                    expiresAt: item.expiresAt ?? null,
+                    packageCode: item.packageCode ?? null,
+                    paymentProvider: item.paymentProvider ?? null,
+                    paymentSessionId: item.paymentSessionId ?? null,
+                  })) as T[],
                 };
               }
 
               return { results: [] as T[] };
             },
               async run(): Promise<D1RunResult> {
+                if (sql.includes("UPDATE credit_transactions SET remaining_amount = ? WHERE id = ?")) {
+                  const nextRemainingAmount =
+                    values[0] == null ? null : Number(values[0]);
+                  const transactionId = String(values[1]);
+                  state.creditTransactions = (state.creditTransactions ?? []).map((item) =>
+                    item.id === transactionId
+                      ? {
+                          ...item,
+                          remainingAmount: nextRemainingAmount,
+                        }
+                      : item,
+                  );
+                  return { meta: { changes: 1 } };
+                }
+
                 if (sql.includes("INSERT INTO generation_tasks")) {
                   const includesCompiledPrompt = sql.includes("compiled_prompt");
                   const promptIndex = 2;
@@ -122,20 +177,20 @@ function createFakeDb(state: FakeState) {
               }
 
               if (sql.includes("INSERT INTO credit_transactions")) {
-                const isCheckInTransaction = sql.includes("'daily_check_in'");
                 const nextTransaction: FakeCreditTransaction = {
                   id: String(values[0]),
-                  type: sql.includes("'signup_bonus'")
-                    ? "signup_bonus"
-                    : sql.includes("'daily_check_in'")
-                      ? "daily_check_in"
-                      : sql.includes("'image_to_image'")
-                        ? "image_to_image"
-                        : "text_to_image",
-                  amount: Number(values[2]),
-                  balanceAfter: Number(values[3]),
-                  remark: typeof values[4] === "string" && isCheckInTransaction ? String(values[4]) : typeof values[5] === "string" ? String(values[5]) : null,
-                  createdAt: String(isCheckInTransaction ? values[5] : values[6]),
+                  type: String(values[2]),
+                  sourceType: (values[3] as string | null) ?? null,
+                  amount: Number(values[4]),
+                  balanceAfter: Number(values[5]),
+                  remainingAmount:
+                    values[6] == null ? null : Number(values[6]),
+                  expiresAt: typeof values[7] === "string" ? String(values[7]) : null,
+                  packageCode: typeof values[9] === "string" ? String(values[9]) : null,
+                  paymentProvider: typeof values[10] === "string" ? String(values[10]) : null,
+                  paymentSessionId: typeof values[11] === "string" ? String(values[11]) : null,
+                  remark: typeof values[12] === "string" ? String(values[12]) : null,
+                  createdAt: String(values[13]),
                 };
                 state.creditTransactions = [nextTransaction, ...(state.creditTransactions ?? [])];
                 return { meta: { changes: 1 } };
@@ -319,7 +374,18 @@ test("POST /api/generate/image stores asset in R2 and returns Worker asset URL",
     generatedTask: null,
     generatedAssetUrl: null,
     hasCheckedInToday: false,
-    creditTransactions: [],
+    creditTransactions: [
+      {
+        id: "tx-signup",
+        type: "signup_bonus",
+        sourceType: "signup",
+        amount: 20,
+        balanceAfter: 20,
+        remainingAmount: 20,
+        remark: "Signup bonus",
+        createdAt: new Date().toISOString(),
+      },
+    ],
   };
   const fakeR2 = createFakeR2();
   const secret = "workers-smoke-secret";
@@ -405,7 +471,18 @@ test("POST /api/generate/image supports image-to-image requests", async () => {
     generatedTask: null,
     generatedAssetUrl: null,
     hasCheckedInToday: false,
-    creditTransactions: [],
+    creditTransactions: [
+      {
+        id: "tx-signup",
+        type: "signup_bonus",
+        sourceType: "signup",
+        amount: 20,
+        balanceAfter: 20,
+        remainingAmount: 20,
+        remark: "Signup bonus",
+        createdAt: new Date().toISOString(),
+      },
+    ],
   };
   const fakeR2 = createFakeR2();
   const secret = "workers-smoke-secret";
@@ -644,6 +721,124 @@ test("POST /api/credits/check-in awards credits once per day", async () => {
   assert.equal(result.body.awardedCredits, 20);
   assert.equal(result.body.creditBalance, 40);
   assert.equal(result.body.hasCheckedInToday, true);
+});
+
+test("GET /api/credits/summary expires stale daily check-in credits on the server", async () => {
+  const worker = await loadWorker();
+  const secret = "workers-smoke-secret";
+  const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const state: FakeState = {
+    user: {
+      id: "user-1",
+      email: "demo@example.com",
+      createdAt: new Date().toISOString(),
+      emailVerifiedAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+      creditBalance: 40,
+    },
+    creditBalance: 40,
+    generatedTask: null,
+    generatedAssetUrl: null,
+    hasCheckedInToday: false,
+    creditTransactions: [
+      {
+        id: "tx-expired",
+        type: "daily_check_in",
+        sourceType: "check_in",
+        amount: 20,
+        balanceAfter: 20,
+        remainingAmount: 20,
+        expiresAt: eightDaysAgo,
+        remark: "Daily check-in",
+        createdAt: eightDaysAgo,
+      },
+      {
+        id: "tx-valid",
+        type: "daily_check_in",
+        sourceType: "check_in",
+        amount: 20,
+        balanceAfter: 40,
+        remainingAmount: 20,
+        expiresAt: tomorrow,
+        remark: "Daily check-in",
+        createdAt: new Date().toISOString(),
+      },
+    ],
+  };
+
+  const session = createSessionToken(state.user.id, state.user.email, secret);
+  const response = await worker.fetch(
+    new Request("https://sparkpost.test/api/credits/summary", {
+      headers: {
+        cookie: `sparkpost_session=${session}`,
+      },
+    }),
+    {
+      SPARKPOST_DB: createFakeDb(state),
+      SESSION_SECRET: secret,
+      DAILY_CHECK_IN_CREDITS: "20",
+    },
+  );
+
+  const result = await readJsonResponse<{
+    ok: boolean;
+    creditBalance: number;
+  }>(response);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, true);
+  assert.equal(result.body.creditBalance, 20);
+});
+
+test("POST /api/credits/topup/checkout returns placeholder checkout payload", async () => {
+  const worker = await loadWorker();
+  const secret = "workers-smoke-secret";
+  const state: FakeState = {
+    user: {
+      id: "user-1",
+      email: "demo@example.com",
+      createdAt: new Date().toISOString(),
+      emailVerifiedAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+      creditBalance: 20,
+    },
+    creditBalance: 20,
+    generatedTask: null,
+    generatedAssetUrl: null,
+    hasCheckedInToday: false,
+    creditTransactions: [],
+  };
+
+  const session = createSessionToken(state.user.id, state.user.email, secret);
+  const response = await worker.fetch(
+    new Request("https://sparkpost.test/api/credits/topup/checkout", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `sparkpost_session=${session}`,
+      },
+      body: JSON.stringify({ packageCode: "creator_pack", paymentProvider: "stripe" }),
+    }),
+    {
+      SPARKPOST_DB: createFakeDb(state),
+      SESSION_SECRET: secret,
+    },
+  );
+
+  const result = await readJsonResponse<{
+    ok: boolean;
+    status: string;
+    package: { code: string; credits: number };
+    checkoutRequest: { paymentProvider: string };
+  }>(response);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, true);
+  assert.equal(result.body.status, "pending_provider_integration");
+  assert.equal(result.body.package.code, "creator_pack");
+  assert.equal(result.body.package.credits, 1200);
+  assert.equal(result.body.checkoutRequest.paymentProvider, "stripe");
 });
 
 test("POST /api/auth/send-code sends verification email when debug mode is disabled", async () => {

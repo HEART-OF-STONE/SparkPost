@@ -132,8 +132,14 @@ type GenerationTaskRow = {
 type CreditTransactionRow = {
   id: string;
   type: string;
+  sourceType: string | null;
   amount: number;
   balanceAfter: number;
+  remainingAmount: number | null;
+  expiresAt: string | null;
+  packageCode: string | null;
+  paymentProvider: string | null;
+  paymentSessionId: string | null;
   remark: string | null;
   createdAt: string;
 };
@@ -144,6 +150,29 @@ type CreditTransactionItem = {
   title: string;
   amount: number;
   date: string;
+  balanceAfter: number;
+  sourceType: string | null;
+  expiresAt: string | null;
+  remainingAmount: number | null;
+  packageCode: string | null;
+  paymentProvider: string | null;
+  paymentSessionId: string | null;
+};
+
+type CreditLotRow = {
+  id: string;
+  type: string;
+  sourceType: string | null;
+  remainingAmount: number;
+  expiresAt: string | null;
+  createdAt: string;
+};
+
+type CreditPackageDefinition = {
+  code: string;
+  title: string;
+  credits: number;
+  priceUsd: string;
 };
 
 type CreditSummaryResponse = {
@@ -186,9 +215,15 @@ const DEFAULT_SESSION_TTL_DAYS = 7;
 const DEFAULT_SIGNUP_BONUS_CREDITS = 20;
 const DEFAULT_DAILY_CHECK_IN_CREDITS = 20;
 const DEFAULT_CREDIT_TIMEZONE = "Asia/Shanghai";
+const DAILY_CHECK_IN_EXPIRY_DAYS = 7;
 const SESSION_COOKIE_NAME = "sparkpost_session";
 const SESSION_COOKIE_PATH = "/";
 const GENERATED_ASSET_PREFIX = "generated";
+const CREDIT_PACKAGE_DEFINITIONS: CreditPackageDefinition[] = [
+  { code: "starter_pack", title: "Starter Pack", credits: 500, priceUsd: "4.99" },
+  { code: "creator_pack", title: "Creator Pack", credits: 1200, priceUsd: "9.99" },
+  { code: "pro_studio", title: "Pro Studio", credits: 3000, priceUsd: "19.99" },
+];
 
 const getNumberEnv = (value: string | undefined, fallback: number) => {
   const parsed = Number.parseInt(value ?? "", 10);
@@ -455,6 +490,10 @@ const mapCreditTransactionTitle = (transactionType: string, remark: string | nul
     return locale === "zh" ? "每日签到" : "Daily check-in";
   }
 
+  if (normalizedType === "daily_check_in_expired") {
+    return locale === "zh" ? "绛惧埌绉垎杩囨湡" : "Check-in credits expired";
+  }
+
   if (normalizedType === "text_to_image") {
     return locale === "zh" ? "文生图消耗" : "Text-to-image";
   }
@@ -479,13 +518,249 @@ const mapCreditTransactionItem = (
   title: mapCreditTransactionTitle(row.type, row.remark, locale),
   amount: row.amount,
   date: row.createdAt,
+  balanceAfter: row.balanceAfter,
+  sourceType: row.sourceType,
+  expiresAt: row.expiresAt,
+  remainingAmount: row.remainingAmount,
+  packageCode: row.packageCode,
+  paymentProvider: row.paymentProvider,
+  paymentSessionId: row.paymentSessionId,
 });
+
+const getExpiryDateIso = (date: Date, days: number) =>
+  new Date(date.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+
+const findCreditPackage = (code: string) =>
+  CREDIT_PACKAGE_DEFINITIONS.find((item) => item.code === code);
+
+const reconcileExpiredCreditsForUser = async (userId: string, env: Env, now = new Date()) => {
+  if (!env.SPARKPOST_DB) {
+    throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
+  }
+
+  const expiredLots = await env.SPARKPOST_DB.prepare(
+    `SELECT
+       id,
+       type,
+       source_type AS sourceType,
+       COALESCE(remaining_amount, CASE WHEN amount > 0 THEN amount ELSE 0 END) AS remainingAmount,
+       expires_at AS expiresAt,
+       created_at AS createdAt
+     FROM credit_transactions
+     WHERE user_id = ?
+       AND amount > 0
+       AND expires_at IS NOT NULL
+       AND expires_at <= ?
+       AND COALESCE(remaining_amount, CASE WHEN amount > 0 THEN amount ELSE 0 END) > 0
+     ORDER BY expires_at ASC, created_at ASC`,
+  ).bind(userId, now.toISOString()).all<CreditLotRow>();
+
+  const lots = expiredLots.results ?? [];
+  if (lots.length === 0) {
+    return { expiredCredits: 0 };
+  }
+
+  const account = await env.SPARKPOST_DB.prepare(
+    `SELECT balance FROM credit_accounts WHERE user_id = ? LIMIT 1`,
+  ).bind(userId).first<{ balance: number }>();
+
+  if (!account) {
+    throw new ImageGenerationAuthError("Authenticated user has no credit account.");
+  }
+
+  const expiredCredits = lots.reduce((sum, lot) => sum + lot.remainingAmount, 0);
+  const nextBalance = Math.max(0, account.balance - expiredCredits);
+
+  for (const lot of lots) {
+    await env.SPARKPOST_DB.prepare(
+      `UPDATE credit_transactions SET remaining_amount = ? WHERE id = ?`,
+    ).bind(0, lot.id).run();
+  }
+
+  await env.SPARKPOST_DB.prepare(
+    `UPDATE credit_accounts SET balance = ?, updated_at = ? WHERE user_id = ?`,
+  ).bind(nextBalance, now.toISOString(), userId).run();
+
+  await env.SPARKPOST_DB.prepare(
+    `INSERT INTO credit_transactions (
+       id, user_id, type, source_type, amount, balance_after, remaining_amount, expires_at,
+       related_task_id, package_code, payment_provider, payment_session_id, remark, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    crypto.randomUUID(),
+    userId,
+    "daily_check_in_expired",
+    "expiration",
+    -expiredCredits,
+    nextBalance,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "Expired daily check-in credits",
+    now.toISOString(),
+  ).run();
+
+  return { expiredCredits };
+};
+
+const awardCreditsToUser = async (
+  userId: string,
+  env: Env,
+  options: {
+    amount: number;
+    type: string;
+    sourceType: string;
+    remark: string;
+    now?: Date;
+    expiresAt?: string | null;
+    packageCode?: string | null;
+    paymentProvider?: string | null;
+    paymentSessionId?: string | null;
+  },
+) => {
+  if (!env.SPARKPOST_DB) {
+    throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
+  }
+
+  const now = options.now ?? new Date();
+  const account = await env.SPARKPOST_DB.prepare(
+    `SELECT balance FROM credit_accounts WHERE user_id = ? LIMIT 1`,
+  ).bind(userId).first<{ balance: number }>();
+
+  if (!account) {
+    throw new ImageGenerationAuthError("Authenticated user has no credit account.");
+  }
+
+  const nextBalance = account.balance + options.amount;
+
+  await env.SPARKPOST_DB.prepare(
+    `UPDATE credit_accounts SET balance = ?, updated_at = ? WHERE user_id = ?`,
+  ).bind(nextBalance, now.toISOString(), userId).run();
+
+  await env.SPARKPOST_DB.prepare(
+    `INSERT INTO credit_transactions (
+       id, user_id, type, source_type, amount, balance_after, remaining_amount, expires_at,
+       related_task_id, package_code, payment_provider, payment_session_id, remark, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    crypto.randomUUID(),
+    userId,
+    options.type,
+    options.sourceType,
+    options.amount,
+    nextBalance,
+    options.amount,
+    options.expiresAt ?? null,
+    null,
+    options.packageCode ?? null,
+    options.paymentProvider ?? null,
+    options.paymentSessionId ?? null,
+    options.remark,
+    now.toISOString(),
+  ).run();
+
+  return nextBalance;
+};
+
+const spendCreditsForUser = async (
+  userId: string,
+  env: Env,
+  options: {
+    amount: number;
+    type: "text_to_image" | "image_to_image";
+    sourceType?: string;
+    relatedTaskId?: string | null;
+    remark: string;
+    now?: Date;
+  },
+) => {
+  if (!env.SPARKPOST_DB) {
+    throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
+  }
+
+  const now = options.now ?? new Date();
+  await reconcileExpiredCreditsForUser(userId, env, now);
+
+  const account = await env.SPARKPOST_DB.prepare(
+    `SELECT balance FROM credit_accounts WHERE user_id = ? LIMIT 1`,
+  ).bind(userId).first<{ balance: number }>();
+
+  if (!account) {
+    throw new ImageGenerationAuthError("Authenticated user has no credit account.");
+  }
+
+  if (account.balance < options.amount) {
+    throw new ImageGenerationCreditsError("Not enough credits to generate an image.");
+  }
+
+  const lots = await env.SPARKPOST_DB.prepare(
+    `SELECT
+       id,
+       type,
+       source_type AS sourceType,
+       COALESCE(remaining_amount, CASE WHEN amount > 0 THEN amount ELSE 0 END) AS remainingAmount,
+       expires_at AS expiresAt,
+       created_at AS createdAt
+     FROM credit_transactions
+     WHERE user_id = ?
+       AND amount > 0
+       AND COALESCE(remaining_amount, CASE WHEN amount > 0 THEN amount ELSE 0 END) > 0
+     ORDER BY CASE WHEN expires_at IS NULL THEN 1 ELSE 0 END ASC, expires_at ASC, created_at ASC`,
+  ).bind(userId).all<CreditLotRow>();
+
+  let remaining = options.amount;
+  for (const lot of lots.results ?? []) {
+    if (remaining <= 0) break;
+    const used = Math.min(remaining, lot.remainingAmount);
+    await env.SPARKPOST_DB.prepare(
+      `UPDATE credit_transactions SET remaining_amount = ? WHERE id = ?`,
+    ).bind(lot.remainingAmount - used, lot.id).run();
+    remaining -= used;
+  }
+
+  if (remaining > 0) {
+    throw new ImageGenerationCreditsError("Not enough credits to generate an image.");
+  }
+
+  const nextBalance = account.balance - options.amount;
+  await env.SPARKPOST_DB.prepare(
+    `UPDATE credit_accounts SET balance = ?, updated_at = ? WHERE user_id = ?`,
+  ).bind(nextBalance, now.toISOString(), userId).run();
+
+  await env.SPARKPOST_DB.prepare(
+    `INSERT INTO credit_transactions (
+       id, user_id, type, source_type, amount, balance_after, remaining_amount, expires_at,
+       related_task_id, package_code, payment_provider, payment_session_id, remark, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    crypto.randomUUID(),
+    userId,
+    options.type,
+    options.sourceType ?? "generation",
+    -options.amount,
+    nextBalance,
+    null,
+    null,
+    options.relatedTaskId ?? null,
+    null,
+    null,
+    null,
+    options.remark,
+    now.toISOString(),
+  ).run();
+
+  return nextBalance;
+};
 
 const getCreditSummaryForUser = async (userId: string, env: Env): Promise<CreditSummaryResponse> => {
   if (!env.SPARKPOST_DB) {
     throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
   }
 
+  await reconcileExpiredCreditsForUser(userId, env);
   const authConfig = getAuthConfig(env);
   const todayKey = getCreditDateKey(new Date());
   const account = await env.SPARKPOST_DB.prepare(
@@ -497,12 +772,12 @@ const getCreditSummaryForUser = async (userId: string, env: Env): Promise<Credit
   ).bind(userId, todayKey).first<{ id: string }>();
 
   const transactions = await env.SPARKPOST_DB.prepare(
-    `SELECT created_at AS createdAt, amount
+    `SELECT created_at AS createdAt, amount, type
      FROM credit_transactions
      WHERE user_id = ?
      ORDER BY created_at DESC
      LIMIT 200`,
-  ).bind(userId).all<{ createdAt: string; amount: number }>();
+  ).bind(userId).all<{ createdAt: string; amount: number; type: string }>();
 
   const today = new Date();
   const dayKeys = Array.from({ length: 7 }, (_, index) => {
@@ -515,7 +790,7 @@ const getCreditSummaryForUser = async (userId: string, env: Env): Promise<Credit
   for (const item of transactions.results ?? []) {
     const key = getCreditDateKey(new Date(item.createdAt));
     if (!usageMap.has(key)) continue;
-    if (item.amount < 0) {
+    if (item.amount < 0 && item.type !== "daily_check_in_expired") {
       usageMap.set(key, (usageMap.get(key) ?? 0) + Math.abs(item.amount));
     }
   }
@@ -538,6 +813,7 @@ const getCreditTransactionsForUser = async (
     throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
   }
 
+  await reconcileExpiredCreditsForUser(userId, env);
   const clauses = ["user_id = ?"];
   const values: unknown[] = [userId];
 
@@ -551,7 +827,19 @@ const getCreditTransactionsForUser = async (
   values.push(options.limit);
 
   const result = await env.SPARKPOST_DB.prepare(
-    `SELECT id, type, amount, balance_after AS balanceAfter, remark, created_at AS createdAt
+    `SELECT
+       id,
+       type,
+       source_type AS sourceType,
+       amount,
+       balance_after AS balanceAfter,
+       COALESCE(remaining_amount, CASE WHEN amount > 0 THEN amount ELSE NULL END) AS remainingAmount,
+       expires_at AS expiresAt,
+       package_code AS packageCode,
+       payment_provider AS paymentProvider,
+       payment_session_id AS paymentSessionId,
+       remark,
+       created_at AS createdAt
      FROM credit_transactions
      WHERE ${clauses.join(" AND ")}
      ORDER BY created_at DESC
@@ -568,6 +856,7 @@ const performDailyCheckInForUser = async (userId: string, env: Env) => {
 
   const authConfig = getAuthConfig(env);
   const now = new Date();
+  await reconcileExpiredCreditsForUser(userId, env, now);
   const todayKey = getCreditDateKey(now);
   const existingCheckIn = await env.SPARKPOST_DB.prepare(
     `SELECT id FROM daily_check_ins WHERE user_id = ? AND check_in_date = ? LIMIT 1`,
@@ -589,29 +878,20 @@ const performDailyCheckInForUser = async (userId: string, env: Env) => {
   }
 
   const awardedCredits = authConfig.dailyCheckInCredits;
-  const nextBalance = account.balance + awardedCredits;
 
   await env.SPARKPOST_DB.prepare(
     `INSERT INTO daily_check_ins (id, user_id, check_in_date, reward_credits, created_at)
      VALUES (?, ?, ?, ?, ?)`,
   ).bind(crypto.randomUUID(), userId, todayKey, awardedCredits, now.toISOString()).run();
 
-  await env.SPARKPOST_DB.prepare(
-    `UPDATE credit_accounts SET balance = ?, updated_at = ? WHERE user_id = ?`,
-  ).bind(nextBalance, now.toISOString(), userId).run();
-
-  await env.SPARKPOST_DB.prepare(
-    `INSERT INTO credit_transactions (
-       id, user_id, type, amount, balance_after, related_task_id, remark, created_at
-     ) VALUES (?, ?, 'daily_check_in', ?, ?, NULL, ?, ?)`,
-  ).bind(
-    crypto.randomUUID(),
-    userId,
-    awardedCredits,
-    nextBalance,
-    "Daily check-in",
-    now.toISOString(),
-  ).run();
+  await awardCreditsToUser(userId, env, {
+    amount: awardedCredits,
+    type: "daily_check_in",
+    sourceType: "check_in",
+    remark: "Daily check-in",
+    expiresAt: getExpiryDateIso(now, DAILY_CHECK_IN_EXPIRY_DAYS),
+    now,
+  });
 
   return {
     awardedCredits,
@@ -1074,6 +1354,12 @@ const getAuthenticatedUser = async (request: Request, env: Env) => {
     return { ok: true, user: null } as const;
   }
 
+  await reconcileExpiredCreditsForUser(user.id, env);
+
+  const refreshedAccount = await env.SPARKPOST_DB.prepare(
+    `SELECT balance FROM credit_accounts WHERE user_id = ? LIMIT 1`,
+  ).bind(user.id).first<{ balance: number }>();
+
   return {
     ok: true,
     user: {
@@ -1082,7 +1368,7 @@ const getAuthenticatedUser = async (request: Request, env: Env) => {
       createdAt: user.createdAt,
       emailVerifiedAt: user.emailVerifiedAt,
       lastLoginAt: user.lastLoginAt,
-      creditBalance: user.creditBalance ?? 0,
+      creditBalance: refreshedAccount?.balance ?? user.creditBalance ?? 0,
     },
   } as const;
 };
@@ -1201,6 +1487,34 @@ const validateGenerateImageInput = (input: unknown) => {
     mode: normalizedMode,
     prompt: normalizedPrompt,
     referenceImages,
+  };
+};
+
+const validateCreateCheckoutInput = (input: unknown) => {
+  if (!isRecord(input)) {
+    return { ok: false as const, error: "Request body must be an object." };
+  }
+
+  const packageCode = typeof input.packageCode === "string" ? input.packageCode.trim() : "";
+  const paymentProvider =
+    typeof input.paymentProvider === "string" && input.paymentProvider.trim()
+      ? input.paymentProvider.trim().toLowerCase()
+      : "stripe";
+
+  if (!packageCode) {
+    return { ok: false as const, error: "packageCode is required." };
+  }
+
+  const creditPackage = findCreditPackage(packageCode);
+  if (!creditPackage) {
+    return { ok: false as const, error: "Unsupported credit package." };
+  }
+
+  return {
+    ok: true as const,
+    packageCode,
+    paymentProvider,
+    creditPackage,
   };
 };
 
@@ -1334,24 +1648,20 @@ const verifyCodeAndProvisionUser = async (email: string, code: string, env: Env)
     await env.SPARKPOST_DB.prepare(
       `INSERT INTO credit_accounts (id, user_id, balance, currency, created_at, updated_at)
        VALUES (?, ?, ?, 'credits', ?, ?)`,
-    ).bind(crypto.randomUUID(), user.id, isNewUser ? authConfig.signupBonusCredits : 0, now.toISOString(), now.toISOString()).run();
+    ).bind(crypto.randomUUID(), user.id, 0, now.toISOString(), now.toISOString()).run();
 
     if (isNewUser && authConfig.signupBonusCredits > 0) {
-      await env.SPARKPOST_DB.prepare(
-        `INSERT INTO credit_transactions (
-           id, user_id, type, amount, balance_after, related_task_id, remark, created_at
-         ) VALUES (?, ?, 'signup_bonus', ?, ?, NULL, ?, ?)`,
-      ).bind(
-        crypto.randomUUID(),
-        user.id,
-        authConfig.signupBonusCredits,
-        authConfig.signupBonusCredits,
-        "Signup bonus",
-        now.toISOString(),
-      ).run();
+      await awardCreditsToUser(user.id, env, {
+        amount: authConfig.signupBonusCredits,
+        type: "signup_bonus",
+        sourceType: "signup",
+        remark: "Signup bonus",
+        now,
+      });
     }
   }
 
+  await reconcileExpiredCreditsForUser(user.id, env, now);
   const creditAccount = await env.SPARKPOST_DB.prepare(
     `SELECT balance FROM credit_accounts WHERE user_id = ? LIMIT 1`,
   ).bind(user.id).first<{ balance: number }>();
@@ -1619,6 +1929,7 @@ const generateTextToImageForUser = async (request: Request, userId: string, prom
   const imageConfig = getImageConfig(env);
   const now = new Date();
   const compiledPrompt = prompt;
+  await reconcileExpiredCreditsForUser(userId, env, now);
   const creditAccount = await env.SPARKPOST_DB.prepare(
     `SELECT balance FROM credit_accounts WHERE user_id = ? LIMIT 1`,
   ).bind(userId).first<{ balance: number }>();
@@ -1650,25 +1961,13 @@ const generateTextToImageForUser = async (request: Request, userId: string, prom
     const providerResult = await generateProviderImage(compiledPrompt, env);
     const storedAsset = await persistGeneratedAsset(request, env, userId, taskId, providerResult);
     const completedAt = new Date();
-    const remainingCredits = creditAccount.balance - imageConfig.textToImageCost;
-
-    await env.SPARKPOST_DB.prepare(
-      `UPDATE credit_accounts SET balance = ?, updated_at = ? WHERE user_id = ?`,
-    ).bind(remainingCredits, completedAt.toISOString(), userId).run();
-
-    await env.SPARKPOST_DB.prepare(
-      `INSERT INTO credit_transactions (
-         id, user_id, type, amount, balance_after, related_task_id, remark, created_at
-       ) VALUES (?, ?, 'text_to_image', ?, ?, ?, ?, ?)`,
-    ).bind(
-      crypto.randomUUID(),
-      userId,
-      -imageConfig.textToImageCost,
-      remainingCredits,
-      taskId,
-      prompt.slice(0, 120),
-      completedAt.toISOString(),
-    ).run();
+    const remainingCredits = await spendCreditsForUser(userId, env, {
+      amount: imageConfig.textToImageCost,
+      type: "text_to_image",
+      relatedTaskId: taskId,
+      remark: prompt.slice(0, 120),
+      now: completedAt,
+    });
 
     await env.SPARKPOST_DB.prepare(
       `INSERT INTO generated_assets (
@@ -1725,6 +2024,7 @@ const generateImageToImageForUser = async (
   const imageConfig = getImageConfig(env);
   const now = new Date();
   const compiledPrompt = compileImageToImagePrompt(prompt, referenceImages.length);
+  await reconcileExpiredCreditsForUser(userId, env, now);
   const creditAccount = await env.SPARKPOST_DB.prepare(
     `SELECT balance FROM credit_accounts WHERE user_id = ? LIMIT 1`,
   ).bind(userId).first<{ balance: number }>();
@@ -1760,25 +2060,13 @@ const generateImageToImageForUser = async (
     });
     const storedAsset = await persistGeneratedAsset(request, env, userId, taskId, providerResult);
     const completedAt = new Date();
-    const remainingCredits = creditAccount.balance - imageConfig.imageToImageCost;
-
-    await env.SPARKPOST_DB.prepare(
-      `UPDATE credit_accounts SET balance = ?, updated_at = ? WHERE user_id = ?`,
-    ).bind(remainingCredits, completedAt.toISOString(), userId).run();
-
-    await env.SPARKPOST_DB.prepare(
-      `INSERT INTO credit_transactions (
-         id, user_id, type, amount, balance_after, related_task_id, remark, created_at
-       ) VALUES (?, ?, 'image_to_image', ?, ?, ?, ?, ?)`,
-    ).bind(
-      crypto.randomUUID(),
-      userId,
-      -imageConfig.imageToImageCost,
-      remainingCredits,
-      taskId,
-      prompt.slice(0, 120),
-      completedAt.toISOString(),
-    ).run();
+    const remainingCredits = await spendCreditsForUser(userId, env, {
+      amount: imageConfig.imageToImageCost,
+      type: "image_to_image",
+      relatedTaskId: taskId,
+      remark: prompt.slice(0, 120),
+      now: completedAt,
+    });
 
     await env.SPARKPOST_DB.prepare(
       `INSERT INTO generated_assets (
@@ -1906,6 +2194,32 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
 
       const result = await performDailyCheckInForUser(authenticatedUser.user.id, env);
       return json({ ok: true, awardedCredits: result.awardedCredits, ...result.summary });
+    },
+  },
+  {
+    method: "POST",
+    pathname: "/api/credits/topup/checkout",
+    handler: async (request, env) => {
+      const authenticatedUser = await getAuthenticatedUser(request, env);
+      if (!authenticatedUser.ok) return authenticatedUser.response;
+      if (!authenticatedUser.user) return json({ error: "Authentication required." }, { status: 401 });
+
+      const bodyResult = await parseJsonBody(request);
+      if (!bodyResult.ok) return json({ error: bodyResult.error }, { status: 400 });
+      const input = validateCreateCheckoutInput(bodyResult.body);
+      if (!input.ok) return json({ error: input.error }, { status: 400 });
+
+      return json({
+        ok: true,
+        status: "pending_provider_integration",
+        message: "Checkout provider is not connected yet.",
+        package: input.creditPackage,
+        checkoutRequest: {
+          packageCode: input.packageCode,
+          paymentProvider: input.paymentProvider,
+          userId: authenticatedUser.user.id,
+        },
+      });
     },
   },
   {

@@ -41,6 +41,7 @@ logs/
 *.db
 *.sql
 *.bak
+!workers/api/migrations/*.sql
 
 # OS files
 .DS_Store
