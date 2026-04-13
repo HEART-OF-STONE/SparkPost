@@ -476,7 +476,8 @@ export default function Home() {
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const [activeBillingTab, setActiveBillingTab] = useState<"topup" | "history">("topup");
   const [historyFilter, setHistoryFilter] = useState<"all" | "consumed" | "earned">("all");
-  const [creditHistory, setCreditHistory] = useState<TransactionItem[]>([]);
+  const [recentCreditHistory, setRecentCreditHistory] = useState<TransactionItem[]>([]);
+  const [dashboardCreditHistory, setDashboardCreditHistory] = useState<TransactionItem[]>([]);
   const [usageLast7Days, setUsageLast7Days] = useState<number[]>(Array(7).fill(0));
   const [dailyCheckInCredits, setDailyCheckInCredits] = useState(20);
   const [pendingGenerateAfterLogin, setPendingGenerateAfterLogin] = useState(false);
@@ -732,6 +733,31 @@ export default function Home() {
     setUsageLast7Days(data.usageLast7Days);
   }, [locale, user]);
 
+  const loadRecentCreditHistory = useCallback(async () => {
+    if (!user) return;
+    const response = await fetchApi(`/api/credits/transactions?filter=all&limit=5&locale=${locale}`, {
+      cache: "no-store",
+    });
+    const data = (await response.json().catch(() => null)) as CreditTransactionsResponse | null;
+    if (!response.ok || !data || !("ok" in data) || data.ok !== true) {
+      throw new Error(locale === "zh" ? "鏃犳硶鍔犺浇绉垎娴佹按銆?" : "Unable to load transaction history.");
+    }
+    setRecentCreditHistory(data.items);
+  }, [locale, user]);
+
+  const loadDashboardCreditHistory = useCallback(async () => {
+    if (!user) return;
+    const response = await fetchApi(
+      `/api/credits/transactions?filter=${historyFilter}&limit=50&locale=${locale}`,
+      { cache: "no-store" },
+    );
+    const data = (await response.json().catch(() => null)) as CreditTransactionsResponse | null;
+    if (!response.ok || !data || !("ok" in data) || data.ok !== true) {
+      throw new Error(locale === "zh" ? "鏃犳硶鍔犺浇绉垎娴佹按銆?" : "Unable to load transaction history.");
+    }
+    setDashboardCreditHistory(data.items);
+  }, [historyFilter, locale, user]);
+
   const loadCreditHistory = useCallback(async () => {
     if (!user) return;
     const response = await fetchApi(
@@ -742,13 +768,14 @@ export default function Home() {
     if (!response.ok || !data || !("ok" in data) || data.ok !== true) {
       throw new Error(locale === "zh" ? "无法加载积分流水。" : "Unable to load transaction history.");
     }
-    setCreditHistory(data.items);
+    setDashboardCreditHistory(data.items);
   }, [historyFilter, locale, user]);
 
   useEffect(() => {
     if (!user) {
       setHasCheckedIn(false);
-      setCreditHistory([]);
+      setRecentCreditHistory([]);
+      setDashboardCreditHistory([]);
       setUsageLast7Days(Array(7).fill(0));
       return;
     }
@@ -758,8 +785,13 @@ export default function Home() {
 
   useEffect(() => {
     if (!user) return;
-    void loadCreditHistory().catch(() => {});
-  }, [loadCreditHistory, user]);
+    void loadRecentCreditHistory().catch(() => {});
+  }, [loadRecentCreditHistory, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    void loadDashboardCreditHistory().catch(() => {});
+  }, [loadDashboardCreditHistory, user]);
 
   const generateImage = useCallback(async () => {
     setGenerationNotice(null);
@@ -930,7 +962,8 @@ export default function Home() {
       setGeneratedImageUrl(null);
       setPreviewLoadFailed(false);
       setHasCheckedIn(false);
-      setCreditHistory([]);
+      setRecentCreditHistory([]);
+      setDashboardCreditHistory([]);
       setUsageLast7Days(Array(7).fill(0));
       setAuthNotice({ type: "info", text: t.signedOutNotice });
     } catch (error) {
@@ -967,7 +1000,7 @@ export default function Home() {
       setDailyCheckInCredits(data.dailyCheckInCredits);
       setUsageLast7Days(data.usageLast7Days);
       setGenerationNotice({ type: "success", text: billingCopy.checkInSuccess });
-      await loadCreditHistory();
+      await Promise.all([loadRecentCreditHistory(), loadDashboardCreditHistory()]);
     } catch (error) {
       setGenerationNotice({
         type: "error",
@@ -1334,8 +1367,8 @@ export default function Home() {
     </div>
   );
 
-  const historyItems = creditHistory;
-  const drawerHistoryItems = historyItems.slice(0, 5);
+  const historyItems = dashboardCreditHistory;
+  const drawerHistoryItems = recentCreditHistory;
   const usageMax = Math.max(...usageLast7Days, 1);
 
   return (
