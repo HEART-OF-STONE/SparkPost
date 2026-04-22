@@ -34,6 +34,7 @@ export interface Env {
     IMAGE_BASE_URL?: string;
     OPENAI_IMAGE_API_KEY?: string;
     RELAY_IMAGE_API_KEY?: string;
+    IMAGE_RELAY_BASE_URL_MICU?: string;
     RELAY_IMAGE_BASE_URL?: string;
     OPENAI_API_KEY?: string;
     DEEPSEEK_API_KEY?: string;
@@ -254,7 +255,13 @@ const getImageConfig = (env: Env) => {
   const imageToImageCost = getNumberEnv(env.IMAGE_TO_IMAGE_COST, DEFAULT_IMAGE_TO_IMAGE_COST);
   const openAiApiKey = env.OPENAI_IMAGE_API_KEY?.trim() || env.IMAGE_API_KEY?.trim() || "";
   const relayApiKey = env.RELAY_IMAGE_API_KEY?.trim() || env.IMAGE_API_KEY?.trim() || "";
-  const relayBaseUrl = (env.RELAY_IMAGE_BASE_URL?.trim() || env.IMAGE_BASE_URL?.trim() || "").replace(/\/$/, "");
+  // 优先读取新的 Micu 中转地址命名，旧变量继续保留兼容，避免线上环境被一次性打断。
+  const relayBaseUrl = (
+    env.IMAGE_RELAY_BASE_URL_MICU?.trim() ||
+    env.RELAY_IMAGE_BASE_URL?.trim() ||
+    env.IMAGE_BASE_URL?.trim() ||
+    ""
+  ).replace(/\/$/, "");
 
   const providerConfig =
     backend === "relay"

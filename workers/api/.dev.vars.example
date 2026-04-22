@@ -11,7 +11,8 @@ IMAGE_BACKEND=official
 IMAGE_MODEL=dall-e-3
 OPENAI_IMAGE_API_KEY=replace_me_for_official_image_generation
 RELAY_IMAGE_API_KEY=replace_me_for_relay_image_generation
-RELAY_IMAGE_BASE_URL=https://your-relay.example.com/v1
+IMAGE_RELAY_BASE_URL_MICU=https://your-relay.example.com/v1
+# RELAY_IMAGE_BASE_URL is kept as a legacy fallback. Prefer IMAGE_RELAY_BASE_URL_MICU for new configs.
 PROMPT_IDEA_PROVIDER=deepseek
 PROMPT_IDEA_MODEL=deepseek-chat
 PROMPT_EXPAND_PROVIDER=minimax
