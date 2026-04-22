@@ -9,6 +9,7 @@ AUTH_SESSION_TTL_DAYS=7
 SIGNUP_BONUS_CREDITS=20
 IMAGE_BACKEND=official
 IMAGE_MODEL=dall-e-3
+IMAGE_DEFAULT_MODEL_ID=nano-banana-2
 OPENAI_IMAGE_API_KEY=replace_me_for_official_image_generation
 RELAY_IMAGE_API_KEY=replace_me_for_relay_image_generation
 RELAY_IMAGE_BASE_URL=https://your-relay.example.com/v1

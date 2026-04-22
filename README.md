@@ -77,10 +77,13 @@ npm run dev
 Workers 默认变量写在 [workers/api/wrangler.jsonc](./workers/api/wrangler.jsonc)：
 - `IMAGE_BACKEND=official`
 - `IMAGE_MODEL=dall-e-3`
+- `IMAGE_DEFAULT_MODEL_ID=nano-banana-2`
 
 以下信息只应存在于本地私有文件、Wrangler secret 或 Cloudflare 后台：
 - `SESSION_SECRET`
-- `IMAGE_API_KEY`
+- `OPENAI_IMAGE_API_KEY`
+- `RELAY_IMAGE_API_KEY`
+- `RELAY_IMAGE_BASE_URL`
 - 任意真实数据库 ID
 - 任意真实 bucket 名称之外的敏感凭据
 
