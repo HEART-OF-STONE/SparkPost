@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent } from "react";
 
 import { fetchApi, resolveApiAssetUrl } from "@/lib/api/client";
 
@@ -1085,6 +1085,49 @@ export default function Home() {
     setMentionMenuPos(null);
   }
 
+  function handleEditorPaste(event: ClipboardEvent<HTMLDivElement>, currentMode: Mode) {
+    event.preventDefault();
+    const editor = event.currentTarget;
+    activeEditorRef.current = editor;
+    promptRef.current = editor;
+
+    const plainText = event.clipboardData.getData("text/plain").replace(/\r\n/g, "\n");
+    if (!plainText) return;
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      editor.focus();
+      document.execCommand("insertText", false, plainText);
+    } else {
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+
+      const lines = plainText.split("\n");
+      const fragment = document.createDocumentFragment();
+      lines.forEach((line, index) => {
+        if (line.length > 0) fragment.appendChild(document.createTextNode(line));
+        if (index < lines.length - 1) fragment.appendChild(document.createElement("br"));
+      });
+
+      const lastNode = fragment.lastChild;
+      range.insertNode(fragment);
+
+      if (lastNode) {
+        range.setStartAfter(lastNode);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
+
+    isTypingRef.current = true;
+    const nextValue = editor.innerText.replace(/\u00A0/g, " ");
+    setPrompts((current) => ({ ...current, [currentMode]: nextValue }));
+    setMentionQuery("");
+    setShowMentionMenu(false);
+    setMentionMenuPos(null);
+  }
+
   function insertMention(index: number) {
     if (!savedRangeRef.current || !activeEditorRef.current) return;
     const selection = window.getSelection();
@@ -1253,6 +1296,7 @@ export default function Home() {
             if (surface === "workspace") promptRef.current = event.currentTarget;
           }}
           onInput={(event) => handleEditorInput(event, mode)}
+          onPaste={(event) => handleEditorPaste(event, mode)}
           className={`prompt-editor w-full flex-1 rounded-xl border p-4 text-sm outline-none transition ${commonClassName} ${mode === "i2i" ? "leading-[26px]" : isWorkspace ? "leading-7" : "leading-relaxed"}`}
           data-placeholder={mode === "i2i" ? i2iPromptPlaceholder : t.promptPlaceholder}
           style={{ minHeight: "140px", whiteSpace: "pre-wrap", wordBreak: "break-word" }}
