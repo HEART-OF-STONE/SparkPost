@@ -35,7 +35,10 @@ export interface Env {
     IMAGE_BASE_URL?: string;
     OPENAI_IMAGE_API_KEY?: string;
     RELAY_IMAGE_API_KEY?: string;
+    GPT_IMAGE_RELAY_API_KEY?: string;
+    RELAY_IMAGE_BASE_URL_MICU?: string;
     IMAGE_RELAY_BASE_URL_MICU?: string;
+    GPT_IMAGE_RELAY_BASE_URL?: string;
     RELAY_IMAGE_BASE_URL?: string;
     OPENAI_API_KEY?: string;
     DEEPSEEK_API_KEY?: string;
@@ -116,6 +119,7 @@ type ImageModelDefinition = {
   provider: ImageProviderKey;
   remoteModel: string;
   supports: Record<ImageMode, boolean>;
+  relayConfigKey?: "micu" | "gptImage";
 };
 
 type ResolvedImageConfig = {
@@ -259,6 +263,7 @@ const IMAGE_MODEL_REGISTRY: Record<string, ImageModelDefinition> = {
     provider: "relay",
     remoteModel: "gemini-3.1-flash-image-openai",
     supports: { t2i: true, i2i: true },
+    relayConfigKey: "micu",
   },
   "gpt-image-2": {
     id: "gpt-image-2",
@@ -266,6 +271,7 @@ const IMAGE_MODEL_REGISTRY: Record<string, ImageModelDefinition> = {
     provider: "relay",
     remoteModel: "gpt-image-1",
     supports: { t2i: true, i2i: true },
+    relayConfigKey: "gptImage",
   },
   "dall-e-3": {
     id: "dall-e-3",
@@ -320,6 +326,26 @@ const getDefaultImageModelId = (env: Env) => {
   return DEFAULT_IMAGE_MODEL_ID;
 };
 
+const getRelayProviderConfig = (env: Env, registryModel?: ImageModelDefinition) => {
+  if (registryModel?.relayConfigKey === "gptImage") {
+    return {
+      apiKey: env.GPT_IMAGE_RELAY_API_KEY?.trim() || "",
+      baseUrl: (env.GPT_IMAGE_RELAY_BASE_URL?.trim() || "").replace(/\/$/, ""),
+    };
+  }
+
+  return {
+    apiKey: env.RELAY_IMAGE_API_KEY?.trim() || env.IMAGE_API_KEY?.trim() || "",
+    baseUrl: (
+      env.RELAY_IMAGE_BASE_URL_MICU?.trim() ||
+      env.IMAGE_RELAY_BASE_URL_MICU?.trim() ||
+      env.RELAY_IMAGE_BASE_URL?.trim() ||
+      env.IMAGE_BASE_URL?.trim() ||
+      ""
+    ).replace(/\/$/, ""),
+  };
+};
+
 // 中文说明：
 // 这里优先使用新的 modelId 注册表来选择图片模型；如果线上仍然只配置了旧的 IMAGE_MODEL，
 // 也会回退到旧逻辑，避免现有 Cloudflare 环境立刻失效。
@@ -330,22 +356,16 @@ const getImageConfig = (env: Env, requestedModelId?: string): ResolvedImageConfi
   const textToImageCost = getNumberEnv(env.TEXT_TO_IMAGE_COST, DEFAULT_TEXT_TO_IMAGE_COST);
   const imageToImageCost = getNumberEnv(env.IMAGE_TO_IMAGE_COST, DEFAULT_IMAGE_TO_IMAGE_COST);
   const openAiApiKey = env.OPENAI_IMAGE_API_KEY?.trim() || env.IMAGE_API_KEY?.trim() || "";
-  const relayApiKey = env.RELAY_IMAGE_API_KEY?.trim() || env.IMAGE_API_KEY?.trim() || "";
-  const relayBaseUrl = (
-    env.IMAGE_RELAY_BASE_URL_MICU?.trim() ||
-    env.RELAY_IMAGE_BASE_URL?.trim() ||
-    env.IMAGE_BASE_URL?.trim() ||
-    ""
-  ).replace(/\/$/, "");
   const registryModel = IMAGE_MODEL_REGISTRY[resolvedModelId];
+  const relayProviderConfig = getRelayProviderConfig(env, registryModel);
 
   const effectiveBackend = registryModel?.provider ?? (backend === "relay" ? "relay" : "official");
   const effectiveModel = registryModel?.remoteModel ?? (env.IMAGE_MODEL?.trim() || DEFAULT_IMAGE_MODEL);
   const providerConfig =
     effectiveBackend === "relay"
       ? {
-          apiKey: relayApiKey,
-          baseUrl: relayBaseUrl,
+          apiKey: relayProviderConfig.apiKey,
+          baseUrl: relayProviderConfig.baseUrl,
         }
       : {
           apiKey: openAiApiKey,
