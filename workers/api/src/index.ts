@@ -274,7 +274,7 @@ const IMAGE_MODEL_REGISTRY: Record<string, ImageModelDefinition> = {
     id: "gpt-image-2",
     label: "GPT-Image 2",
     provider: "relay",
-    remoteModel: "gpt-image-1",
+    remoteModel: "gpt-image-2",
     supports: { t2i: true, i2i: true },
     relayConfigKey: "micu",
   },
@@ -290,7 +290,6 @@ const IMAGE_MODEL_REGISTRY: Record<string, ImageModelDefinition> = {
 const IMAGE_MODEL_ALIAS_MAP: Record<string, string> = {
   "gemini-3.1-flash-image-openai": "nano-banana-2",
   "gemini-3.1-image-openai": "nano-banana-2",
-  "gpt-image-1": "gpt-image-2",
   "gpt-image-2": "gpt-image-2",
   "dall-e-3": "dall-e-3",
 };
