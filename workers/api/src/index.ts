@@ -2540,6 +2540,7 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
       pathname: "/api/models/image",
       handler: async (_request, env) => {
         const defaultModelId = getDefaultImageModelId(env);
+        const imageConfig = getImageConfig(env);
         return json({
           ok: true,
           defaultModelId,
@@ -2550,6 +2551,10 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
             model: item.remoteModel,
             supports: item.supports,
             isDefault: item.id === defaultModelId,
+            costCredits: {
+              t2i: item.supports.t2i ? imageConfig.textToImageCost : null,
+              i2i: item.supports.i2i ? imageConfig.imageToImageCost : null,
+            },
           })),
         });
       },

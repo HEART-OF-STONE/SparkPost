@@ -39,6 +39,20 @@ type ImageTaskResult = {
 };
 type GenerateImageResponse = { ok: true; task: ImageTaskResult } | { error: string };
 type PromptAssistResponse = { ok: true; prompt: string; provider: string; model: string } | { error: string };
+type ImageModelItem = {
+  id: string;
+  label: string;
+  supports: Record<Mode, boolean>;
+  isDefault: boolean;
+  costCredits: Record<Mode, number | null>;
+};
+type ImageModelsResponse =
+  | {
+      ok: true;
+      defaultModelId: string;
+      items: ImageModelItem[];
+    }
+  | { error: string };
 type TransactionItem = {
   id: number | string;
   type: "earned" | "consumed";
@@ -363,18 +377,25 @@ const formatDate = (value: string | null, locale: Locale) =>
   value ? new Date(value).toLocaleString(locale === "zh" ? "zh-CN" : "en-US", { hour12: false }) : "-";
 const formatTemplate = (template: string, values: Record<string, string | number>) => template.replace(/\{(\w+)\}/g, (_, key: string) => String(values[key] ?? ""));
 const primaryImageUrl = (task: ImageTaskResult | null) => resolveApiAssetUrl(task?.assets[0]?.fileUrl ?? null);
-const DEFAULT_IMAGE_MODEL_ID = "gemini-3.1-flash-image-openai";
+const DEFAULT_IMAGE_MODEL_ID = "nano-banana-2";
+const DEFAULT_IMAGE_MODEL_COST: Record<Mode, number> = {
+  t2i: 10,
+  i2i: 15,
+};
 const MODEL_DISPLAY_NAMES: Record<string, string> = {
+  "nano-banana-2": "Nano Banana 2",
   "gemini-3.1-flash-image-openai": "Nano Banana 2",
   "gemini-3.1-image-openai": "Nano Banana 2",
   "gemini-3.1-image": "Nano Banana 2",
+  "gpt-image-2": "GPT-Image 2",
+  "gpt-image-1": "GPT-Image 2",
   "dall-e-3": "DALL-E 3",
   dalle3: "DALL-E 3",
 };
 
 const getDisplayImageModel = (model: string | null | undefined) => {
   const normalized = (model ?? DEFAULT_IMAGE_MODEL_ID).trim().toLowerCase();
-  return MODEL_DISPLAY_NAMES[normalized] ?? model ?? DEFAULT_IMAGE_MODEL_ID;
+  return MODEL_DISPLAY_NAMES[normalized] ?? model ?? MODEL_DISPLAY_NAMES[DEFAULT_IMAGE_MODEL_ID];
 };
 
 const createLocalPreviewUser = (): AuthUser => ({
@@ -424,6 +445,7 @@ const CreditCardIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fil
 const CheckCircleIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>;
 const ArrowLeftIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>;
 const FilterIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>;
+const ChevronDownIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>;
 
 function NoticeBanner({ notice }: { notice: Notice }) {
   return <div className={`rounded-xl border px-3 py-2.5 text-sm leading-6 ${noticeClasses(notice.type)}`}>{notice.text}</div>;
@@ -489,12 +511,19 @@ export default function Home() {
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [previewLoadFailed, setPreviewLoadFailed] = useState(false);
   const [systemStatus, setSystemStatus] = useState<SystemStatus>("unknown");
+  const [availableImageModels, setAvailableImageModels] = useState<ImageModelItem[]>([]);
+  const [selectedImageModelByMode, setSelectedImageModelByMode] = useState<Record<Mode, string>>({
+    t2i: DEFAULT_IMAGE_MODEL_ID,
+    i2i: DEFAULT_IMAGE_MODEL_ID,
+  });
+  const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
 
   const emailRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
   const promptRef = useRef<HTMLDivElement>(null);
   const playgroundRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const modelSelectorRef = useRef<HTMLDivElement>(null);
   const mentionMenuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeEditorRef = useRef<HTMLDivElement | null>(null);
@@ -507,10 +536,24 @@ export default function Home() {
   const resultStatus: ResultStatus = generationTask ? "success" : generationNotice?.type === "error" ? "error" : "empty";
   const cooldownActive = useMemo(() => cooldownEndsAt !== null && timeLeft > 0, [cooldownEndsAt, timeLeft]);
   const accountInitials = user?.email.slice(0, 2).toUpperCase() ?? "SP";
-  const currentCost = mode === "i2i" ? 15 : 10;
   const currentPrompt = prompts[mode];
   const canRender = !!currentPrompt.trim() && !isGeneratingImage;
   const referenceUploadInputId = user ? "workspace-reference-upload" : "landing-reference-upload";
+  const supportedImageModels = useMemo(
+    () => availableImageModels.filter((item) => item.supports[mode]),
+    [availableImageModels, mode],
+  );
+  const selectedImageModel = useMemo(() => {
+    const selectedId = selectedImageModelByMode[mode];
+    return (
+      supportedImageModels.find((item) => item.id === selectedId) ??
+      supportedImageModels.find((item) => item.isDefault) ??
+      supportedImageModels[0] ??
+      null
+    );
+  }, [mode, selectedImageModelByMode, supportedImageModels]);
+  const selectedImageModelId = selectedImageModel?.id ?? selectedImageModelByMode[mode] ?? DEFAULT_IMAGE_MODEL_ID;
+  const currentCost = selectedImageModel?.costCredits[mode] ?? DEFAULT_IMAGE_MODEL_COST[mode];
   const i2iPromptPlaceholder = locale === "zh"
     ? "输入 @ 引用参考图，例如让 @R2 延续 @R1 的构图。"
     : "Type @ to reference uploaded images, e.g. redraw @R1 in the style of @R2.";
@@ -597,6 +640,58 @@ export default function Home() {
       } catch {}
     }
     void loadGenerateStatus();
+    return () => controller.abort();
+  }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadImageModels() {
+      try {
+        const response = await fetchApi("/api/models/image", { cache: "no-store", signal: controller.signal });
+        const data = (await response.json().catch(() => null)) as ImageModelsResponse | null;
+        if (!response.ok || !data || !("ok" in data) || data.ok !== true || !Array.isArray(data.items)) {
+          return;
+        }
+        const normalizedItems = data.items
+          .filter((item) => item && typeof item.id === "string" && typeof item.label === "string")
+          .map((item) => {
+            const supports = {
+              t2i: Boolean(item.supports?.t2i),
+              i2i: Boolean(item.supports?.i2i),
+            };
+
+            return {
+              id: item.id,
+              label: item.label,
+              isDefault: Boolean(item.isDefault),
+              supports,
+              costCredits: {
+                t2i: typeof item.costCredits?.t2i === "number" ? item.costCredits.t2i : supports.t2i ? DEFAULT_IMAGE_MODEL_COST.t2i : null,
+                i2i: typeof item.costCredits?.i2i === "number" ? item.costCredits.i2i : supports.i2i ? DEFAULT_IMAGE_MODEL_COST.i2i : null,
+              },
+            } satisfies ImageModelItem;
+          });
+
+        if (controller.signal.aborted) return;
+        setAvailableImageModels(normalizedItems);
+        setSelectedImageModelByMode((current) => {
+          const next = { ...current };
+          (["t2i", "i2i"] as const).forEach((targetMode) => {
+            const supportedItems = normalizedItems.filter((item) => item.supports[targetMode]);
+            const selectedItem = supportedItems.find((item) => item.id === current[targetMode]);
+            if (selectedItem) return;
+            next[targetMode] =
+              supportedItems.find((item) => item.id === data.defaultModelId)?.id ??
+              supportedItems.find((item) => item.isDefault)?.id ??
+              supportedItems[0]?.id ??
+              current[targetMode];
+          });
+          return next;
+        });
+      } catch {}
+    }
+
+    void loadImageModels();
     return () => controller.abort();
   }, []);
   useEffect(() => {
@@ -703,6 +798,9 @@ export default function Home() {
   useEffect(() => {
     function closeMenu(event: MouseEvent) {
       if (menuRef.current && event.target instanceof Node && !menuRef.current.contains(event.target)) setShowAccountMenu(false);
+      if (modelSelectorRef.current && event.target instanceof Node && !modelSelectorRef.current.contains(event.target)) {
+        setIsModelSelectorOpen(false);
+      }
       if (mentionMenuRef.current && event.target instanceof Node && !mentionMenuRef.current.contains(event.target)) {
         setShowMentionMenu(false);
         setMentionMenuPos(null);
@@ -818,11 +916,12 @@ export default function Home() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({
-            mode,
-            prompt: currentPrompt,
-            referenceImages: mode === "i2i" ? uploadedImages : [],
-          }),
+        body: JSON.stringify({
+          mode,
+          modelId: selectedImageModelId,
+          prompt: currentPrompt,
+          referenceImages: mode === "i2i" ? uploadedImages : [],
+        }),
         });
       const data = (await response.json().catch(() => null)) as GenerateImageResponse | null;
       if (!response.ok) {
@@ -846,7 +945,7 @@ export default function Home() {
     } finally {
       setIsGeneratingImage(false);
     }
-  }, [billingCopy.insufficientCredits, currentCost, currentPrompt, mode, t.enterPrompt, t.generateFailed, t.generateSuccess, t.imagePreviewUnavailable, t.unexpectedPayload, t.uploadHint, uploadedImages, user]);
+  }, [billingCopy.insufficientCredits, currentCost, currentPrompt, mode, selectedImageModelId, t.enterPrompt, t.generateFailed, t.generateSuccess, t.imagePreviewUnavailable, t.unexpectedPayload, t.uploadHint, uploadedImages, user]);
 
   useEffect(() => {
     if (user && pendingGenerateAfterLogin && !isGeneratingImage) {
@@ -1013,6 +1112,7 @@ export default function Home() {
 
   function handleModeSwitch(nextMode: Mode) {
     setMode(nextMode);
+    setIsModelSelectorOpen(false);
     setShowMentionMenu(false);
     setMentionMenuPos(null);
     isTypingRef.current = false;
@@ -1582,12 +1682,58 @@ export default function Home() {
             <aside className={`flex min-h-0 w-full shrink-0 flex-col overflow-y-auto border-r md:w-[380px] ${isDark ? "border-white/10 bg-[#050505]" : "border-gray-200 bg-white"}`}>
               <div className="p-6 flex flex-col gap-6 flex-1">
                 <div className="grid grid-cols-2 gap-3">
-                  <div className={`p-3 rounded-xl border ${isDark ? "border-white/5 bg-[#0A0A0A]" : "border-gray-200 bg-gray-50"}`}>
-                    <div className={`text-[10px] uppercase tracking-wider mb-2 ${isDark ? "text-[#666]" : "text-gray-500"}`}>{t.provider}</div>
-                    <div className={`flex items-center gap-2 text-xs font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
-                      <span className={`w-2 h-2 rounded-full ${systemStatus === "available" ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : systemStatus === "unavailable" ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.45)]" : "bg-gray-500"}`} />
-                      {getDisplayImageModel(generationTask?.model)}
-                    </div>
+                  <div ref={modelSelectorRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isGeneratingImage || supportedImageModels.length <= 1) return;
+                        setIsModelSelectorOpen((current) => !current);
+                      }}
+                      disabled={isGeneratingImage}
+                      className={`w-full rounded-xl border p-3 text-left transition ${isDark ? "border-white/5 bg-[#0A0A0A] hover:border-cyan-500/30" : "border-gray-200 bg-gray-50 hover:border-cyan-400/50"} ${isGeneratingImage ? "cursor-not-allowed opacity-60" : ""}`}
+                    >
+                      <div className={`mb-2 text-[10px] uppercase tracking-wider ${isDark ? "text-[#666]" : "text-gray-500"}`}>{t.provider}</div>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className={`truncate text-xs font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                            {selectedImageModel?.label ?? getDisplayImageModel(selectedImageModelId)}
+                          </div>
+                          <div className={`mt-1 text-[10px] ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                            {currentCost} {t.credits}
+                          </div>
+                        </div>
+                        <div className={`shrink-0 transition-transform ${isModelSelectorOpen ? "rotate-180" : ""} ${supportedImageModels.length <= 1 ? "opacity-30" : ""} ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          <ChevronDownIcon />
+                        </div>
+                      </div>
+                    </button>
+
+                    {isModelSelectorOpen && supportedImageModels.length > 0 ? (
+                      <div className={`absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-xl border shadow-2xl ${isDark ? "border-white/10 bg-[#111]" : "border-gray-200 bg-white"}`}>
+                        {supportedImageModels.map((item) => {
+                          const isSelected = item.id === selectedImageModelId;
+                          const optionCost = item.costCredits[mode] ?? DEFAULT_IMAGE_MODEL_COST[mode];
+
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedImageModelByMode((current) => ({ ...current, [mode]: item.id }));
+                                setIsModelSelectorOpen(false);
+                              }}
+                              className={`flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-xs transition ${isDark ? "hover:bg-white/5" : "hover:bg-gray-50"} ${isSelected ? (isDark ? "bg-cyan-500/10 text-white" : "bg-cyan-50 text-gray-900") : (isDark ? "text-slate-300" : "text-gray-700")}`}
+                            >
+                              <div className="min-w-0">
+                                <div className="truncate font-medium">{item.label}</div>
+                                <div className={`${isDark ? "text-slate-400" : "text-gray-500"}`}>{optionCost} {t.credits}</div>
+                              </div>
+                              {isSelected ? <CheckCircleIcon /> : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                   </div>
                   <div className={`p-3 rounded-xl border ${isDark ? "border-white/5 bg-[#0A0A0A]" : "border-gray-200 bg-gray-50"}`}>
                     <div className={`text-[10px] uppercase tracking-wider mb-2 ${isDark ? "text-[#666]" : "text-gray-500"}`}>{t.status}</div>

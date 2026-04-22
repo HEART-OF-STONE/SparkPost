@@ -363,17 +363,34 @@ test("GET /api/models/image returns registered image models", async () => {
   const worker = await loadWorker();
   const response = await worker.fetch(new Request("https://sparkpost.test/api/models/image"), {
     IMAGE_DEFAULT_MODEL_ID: "gpt-image-2",
+    TEXT_TO_IMAGE_COST: "10",
+    IMAGE_TO_IMAGE_COST: "15",
   });
   const result = await readJsonResponse<{
     ok: boolean;
     defaultModelId: string;
-    items: Array<{ id: string; label: string; provider: string; model: string; isDefault: boolean }>;
+    items: Array<{
+      id: string;
+      label: string;
+      provider: string;
+      model: string;
+      isDefault: boolean;
+      costCredits: { t2i: number | null; i2i: number | null };
+    }>;
   }>(response);
 
   assert.equal(result.status, 200);
   assert.equal(result.body.ok, true);
   assert.equal(result.body.defaultModelId, "gpt-image-2");
   assert.ok(result.body.items.some((item) => item.id === "gpt-image-2" && item.provider === "relay" && item.model === "gpt-image-1" && item.isDefault));
+  assert.deepEqual(result.body.items.find((item) => item.id === "gpt-image-2")?.costCredits, {
+    t2i: 10,
+    i2i: 15,
+  });
+  assert.deepEqual(result.body.items.find((item) => item.id === "dall-e-3")?.costCredits, {
+    t2i: 10,
+    i2i: null,
+  });
 });
 
 test("POST /api/generate/image stores asset in R2 and returns Worker asset URL", async () => {
