@@ -37,7 +37,7 @@ type ImageTaskResult = {
     height: number | null;
   }>;
 };
-type GenerateImageResponse = { ok: true; task: ImageTaskResult } | { error: string };
+type GenerateImageResponse = { ok: true; task: ImageTaskResult } | { code?: string; error: string };
 type PromptAssistResponse = { ok: true; prompt: string; provider: string; model: string } | { error: string };
 type ImageModelItem = {
   id: string;
@@ -45,6 +45,9 @@ type ImageModelItem = {
   supports: Record<Mode, boolean>;
   isDefault: boolean;
   costCredits: Record<Mode, number | null>;
+  status?: "available" | "unavailable";
+  code?: string | null;
+  message?: string | null;
 };
 type ImageModelsResponse =
   | {
@@ -430,6 +433,12 @@ const getFallbackImageModelsResponse = (): SuccessfulImageModelsResponse => ({
   defaultModelId: "nano-banana-2",
   items: FALLBACK_IMAGE_MODELS,
 });
+
+const formatApiError = (payload: { code?: string | null; error?: string | null }, fallback: string) => {
+  const errorText = typeof payload.error === "string" && payload.error.trim().length > 0 ? payload.error.trim() : fallback;
+  const errorCode = typeof payload.code === "string" && payload.code.trim().length > 0 ? payload.code.trim() : "";
+  return errorCode ? `${errorCode}: ${errorText}` : errorText;
+};
 
 const shouldUseLocalPreview = () => {
   if (typeof window === "undefined") return false;
@@ -964,7 +973,7 @@ export default function Home() {
         });
       const data = (await response.json().catch(() => null)) as GenerateImageResponse | null;
       if (!response.ok) {
-        const errorText = data && "error" in data && typeof data.error === "string" ? data.error : t.generateFailed;
+        const errorText = data && "error" in data ? formatApiError(data, t.generateFailed) : t.generateFailed;
         setGenerationNotice({ type: "error", text: errorText });
         if (response.status === 503) setSystemStatus("unavailable");
         return;

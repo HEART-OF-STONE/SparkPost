@@ -134,6 +134,8 @@ type ResolvedImageConfig = {
   imageToImageCost: number;
   supports: Record<ImageMode, boolean>;
   status: "available" | "unavailable";
+  statusCode?: string;
+  statusMessage?: string;
 };
 
 type PromptAssistConfig = {
@@ -205,6 +207,8 @@ type CreditPackageDefinition = {
   credits: number;
   priceUsd: string;
 };
+
+const withErrorCode = (code: string, error: string) => ({ code, error });
 
 type CreditSummaryResponse = {
   creditBalance: number;
@@ -377,6 +381,31 @@ const getImageConfig = (env: Env, requestedModelId?: string): ResolvedImageConfi
           baseUrl: DEFAULT_OPENAI_IMAGE_BASE_URL,
         };
 
+  const statusReason =
+    effectiveBackend === "official"
+      ? {
+          code: providerConfig.apiKey.length > 0 ? undefined : "OFFICIAL_IMAGE_API_KEY_MISSING",
+          message: providerConfig.apiKey.length > 0 ? undefined : "Official image API key is not configured.",
+        }
+      : {
+          code:
+            providerConfig.baseUrl.length === 0
+              ? "RELAY_BASE_URL_MISSING"
+              : providerConfig.apiKey.length === 0
+                ? registryModel?.relayConfigKey === "micu"
+                  ? "RELAY_IMAGE_API_KEY_MICU_MISSING"
+                  : "RELAY_IMAGE_API_KEY_MISSING"
+                : undefined,
+          message:
+            providerConfig.baseUrl.length === 0
+              ? "Relay base URL is not configured."
+              : providerConfig.apiKey.length === 0
+                ? registryModel?.relayConfigKey === "micu"
+                  ? "Relay image API key for the micu provider is not configured."
+                  : "Relay image API key is not configured."
+                : undefined,
+        };
+
   return {
     backend: effectiveBackend,
     apiKey: providerConfig.apiKey,
@@ -394,6 +423,8 @@ const getImageConfig = (env: Env, requestedModelId?: string): ResolvedImageConfi
       )
         ? "available"
         : "unavailable",
+    statusCode: statusReason.code,
+    statusMessage: statusReason.message,
   };
 };
 
@@ -2479,8 +2510,10 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
       if (!input.ok) return json({ error: input.error }, { status: 400 });
 
       const authenticatedUser = await getAuthenticatedUser(request, env);
-      if (!authenticatedUser.ok) return json({ error: "Generation service is temporarily unavailable." }, { status: 503 });
-      if (!authenticatedUser.user) return json({ error: "Authentication required." }, { status: 401 });
+      if (!authenticatedUser.ok) {
+        return json(withErrorCode("AUTH_SERVICE_UNAVAILABLE", "Generation service is temporarily unavailable."), { status: 503 });
+      }
+      if (!authenticatedUser.user) return json(withErrorCode("AUTH_REQUIRED", "Authentication required."), { status: 401 });
 
       try {
         const task =
@@ -2497,14 +2530,14 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
         return json({ ok: true, task });
       } catch (error) {
         if (error instanceof ImageGenerationCreditsError) {
-          return json({ error: error.message }, { status: 402 });
+          return json(withErrorCode("INSUFFICIENT_CREDITS", error.message), { status: 402 });
         }
         if (error instanceof ImageGenerationAuthError) {
-          return json({ error: error.message }, { status: 403 });
+          return json(withErrorCode("IMAGE_PROVIDER_AUTH_FAILED", error.message), { status: 403 });
         }
         if (error instanceof ImageGenerationConfigError || error instanceof ImageGenerationProviderError) {
           console.error("Image generation failed.", error);
-          return json({ error: "Image generation service is temporarily unavailable." }, { status: 503 });
+          return json(withErrorCode("IMAGE_PROVIDER_UNAVAILABLE", "Image generation service is temporarily unavailable."), { status: 503 });
         }
         throw error;
       }
@@ -2565,22 +2598,27 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
       pathname: "/api/models/image",
       handler: async (_request, env) => {
         const defaultModelId = getDefaultImageModelId(env);
-        const imageConfig = getImageConfig(env);
         return json({
           ok: true,
           defaultModelId,
-          items: Object.values(IMAGE_MODEL_REGISTRY).map((item) => ({
-            id: item.id,
-            label: item.label,
-            provider: item.provider,
-            model: item.remoteModel,
-            supports: item.supports,
-            isDefault: item.id === defaultModelId,
-            costCredits: {
-              t2i: item.supports.t2i ? imageConfig.textToImageCost : null,
-              i2i: item.supports.i2i ? imageConfig.imageToImageCost : null,
-            },
-          })),
+          items: Object.values(IMAGE_MODEL_REGISTRY).map((item) => {
+            const itemConfig = getImageConfig(env, item.id);
+            return {
+              id: item.id,
+              label: item.label,
+              provider: item.provider,
+              model: item.remoteModel,
+              supports: item.supports,
+              isDefault: item.id === defaultModelId,
+              status: itemConfig.status,
+              code: itemConfig.statusCode ?? null,
+              message: itemConfig.statusMessage ?? null,
+              costCredits: {
+                t2i: item.supports.t2i ? itemConfig.textToImageCost : null,
+                i2i: item.supports.i2i ? itemConfig.imageToImageCost : null,
+              },
+            };
+          }),
         });
       },
     },
