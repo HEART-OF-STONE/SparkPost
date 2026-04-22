@@ -35,6 +35,7 @@ export interface Env {
     IMAGE_BASE_URL?: string;
     OPENAI_IMAGE_API_KEY?: string;
     RELAY_IMAGE_API_KEY?: string;
+    RELAY_IMAGE_API_KEY_MICU?: string;
     GPT_IMAGE_RELAY_API_KEY?: string;
     RELAY_IMAGE_BASE_URL_MICU?: string;
     IMAGE_RELAY_BASE_URL_MICU?: string;
@@ -119,7 +120,7 @@ type ImageModelDefinition = {
   provider: ImageProviderKey;
   remoteModel: string;
   supports: Record<ImageMode, boolean>;
-  relayConfigKey?: "micu" | "gptImage";
+  relayConfigKey?: "default" | "micu";
 };
 
 type ResolvedImageConfig = {
@@ -263,7 +264,7 @@ const IMAGE_MODEL_REGISTRY: Record<string, ImageModelDefinition> = {
     provider: "relay",
     remoteModel: "gemini-3.1-flash-image-openai",
     supports: { t2i: true, i2i: true },
-    relayConfigKey: "micu",
+    relayConfigKey: "default",
   },
   "gpt-image-2": {
     id: "gpt-image-2",
@@ -271,7 +272,7 @@ const IMAGE_MODEL_REGISTRY: Record<string, ImageModelDefinition> = {
     provider: "relay",
     remoteModel: "gpt-image-1",
     supports: { t2i: true, i2i: true },
-    relayConfigKey: "gptImage",
+    relayConfigKey: "micu",
   },
   "dall-e-3": {
     id: "dall-e-3",
@@ -327,10 +328,14 @@ const getDefaultImageModelId = (env: Env) => {
 };
 
 const getRelayProviderConfig = (env: Env, registryModel?: ImageModelDefinition) => {
-  if (registryModel?.relayConfigKey === "gptImage") {
+  if (registryModel?.relayConfigKey === "micu") {
     return {
-      apiKey: env.GPT_IMAGE_RELAY_API_KEY?.trim() || "",
-      baseUrl: (env.GPT_IMAGE_RELAY_BASE_URL?.trim() || "").replace(/\/$/, ""),
+      apiKey: env.RELAY_IMAGE_API_KEY_MICU?.trim() || "",
+      baseUrl: (
+        env.RELAY_IMAGE_BASE_URL_MICU?.trim() ||
+        env.IMAGE_RELAY_BASE_URL_MICU?.trim() ||
+        ""
+      ).replace(/\/$/, ""),
     };
   }
 

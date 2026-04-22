@@ -12,10 +12,9 @@ IMAGE_MODEL=dall-e-3
 IMAGE_DEFAULT_MODEL_ID=nano-banana-2
 OPENAI_IMAGE_API_KEY=replace_me_for_official_image_generation
 RELAY_IMAGE_API_KEY=replace_me_for_relay_image_generation
-RELAY_IMAGE_BASE_URL_MICU=https://your-relay.example.com/v1
-# IMAGE_RELAY_BASE_URL_MICU and RELAY_IMAGE_BASE_URL are kept as legacy base URL fallbacks.
-GPT_IMAGE_RELAY_API_KEY=replace_me_for_gpt_image_relay
-GPT_IMAGE_RELAY_BASE_URL=https://your-gpt-image-relay.example.com/v1
+RELAY_IMAGE_API_KEY_MICU=replace_me_for_micu_relay_image_generation
+RELAY_IMAGE_BASE_URL_MICU=https://your-micu-relay.example.com/v1
+# IMAGE_RELAY_BASE_URL_MICU and RELAY_IMAGE_BASE_URL are kept as legacy base URL fallbacks for the micu relay.
 PROMPT_IDEA_PROVIDER=deepseek
 PROMPT_IDEA_MODEL=deepseek-chat
 PROMPT_EXPAND_PROVIDER=minimax
