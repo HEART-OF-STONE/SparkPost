@@ -53,6 +53,7 @@ type ImageModelsResponse =
       items: ImageModelItem[];
     }
   | { error: string };
+type SuccessfulImageModelsResponse = Extract<ImageModelsResponse, { ok: true }>;
 type TransactionItem = {
   id: number | string;
   type: "earned" | "consumed";
@@ -393,6 +394,23 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   dalle3: "DALL-E 3",
 };
 
+const FALLBACK_IMAGE_MODELS: ImageModelItem[] = [
+  {
+    id: "nano-banana-2",
+    label: "Nano Banana 2",
+    isDefault: true,
+    supports: { t2i: true, i2i: true },
+    costCredits: { t2i: 10, i2i: 15 },
+  },
+  {
+    id: "gpt-image-2",
+    label: "GPT-Image 2",
+    isDefault: false,
+    supports: { t2i: true, i2i: true },
+    costCredits: { t2i: 10, i2i: 15 },
+  },
+];
+
 const getDisplayImageModel = (model: string | null | undefined) => {
   const normalized = (model ?? DEFAULT_IMAGE_MODEL_ID).trim().toLowerCase();
   return MODEL_DISPLAY_NAMES[normalized] ?? model ?? MODEL_DISPLAY_NAMES[DEFAULT_IMAGE_MODEL_ID];
@@ -405,6 +423,12 @@ const createLocalPreviewUser = (): AuthUser => ({
   emailVerifiedAt: new Date().toISOString(),
   lastLoginAt: new Date().toISOString(),
   creditBalance: 20,
+});
+
+const getFallbackImageModelsResponse = (): SuccessfulImageModelsResponse => ({
+  ok: true,
+  defaultModelId: "nano-banana-2",
+  items: FALLBACK_IMAGE_MODELS,
 });
 
 const shouldUseLocalPreview = () => {
@@ -554,6 +578,14 @@ export default function Home() {
   }, [mode, selectedImageModelByMode, supportedImageModels]);
   const selectedImageModelId = selectedImageModel?.id ?? selectedImageModelByMode[mode] ?? DEFAULT_IMAGE_MODEL_ID;
   const currentCost = selectedImageModel?.costCredits[mode] ?? DEFAULT_IMAGE_MODEL_COST[mode];
+  const modelStatusDotClass =
+    systemStatus === "available"
+      ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.55)]"
+      : systemStatus === "unavailable"
+        ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.45)]"
+        : isDark
+          ? "bg-slate-500"
+          : "bg-gray-400";
   const i2iPromptPlaceholder = locale === "zh"
     ? "输入 @ 引用参考图，例如让 @R2 延续 @R1 的构图。"
     : "Type @ to reference uploaded images, e.g. redraw @R1 in the style of @R2.";
@@ -646,12 +678,7 @@ export default function Home() {
     const controller = new AbortController();
 
     async function loadImageModels() {
-      try {
-        const response = await fetchApi("/api/models/image", { cache: "no-store", signal: controller.signal });
-        const data = (await response.json().catch(() => null)) as ImageModelsResponse | null;
-        if (!response.ok || !data || !("ok" in data) || data.ok !== true || !Array.isArray(data.items)) {
-          return;
-        }
+      const applyImageModels = (data: SuccessfulImageModelsResponse) => {
         const normalizedItems = data.items
           .filter((item) => item && typeof item.id === "string" && typeof item.label === "string")
           .map((item) => {
@@ -688,7 +715,19 @@ export default function Home() {
           });
           return next;
         });
-      } catch {}
+      };
+
+      try {
+        const response = await fetchApi("/api/models/image", { cache: "no-store", signal: controller.signal });
+        const data = (await response.json().catch(() => null)) as ImageModelsResponse | null;
+        if (!response.ok || !data || !("ok" in data) || data.ok !== true || !Array.isArray(data.items)) {
+          applyImageModels(getFallbackImageModelsResponse());
+          return;
+        }
+        applyImageModels(data);
+      } catch {
+        applyImageModels(getFallbackImageModelsResponse());
+      }
     }
 
     void loadImageModels();
@@ -1695,8 +1734,11 @@ export default function Home() {
                       <div className={`mb-2 text-[10px] uppercase tracking-wider ${isDark ? "text-[#666]" : "text-gray-500"}`}>{t.provider}</div>
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <div className={`truncate text-xs font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
-                            {selectedImageModel?.label ?? getDisplayImageModel(selectedImageModelId)}
+                          <div className={`flex items-center gap-2 truncate text-xs font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                            <span className={`h-2 w-2 shrink-0 rounded-full ${modelStatusDotClass}`} />
+                            <span className="truncate">
+                              {selectedImageModel?.label ?? getDisplayImageModel(selectedImageModelId)}
+                            </span>
                           </div>
                           <div className={`mt-1 text-[10px] ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                             {currentCost} {t.credits}
@@ -1818,7 +1860,7 @@ export default function Home() {
           className={`fixed inset-0 z-[105] bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isDrawerOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
           onClick={() => setIsDrawerOpen(false)}
         />
-        <div className={`fixed top-0 right-0 z-[110] flex h-full w-full transform flex-col border-l shadow-2xl transition-transform duration-300 ease-out sm:w-[420px] ${isDrawerOpen ? "translate-x-0" : "translate-x-full"} ${isDark ? "border-white/10 bg-[#111]" : "border-gray-200 bg-white"}`}>
+        <div className={`fixed top-0 right-0 z-[110] flex h-full w-full transform flex-col border-l shadow-2xl transition-transform duration-300 ease-out sm:w-[420px] ${isDrawerOpen ? "translate-x-0 pointer-events-auto" : "translate-x-full pointer-events-none"} ${isDark ? "border-white/10 bg-[#111]" : "border-gray-200 bg-white"}`}>
           <div className={`flex items-center justify-between border-b p-6 ${isDark ? "border-white/5" : "border-gray-100"}`}>
             <h2 className={`flex items-center gap-2 text-lg font-bold tracking-wide ${isDark ? "text-white" : "text-gray-900"}`}>
               <span className={isDark ? "text-cyan-400" : "text-cyan-600"}><SparklesIcon /></span>
