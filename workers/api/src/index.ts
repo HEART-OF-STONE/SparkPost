@@ -31,6 +31,7 @@ export interface Env {
     IMAGE_BACKEND?: string;
     IMAGE_API_KEY?: string;
     IMAGE_MODEL?: string;
+    IMAGE_DEFAULT_MODEL_ID?: string;
     IMAGE_BASE_URL?: string;
     OPENAI_IMAGE_API_KEY?: string;
     RELAY_IMAGE_API_KEY?: string;
@@ -105,6 +106,30 @@ type ProviderResult = {
 };
 
 type PromptAssistAction = "inspire" | "enhance";
+
+type ImageMode = "t2i" | "i2i";
+type ImageProviderKey = "official" | "relay";
+
+type ImageModelDefinition = {
+  id: string;
+  label: string;
+  provider: ImageProviderKey;
+  remoteModel: string;
+  supports: Record<ImageMode, boolean>;
+};
+
+type ResolvedImageConfig = {
+  backend: ImageProviderKey;
+  apiKey: string;
+  model: string;
+  modelId: string;
+  label: string;
+  baseUrl: string;
+  textToImageCost: number;
+  imageToImageCost: number;
+  supports: Record<ImageMode, boolean>;
+  status: "available" | "unavailable";
+};
 
 type PromptAssistConfig = {
   provider: string;
@@ -199,6 +224,7 @@ const DEFAULT_EMAIL_SUBJECT_PREFIX = "[SparkPost]";
 const DEFAULT_RESEND_BASE_URL = "https://api.resend.com";
 const DEFAULT_IMAGE_BACKEND = "official";
 const DEFAULT_IMAGE_MODEL = "dall-e-3";
+const DEFAULT_IMAGE_MODEL_ID = "nano-banana-2";
 const DEFAULT_OPENAI_IMAGE_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_OPENAI_TEXT_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1";
@@ -226,6 +252,38 @@ const CREDIT_PACKAGE_DEFINITIONS: CreditPackageDefinition[] = [
   { code: "pro_studio", title: "Pro Studio", credits: 3000, priceUsd: "19.99" },
 ];
 
+const IMAGE_MODEL_REGISTRY: Record<string, ImageModelDefinition> = {
+  "nano-banana-2": {
+    id: "nano-banana-2",
+    label: "Nano Banana 2",
+    provider: "relay",
+    remoteModel: "gemini-3.1-flash-image-openai",
+    supports: { t2i: true, i2i: true },
+  },
+  "gpt-image-2": {
+    id: "gpt-image-2",
+    label: "GPT-Image 2",
+    provider: "relay",
+    remoteModel: "gpt-image-1",
+    supports: { t2i: true, i2i: true },
+  },
+  "dall-e-3": {
+    id: "dall-e-3",
+    label: "DALL-E 3",
+    provider: "official",
+    remoteModel: "dall-e-3",
+    supports: { t2i: true, i2i: false },
+  },
+};
+
+const IMAGE_MODEL_ALIAS_MAP: Record<string, string> = {
+  "gemini-3.1-flash-image-openai": "nano-banana-2",
+  "gemini-3.1-image-openai": "nano-banana-2",
+  "gpt-image-1": "gpt-image-2",
+  "gpt-image-2": "gpt-image-2",
+  "dall-e-3": "dall-e-3",
+};
+
 const getNumberEnv = (value: string | undefined, fallback: number) => {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -248,23 +306,43 @@ const getAuthConfig = (env: Env) => ({
   dailyCheckInCredits: getNumberEnv(env.DAILY_CHECK_IN_CREDITS, DEFAULT_DAILY_CHECK_IN_CREDITS),
 });
 
-const getImageConfig = (env: Env) => {
-  const backend = env.IMAGE_BACKEND ?? DEFAULT_IMAGE_BACKEND;
-  const model = env.IMAGE_MODEL ?? DEFAULT_IMAGE_MODEL;
+const getDefaultImageModelId = (env: Env) => {
+  const configuredModelId = env.IMAGE_DEFAULT_MODEL_ID?.trim().toLowerCase();
+  if (configuredModelId && IMAGE_MODEL_REGISTRY[configuredModelId]) {
+    return configuredModelId;
+  }
+
+  const legacyModel = env.IMAGE_MODEL?.trim().toLowerCase();
+  if (legacyModel && IMAGE_MODEL_ALIAS_MAP[legacyModel]) {
+    return IMAGE_MODEL_ALIAS_MAP[legacyModel];
+  }
+
+  return DEFAULT_IMAGE_MODEL_ID;
+};
+
+// 中文说明：
+// 这里优先使用新的 modelId 注册表来选择图片模型；如果线上仍然只配置了旧的 IMAGE_MODEL，
+// 也会回退到旧逻辑，避免现有 Cloudflare 环境立刻失效。
+const getImageConfig = (env: Env, requestedModelId?: string): ResolvedImageConfig => {
+  const normalizedRequestedModelId = requestedModelId?.trim().toLowerCase();
+  const resolvedModelId = normalizedRequestedModelId || getDefaultImageModelId(env);
+  const backend = (env.IMAGE_BACKEND ?? DEFAULT_IMAGE_BACKEND).trim().toLowerCase() as ImageProviderKey;
   const textToImageCost = getNumberEnv(env.TEXT_TO_IMAGE_COST, DEFAULT_TEXT_TO_IMAGE_COST);
   const imageToImageCost = getNumberEnv(env.IMAGE_TO_IMAGE_COST, DEFAULT_IMAGE_TO_IMAGE_COST);
   const openAiApiKey = env.OPENAI_IMAGE_API_KEY?.trim() || env.IMAGE_API_KEY?.trim() || "";
   const relayApiKey = env.RELAY_IMAGE_API_KEY?.trim() || env.IMAGE_API_KEY?.trim() || "";
-  // 优先读取新的 Micu 中转地址命名，旧变量继续保留兼容，避免线上环境被一次性打断。
   const relayBaseUrl = (
     env.IMAGE_RELAY_BASE_URL_MICU?.trim() ||
     env.RELAY_IMAGE_BASE_URL?.trim() ||
     env.IMAGE_BASE_URL?.trim() ||
     ""
   ).replace(/\/$/, "");
+  const registryModel = IMAGE_MODEL_REGISTRY[resolvedModelId];
 
+  const effectiveBackend = registryModel?.provider ?? (backend === "relay" ? "relay" : "official");
+  const effectiveModel = registryModel?.remoteModel ?? (env.IMAGE_MODEL?.trim() || DEFAULT_IMAGE_MODEL);
   const providerConfig =
-    backend === "relay"
+    effectiveBackend === "relay"
       ? {
           apiKey: relayApiKey,
           baseUrl: relayBaseUrl,
@@ -275,16 +353,19 @@ const getImageConfig = (env: Env) => {
         };
 
   return {
-    backend,
+    backend: effectiveBackend,
     apiKey: providerConfig.apiKey,
-    model,
+    model: effectiveModel,
+    modelId: registryModel?.id ?? resolvedModelId,
+    label: registryModel?.label ?? resolvedModelId,
     baseUrl: providerConfig.baseUrl,
     textToImageCost,
     imageToImageCost,
+    supports: registryModel?.supports ?? { t2i: true, i2i: true },
     status:
       (
-        (backend === "official" && providerConfig.apiKey.length > 0) ||
-        (backend === "relay" && providerConfig.apiKey.length > 0 && providerConfig.baseUrl.length > 0)
+        (effectiveBackend === "official" && providerConfig.apiKey.length > 0) ||
+        (effectiveBackend === "relay" && providerConfig.apiKey.length > 0 && providerConfig.baseUrl.length > 0)
       )
         ? "available"
         : "unavailable",
@@ -1456,6 +1537,7 @@ const isSupportedReferenceImage = (value: string) =>
 const validateGenerateImageInput = (input: unknown) => {
   const prompt = isRecord(input) && "prompt" in input ? input.prompt : undefined;
   const mode = isRecord(input) && "mode" in input ? input.mode : undefined;
+  const modelId = isRecord(input) && "modelId" in input ? input.modelId : undefined;
   const referenceImages = isRecord(input) && "referenceImages" in input ? input.referenceImages : undefined;
 
   if (typeof prompt !== "string") {
@@ -1472,9 +1554,16 @@ const validateGenerateImageInput = (input: unknown) => {
 
   const normalizedMode =
     mode === "i2i" || mode === "t2i" ? mode : Array.isArray(referenceImages) && referenceImages.length > 0 ? "i2i" : "t2i";
+  const normalizedModelId = typeof modelId === "string" && modelId.trim().length > 0 ? modelId.trim().toLowerCase() : undefined;
 
   if (normalizedMode === "t2i") {
-    return { ok: true as const, mode: normalizedMode, prompt: normalizedPrompt, referenceImages: [] as string[] };
+    return {
+      ok: true as const,
+      mode: normalizedMode,
+      modelId: normalizedModelId,
+      prompt: normalizedPrompt,
+      referenceImages: [] as string[],
+    };
   }
 
   if (!Array.isArray(referenceImages) || referenceImages.length === 0) {
@@ -1492,6 +1581,7 @@ const validateGenerateImageInput = (input: unknown) => {
   return {
     ok: true as const,
     mode: normalizedMode,
+    modelId: normalizedModelId,
     prompt: normalizedPrompt,
     referenceImages,
   };
@@ -1731,8 +1821,7 @@ const fetchRemoteImageBytes = async (url: string) => {
   return { bytes, mimeType };
 };
 
-const callOfficialImageProvider = async (prompt: string, env: Env): Promise<ProviderResult> => {
-  const imageConfig = getImageConfig(env);
+const callOfficialImageProvider = async (prompt: string, imageConfig: ResolvedImageConfig): Promise<ProviderResult> => {
   if (imageConfig.status !== "available") {
     throw new ImageGenerationConfigError("Image generation provider is not configured.");
   }
@@ -1775,9 +1864,8 @@ const callOfficialImageProvider = async (prompt: string, env: Env): Promise<Prov
 const callOfficialImageEditProvider = async (
   prompt: string,
   referenceImages: string[],
-  env: Env,
+  imageConfig: ResolvedImageConfig,
 ): Promise<ProviderResult> => {
-  const imageConfig = getImageConfig(env);
   if (imageConfig.status !== "available") {
     throw new ImageGenerationConfigError("Image generation provider is not configured.");
   }
@@ -1849,14 +1937,17 @@ const callOfficialImageEditProvider = async (
 const generateProviderImage = async (
   prompt: string,
   env: Env,
-  options?: { mode?: "t2i" | "i2i"; referenceImages?: string[] },
+  options?: { mode?: ImageMode; modelId?: string; referenceImages?: string[] },
 ) => {
-  const imageConfig = getImageConfig(env);
+  const imageConfig = getImageConfig(env, options?.modelId);
+  if (!imageConfig.supports[options?.mode ?? "t2i"]) {
+    throw new ImageGenerationConfigError(`Selected image model does not support ${options?.mode ?? "t2i"}.`);
+  }
   if (["official", "relay"].includes(imageConfig.backend)) {
     if (options?.mode === "i2i") {
-      return callOfficialImageEditProvider(prompt, options.referenceImages ?? [], env);
+      return callOfficialImageEditProvider(prompt, options.referenceImages ?? [], imageConfig);
     }
-    return callOfficialImageProvider(prompt, env);
+    return callOfficialImageProvider(prompt, imageConfig);
   }
   throw new ImageGenerationConfigError(`Unsupported IMAGE_BACKEND: ${imageConfig.backend}`);
 };
@@ -1928,12 +2019,18 @@ const getGeneratedAssetResponse = async (_request: Request, env: Env, url: URL) 
   return new Response(object.body, { status: 200, headers });
 };
 
-const generateTextToImageForUser = async (request: Request, userId: string, prompt: string, env: Env) => {
+const generateTextToImageForUser = async (
+  request: Request,
+  userId: string,
+  prompt: string,
+  env: Env,
+  modelId?: string,
+) => {
   if (!env.SPARKPOST_DB) {
     throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
   }
 
-  const imageConfig = getImageConfig(env);
+  const imageConfig = getImageConfig(env, modelId);
   const now = new Date();
   const compiledPrompt = prompt;
   await reconcileExpiredCreditsForUser(userId, env, now);
@@ -1965,7 +2062,7 @@ const generateTextToImageForUser = async (request: Request, userId: string, prom
   ).run();
 
   try {
-    const providerResult = await generateProviderImage(compiledPrompt, env);
+    const providerResult = await generateProviderImage(compiledPrompt, env, { mode: "t2i", modelId });
     const storedAsset = await persistGeneratedAsset(request, env, userId, taskId, providerResult);
     const completedAt = new Date();
     const remainingCredits = await spendCreditsForUser(userId, env, {
@@ -2023,12 +2120,13 @@ const generateImageToImageForUser = async (
   prompt: string,
   referenceImages: string[],
   env: Env,
+  modelId?: string,
 ) => {
   if (!env.SPARKPOST_DB) {
     throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
   }
 
-  const imageConfig = getImageConfig(env);
+  const imageConfig = getImageConfig(env, modelId);
   const now = new Date();
   const compiledPrompt = compileImageToImagePrompt(prompt, referenceImages.length);
   await reconcileExpiredCreditsForUser(userId, env, now);
@@ -2063,6 +2161,7 @@ const generateImageToImageForUser = async (
   try {
     const providerResult = await generateProviderImage(compiledPrompt, env, {
       mode: "i2i",
+      modelId,
       referenceImages,
     });
     const storedAsset = await persistGeneratedAsset(request, env, userId, taskId, providerResult);
@@ -2361,14 +2460,15 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
       try {
         const task =
           input.mode === "i2i"
-            ? await generateImageToImageForUser(
-                request,
-                authenticatedUser.user.id,
-                input.prompt,
-                input.referenceImages,
-                env,
-              )
-            : await generateTextToImageForUser(request, authenticatedUser.user.id, input.prompt, env);
+              ? await generateImageToImageForUser(
+                  request,
+                  authenticatedUser.user.id,
+                  input.prompt,
+                  input.referenceImages,
+                  env,
+                  input.modelId,
+                )
+              : await generateTextToImageForUser(request, authenticatedUser.user.id, input.prompt, env, input.modelId);
         return json({ ok: true, task });
       } catch (error) {
         if (error instanceof ImageGenerationCreditsError) {
@@ -2432,10 +2532,29 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
       pathname: "/api/generate/status",
       handler: async (_request, env) => {
         const imageConfig = getImageConfig(env);
-      return json({ status: imageConfig.status, model: imageConfig.model });
+      return json({ status: imageConfig.status, model: imageConfig.model, modelId: imageConfig.modelId, label: imageConfig.label });
+      },
     },
-  },
-];
+    {
+      method: "GET",
+      pathname: "/api/models/image",
+      handler: async (_request, env) => {
+        const defaultModelId = getDefaultImageModelId(env);
+        return json({
+          ok: true,
+          defaultModelId,
+          items: Object.values(IMAGE_MODEL_REGISTRY).map((item) => ({
+            id: item.id,
+            label: item.label,
+            provider: item.provider,
+            model: item.remoteModel,
+            supports: item.supports,
+            isDefault: item.id === defaultModelId,
+          })),
+        });
+      },
+    },
+  ];
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
