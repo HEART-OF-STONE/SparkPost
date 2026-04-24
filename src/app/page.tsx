@@ -132,6 +132,7 @@ type Copy = {
   credits: string;
   provider: string;
   status: string;
+  imageSize: string;
   providerAvailable: string;
   providerUnavailable: string;
   providerUnknown: string;
@@ -229,6 +230,7 @@ const copy: Record<Locale, Copy> = {
     credits: "积分",
     provider: "模型服务",
     status: "状态",
+    imageSize: "输出尺寸",
     providerAvailable: "Nano Banana 2",
     providerUnavailable: "不可用",
     providerUnknown: "Nano Banana 2",
@@ -324,6 +326,7 @@ const copy: Record<Locale, Copy> = {
     credits: "Credits",
     provider: "Model Service",
     status: "Status",
+    imageSize: "Output Size",
     providerAvailable: "Nano Banana 2",
     providerUnavailable: "Unavailable",
     providerUnknown: "Nano Banana 2",
@@ -388,6 +391,8 @@ const DEFAULT_IMAGE_MODEL_COST: Record<Mode, number> = {
   t2i: 10,
   i2i: 15,
 };
+const DEFAULT_IMAGE_SIZE = "auto";
+const ENABLE_IMAGE_SIZE_SELECTOR = process.env.NEXT_PUBLIC_ENABLE_IMAGE_SIZE_SELECTOR !== "false";
 const MODEL_DISPLAY_NAMES: Record<string, string> = {
   "nano-banana-2": "Nano Banana 2",
   "gemini-3.1-flash-image-openai": "Nano Banana 2",
@@ -405,6 +410,8 @@ const FALLBACK_IMAGE_MODELS: ImageModelItem[] = [
     label: "Nano Banana 2",
     isDefault: true,
     supports: { t2i: true, i2i: true },
+    supportedSizes: ["auto", "1024x1024", "1536x1024", "1024x1536", "2048x2048", "2048x1152", "3840x2160", "2160x3840"],
+    defaultSize: DEFAULT_IMAGE_SIZE,
     costCredits: { t2i: 10, i2i: 15 },
   },
   {
@@ -412,9 +419,28 @@ const FALLBACK_IMAGE_MODELS: ImageModelItem[] = [
     label: "GPT-Image 2",
     isDefault: false,
     supports: { t2i: true, i2i: true },
+    supportedSizes: ["auto", "1024x1024", "1536x1024", "1024x1536", "2048x2048", "2048x1152", "3840x2160", "2160x3840"],
+    defaultSize: DEFAULT_IMAGE_SIZE,
     costCredits: { t2i: 10, i2i: 15 },
   },
 ];
+
+const getImageSizeLabel = (size: string, locale: Locale) => {
+  const labels: Record<string, Record<Locale, string>> = {
+    auto: { zh: "自动", en: "Auto" },
+    "1024x1024": { zh: "1K 方图", en: "1K Square" },
+    "1536x1024": { zh: "1K 横图", en: "1K Landscape" },
+    "1024x1536": { zh: "1K 竖图", en: "1K Portrait" },
+    "2048x2048": { zh: "2K 方图", en: "2K Square" },
+    "2048x1152": { zh: "2K 横图", en: "2K Landscape" },
+    "3840x2160": { zh: "4K 横图", en: "4K Landscape" },
+    "2160x3840": { zh: "4K 竖图", en: "4K Portrait" },
+    "1792x1024": { zh: "DALL-E 横图", en: "DALL-E Landscape" },
+    "1024x1792": { zh: "DALL-E 竖图", en: "DALL-E Portrait" },
+  };
+
+  return labels[size]?.[locale] ?? size;
+};
 
 const getDisplayImageModel = (model: string | null | undefined) => {
   const normalized = (model ?? DEFAULT_IMAGE_MODEL_ID).trim().toLowerCase();
@@ -551,7 +577,12 @@ export default function Home() {
     t2i: DEFAULT_IMAGE_MODEL_ID,
     i2i: DEFAULT_IMAGE_MODEL_ID,
   });
+  const [selectedImageSizeByMode, setSelectedImageSizeByMode] = useState<Record<Mode, string>>({
+    t2i: DEFAULT_IMAGE_SIZE,
+    i2i: DEFAULT_IMAGE_SIZE,
+  });
   const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
+  const [isSizeSelectorOpen, setIsSizeSelectorOpen] = useState(false);
 
   const emailRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
@@ -559,6 +590,7 @@ export default function Home() {
   const playgroundRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const modelSelectorRef = useRef<HTMLDivElement>(null);
+  const sizeSelectorRef = useRef<HTMLDivElement>(null);
   const mentionMenuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeEditorRef = useRef<HTMLDivElement | null>(null);
@@ -588,6 +620,15 @@ export default function Home() {
     );
   }, [mode, selectedImageModelByMode, supportedImageModels]);
   const selectedImageModelId = selectedImageModel?.id ?? selectedImageModelByMode[mode] ?? DEFAULT_IMAGE_MODEL_ID;
+  const supportedImageSizes = useMemo(() => {
+    const sizes = selectedImageModel?.supportedSizes?.filter((size) => typeof size === "string" && size.trim().length > 0) ?? [];
+    return sizes.length > 0 ? sizes : [selectedImageModel?.defaultSize ?? DEFAULT_IMAGE_SIZE];
+  }, [selectedImageModel]);
+  const selectedImageSize = supportedImageSizes.includes(selectedImageSizeByMode[mode])
+    ? selectedImageSizeByMode[mode]
+    : selectedImageModel?.defaultSize && supportedImageSizes.includes(selectedImageModel.defaultSize)
+      ? selectedImageModel.defaultSize
+      : supportedImageSizes[0] ?? DEFAULT_IMAGE_SIZE;
   const currentCost = selectedImageModel?.costCredits[mode] ?? DEFAULT_IMAGE_MODEL_COST[mode];
   const modelStatusDotClass =
     systemStatus === "available"
@@ -853,6 +894,9 @@ export default function Home() {
       if (modelSelectorRef.current && event.target instanceof Node && !modelSelectorRef.current.contains(event.target)) {
         setIsModelSelectorOpen(false);
       }
+      if (sizeSelectorRef.current && event.target instanceof Node && !sizeSelectorRef.current.contains(event.target)) {
+        setIsSizeSelectorOpen(false);
+      }
       if (mentionMenuRef.current && event.target instanceof Node && !mentionMenuRef.current.contains(event.target)) {
         setShowMentionMenu(false);
         setMentionMenuPos(null);
@@ -971,6 +1015,7 @@ export default function Home() {
         body: JSON.stringify({
           mode,
           modelId: selectedImageModelId,
+          ...(ENABLE_IMAGE_SIZE_SELECTOR ? { size: selectedImageSize } : {}),
           prompt: currentPrompt,
           referenceImages: mode === "i2i" ? uploadedImages : [],
         }),
@@ -997,7 +1042,7 @@ export default function Home() {
     } finally {
       setIsGeneratingImage(false);
     }
-  }, [billingCopy.insufficientCredits, currentCost, currentPrompt, mode, selectedImageModelId, t.enterPrompt, t.generateFailed, t.generateSuccess, t.imagePreviewUnavailable, t.unexpectedPayload, t.uploadHint, uploadedImages, user]);
+  }, [billingCopy.insufficientCredits, currentCost, currentPrompt, mode, selectedImageModelId, selectedImageSize, t.enterPrompt, t.generateFailed, t.generateSuccess, t.imagePreviewUnavailable, t.unexpectedPayload, t.uploadHint, uploadedImages, user]);
 
   useEffect(() => {
     if (user && pendingGenerateAfterLogin && !isGeneratingImage) {
@@ -1165,6 +1210,7 @@ export default function Home() {
   function handleModeSwitch(nextMode: Mode) {
     setMode(nextMode);
     setIsModelSelectorOpen(false);
+    setIsSizeSelectorOpen(false);
     setShowMentionMenu(false);
     setMentionMenuPos(null);
     isTypingRef.current = false;
@@ -1739,6 +1785,7 @@ export default function Home() {
                       type="button"
                       onClick={() => {
                         if (isGeneratingImage || supportedImageModels.length <= 1) return;
+                        setIsSizeSelectorOpen(false);
                         setIsModelSelectorOpen((current) => !current);
                       }}
                       disabled={isGeneratingImage}
@@ -1775,6 +1822,11 @@ export default function Home() {
                               type="button"
                               onClick={() => {
                                 setSelectedImageModelByMode((current) => ({ ...current, [mode]: item.id }));
+                                setSelectedImageSizeByMode((current) => {
+                                  const supportedSizes = item.supportedSizes?.length ? item.supportedSizes : [item.defaultSize ?? DEFAULT_IMAGE_SIZE];
+                                  if (supportedSizes.includes(current[mode])) return current;
+                                  return { ...current, [mode]: item.defaultSize ?? supportedSizes[0] ?? DEFAULT_IMAGE_SIZE };
+                                });
                                 setIsModelSelectorOpen(false);
                               }}
                               className={`flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-xs transition ${isDark ? "hover:bg-white/5" : "hover:bg-gray-50"} ${isSelected ? (isDark ? "bg-cyan-500/10 text-white" : "bg-cyan-50 text-gray-900") : (isDark ? "text-slate-300" : "text-gray-700")}`}
@@ -1798,6 +1850,58 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
+
+                {ENABLE_IMAGE_SIZE_SELECTOR ? (
+                  <div ref={sizeSelectorRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isGeneratingImage || supportedImageSizes.length <= 1) return;
+                        setIsModelSelectorOpen(false);
+                        setIsSizeSelectorOpen((current) => !current);
+                      }}
+                      disabled={isGeneratingImage}
+                      className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition ${isDark ? "border-white/5 bg-[#0A0A0A] hover:border-cyan-500/30" : "border-gray-200 bg-gray-50 hover:border-cyan-400/50"} ${isGeneratingImage ? "cursor-not-allowed opacity-60" : ""}`}
+                    >
+                      <div className="min-w-0">
+                        <div className={`text-[10px] uppercase tracking-wider ${isDark ? "text-[#666]" : "text-gray-500"}`}>{t.imageSize}</div>
+                        <div className={`mt-1 truncate text-xs font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                          {getImageSizeLabel(selectedImageSize, locale)}
+                          <span className={`ml-2 text-[10px] font-normal ${isDark ? "text-slate-500" : "text-gray-500"}`}>{selectedImageSize}</span>
+                        </div>
+                      </div>
+                      <div className={`shrink-0 transition-transform ${isSizeSelectorOpen ? "rotate-180" : ""} ${supportedImageSizes.length <= 1 ? "opacity-30" : ""} ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        <ChevronDownIcon />
+                      </div>
+                    </button>
+
+                    {isSizeSelectorOpen && supportedImageSizes.length > 0 ? (
+                      <div className={`absolute left-0 right-0 top-[calc(100%+8px)] z-20 grid max-h-64 grid-cols-2 gap-1 overflow-y-auto rounded-xl border p-1 shadow-2xl ${isDark ? "border-white/10 bg-[#111]" : "border-gray-200 bg-white"}`}>
+                        {supportedImageSizes.map((size) => {
+                          const isSelected = size === selectedImageSize;
+
+                          return (
+                            <button
+                              key={size}
+                              type="button"
+                              onClick={() => {
+                                setSelectedImageSizeByMode((current) => ({ ...current, [mode]: size }));
+                                setIsSizeSelectorOpen(false);
+                              }}
+                              className={`rounded-lg px-2.5 py-2 text-left text-xs transition ${isDark ? "hover:bg-white/5" : "hover:bg-gray-50"} ${isSelected ? (isDark ? "bg-cyan-500/10 text-white" : "bg-cyan-50 text-gray-900") : (isDark ? "text-slate-300" : "text-gray-700")}`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="truncate font-medium">{getImageSizeLabel(size, locale)}</span>
+                                {isSelected ? <CheckCircleIcon /> : null}
+                              </div>
+                              <div className={`${isDark ? "text-slate-500" : "text-gray-500"}`}>{size}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <div className={`flex rounded-xl border p-1 mt-2 ${isDark ? "border-white/5 bg-[#111]" : "border-gray-200 bg-gray-100 shadow-sm"}`}>
                   <button type="button" onClick={() => handleModeSwitch("t2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "t2i" ? (isDark ? "bg-[#222] text-white shadow-sm" : "bg-white text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><SparklesIcon />{t.t2iMode}</button>
