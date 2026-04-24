@@ -44,6 +44,8 @@ type ImageModelItem = {
   label: string;
   supports: Record<Mode, boolean>;
   isDefault: boolean;
+  supportedSizes?: string[];
+  defaultSize?: string;
   costCredits: Record<Mode, number | null>;
   status?: "available" | "unavailable";
   code?: string | null;
@@ -701,6 +703,8 @@ export default function Home() {
               label: item.label,
               isDefault: Boolean(item.isDefault),
               supports,
+              supportedSizes: Array.isArray(item.supportedSizes) ? item.supportedSizes.filter((size) => typeof size === "string") : undefined,
+              defaultSize: typeof item.defaultSize === "string" ? item.defaultSize : undefined,
               costCredits: {
                 t2i: typeof item.costCredits?.t2i === "number" ? item.costCredits.t2i : supports.t2i ? DEFAULT_IMAGE_MODEL_COST.t2i : null,
                 i2i: typeof item.costCredits?.i2i === "number" ? item.costCredits.i2i : supports.i2i ? DEFAULT_IMAGE_MODEL_COST.i2i : null,
