@@ -1005,9 +1005,17 @@ export default function Home() {
     void loadDashboardCreditHistory().catch(() => {});
   }, [loadDashboardCreditHistory, user]);
 
+  const getLivePromptValue = useCallback(() => {
+    const editor = promptRef.current ?? activeEditorRef.current;
+    if (!editor) return currentPrompt;
+    return editor.innerText.replace(/\u00A0/g, " ");
+  }, [currentPrompt]);
+
   const generateImage = useCallback(async () => {
     setGenerationNotice(null);
-    if (!currentPrompt.trim()) {
+    const promptForRequest = getLivePromptValue();
+    setPrompts((current) => (current[mode] === promptForRequest ? current : { ...current, [mode]: promptForRequest }));
+    if (!promptForRequest.trim()) {
       setGenerationNotice({ type: "error", text: t.enterPrompt });
       return;
     }
@@ -1034,7 +1042,7 @@ export default function Home() {
           mode,
           modelId: selectedImageModelId,
           ...(ENABLE_IMAGE_SIZE_SELECTOR ? { size: selectedImageSize } : {}),
-          prompt: currentPrompt,
+          prompt: promptForRequest,
           referenceImages: mode === "i2i" ? uploadedImages : [],
         }),
         });
@@ -1060,7 +1068,7 @@ export default function Home() {
     } finally {
       setIsGeneratingImage(false);
     }
-  }, [billingCopy.insufficientCredits, currentCost, currentPrompt, mode, selectedImageModelId, selectedImageSize, t.enterPrompt, t.generateFailed, t.generateSuccess, t.imagePreviewUnavailable, t.unexpectedPayload, t.uploadHint, uploadedImages, user]);
+  }, [billingCopy.insufficientCredits, currentCost, getLivePromptValue, mode, selectedImageModelId, selectedImageSize, t.enterPrompt, t.generateFailed, t.generateSuccess, t.imagePreviewUnavailable, t.unexpectedPayload, t.uploadHint, uploadedImages, user]);
 
   useEffect(() => {
     if (user && pendingGenerateAfterLogin && !isGeneratingImage) {
@@ -1186,7 +1194,9 @@ export default function Home() {
   }
 
   function startRenderIntent() {
-    if (!currentPrompt.trim()) {
+    const promptForRequest = getLivePromptValue();
+    setPrompts((current) => (current[mode] === promptForRequest ? current : { ...current, [mode]: promptForRequest }));
+    if (!promptForRequest.trim()) {
       setGenerationNotice({ type: "error", text: t.enterPrompt });
       return;
     }
@@ -1557,7 +1567,9 @@ export default function Home() {
 
   async function handlePromptAssist(action: "inspire" | "enhance") {
     setGenerationNotice(null);
-    if (!currentPrompt.trim()) {
+    const promptForRequest = getLivePromptValue();
+    setPrompts((current) => (current[mode] === promptForRequest ? current : { ...current, [mode]: promptForRequest }));
+    if (!promptForRequest.trim()) {
       setGenerationNotice({ type: "error", text: t.enterPrompt });
       return;
     }
@@ -1578,7 +1590,7 @@ export default function Home() {
       const response = await fetchApi(action === "inspire" ? "/api/prompt/inspire" : "/api/prompt/enhance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: currentPrompt, mode }),
+        body: JSON.stringify({ prompt: promptForRequest, mode }),
       });
       const data = (await response.json().catch(() => null)) as PromptAssistResponse | null;
 
