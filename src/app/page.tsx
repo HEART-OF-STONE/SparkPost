@@ -132,7 +132,12 @@ type Copy = {
   credits: string;
   provider: string;
   status: string;
+  advancedSettings: string;
+  advancedSummary: string;
   imageSize: string;
+  generationCount: string;
+  referenceStrength: string;
+  comingLater: string;
   providerAvailable: string;
   providerUnavailable: string;
   providerUnknown: string;
@@ -230,7 +235,12 @@ const copy: Record<Locale, Copy> = {
     credits: "积分",
     provider: "模型服务",
     status: "状态",
+    advancedSettings: "高级参数",
+    advancedSummary: "{size} · 1 张",
     imageSize: "输出尺寸",
+    generationCount: "生成数量",
+    referenceStrength: "参考强度",
+    comingLater: "后续接入",
     providerAvailable: "Nano Banana 2",
     providerUnavailable: "不可用",
     providerUnknown: "Nano Banana 2",
@@ -326,7 +336,12 @@ const copy: Record<Locale, Copy> = {
     credits: "Credits",
     provider: "Model Service",
     status: "Status",
+    advancedSettings: "Advanced",
+    advancedSummary: "{size} · 1 image",
     imageSize: "Output Size",
+    generationCount: "Image Count",
+    referenceStrength: "Reference Strength",
+    comingLater: "Coming later",
     providerAvailable: "Nano Banana 2",
     providerUnavailable: "Unavailable",
     providerUnknown: "Nano Banana 2",
@@ -581,6 +596,7 @@ export default function Home() {
     t2i: DEFAULT_IMAGE_SIZE,
     i2i: DEFAULT_IMAGE_SIZE,
   });
+  const [isAdvancedSettingsOpen, setIsAdvancedSettingsOpen] = useState(false);
   const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
   const [isSizeSelectorOpen, setIsSizeSelectorOpen] = useState(false);
 
@@ -629,6 +645,8 @@ export default function Home() {
     : selectedImageModel?.defaultSize && supportedImageSizes.includes(selectedImageModel.defaultSize)
       ? selectedImageModel.defaultSize
       : supportedImageSizes[0] ?? DEFAULT_IMAGE_SIZE;
+  const selectedImageSizeLabel = getImageSizeLabel(selectedImageSize, locale);
+  const advancedSettingsSummary = formatTemplate(t.advancedSummary, { size: selectedImageSizeLabel });
   const currentCost = selectedImageModel?.costCredits[mode] ?? DEFAULT_IMAGE_MODEL_COST[mode];
   const modelStatusDotClass =
     systemStatus === "available"
@@ -1211,6 +1229,7 @@ export default function Home() {
     setMode(nextMode);
     setIsModelSelectorOpen(false);
     setIsSizeSelectorOpen(false);
+    setIsAdvancedSettingsOpen(false);
     setShowMentionMenu(false);
     setMentionMenuPos(null);
     isTypingRef.current = false;
@@ -1851,62 +1870,96 @@ export default function Home() {
                   </div>
                 </div>
 
-                {ENABLE_IMAGE_SIZE_SELECTOR ? (
-                  <div ref={sizeSelectorRef} className="relative">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (isGeneratingImage || supportedImageSizes.length <= 1) return;
-                        setIsModelSelectorOpen(false);
-                        setIsSizeSelectorOpen((current) => !current);
-                      }}
-                      disabled={isGeneratingImage}
-                      className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition ${isDark ? "border-white/5 bg-[#0A0A0A] hover:border-cyan-500/30" : "border-gray-200 bg-gray-50 hover:border-cyan-400/50"} ${isGeneratingImage ? "cursor-not-allowed opacity-60" : ""}`}
-                    >
-                      <div className="min-w-0">
-                        <div className={`text-[10px] uppercase tracking-wider ${isDark ? "text-[#666]" : "text-gray-500"}`}>{t.imageSize}</div>
-                        <div className={`mt-1 truncate text-xs font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
-                          {getImageSizeLabel(selectedImageSize, locale)}
-                          <span className={`ml-2 text-[10px] font-normal ${isDark ? "text-slate-500" : "text-gray-500"}`}>{selectedImageSize}</span>
-                        </div>
-                      </div>
-                      <div className={`shrink-0 transition-transform ${isSizeSelectorOpen ? "rotate-180" : ""} ${supportedImageSizes.length <= 1 ? "opacity-30" : ""} ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                        <ChevronDownIcon />
-                      </div>
-                    </button>
-
-                    {isSizeSelectorOpen && supportedImageSizes.length > 0 ? (
-                      <div className={`absolute left-0 right-0 top-[calc(100%+8px)] z-20 grid max-h-64 grid-cols-2 gap-1 overflow-y-auto rounded-xl border p-1 shadow-2xl ${isDark ? "border-white/10 bg-[#111]" : "border-gray-200 bg-white"}`}>
-                        {supportedImageSizes.map((size) => {
-                          const isSelected = size === selectedImageSize;
-
-                          return (
-                            <button
-                              key={size}
-                              type="button"
-                              onClick={() => {
-                                setSelectedImageSizeByMode((current) => ({ ...current, [mode]: size }));
-                                setIsSizeSelectorOpen(false);
-                              }}
-                              className={`rounded-lg px-2.5 py-2 text-left text-xs transition ${isDark ? "hover:bg-white/5" : "hover:bg-gray-50"} ${isSelected ? (isDark ? "bg-cyan-500/10 text-white" : "bg-cyan-50 text-gray-900") : (isDark ? "text-slate-300" : "text-gray-700")}`}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="truncate font-medium">{getImageSizeLabel(size, locale)}</span>
-                                {isSelected ? <CheckCircleIcon /> : null}
-                              </div>
-                              <div className={`${isDark ? "text-slate-500" : "text-gray-500"}`}>{size}</div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-
                 <div className={`flex rounded-xl border p-1 mt-2 ${isDark ? "border-white/5 bg-[#111]" : "border-gray-200 bg-gray-100 shadow-sm"}`}>
                   <button type="button" onClick={() => handleModeSwitch("t2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "t2i" ? (isDark ? "bg-[#222] text-white shadow-sm" : "bg-white text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><SparklesIcon />{t.t2iMode}</button>
                   <button type="button" onClick={() => handleModeSwitch("i2i")} className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "i2i" ? (isDark ? "bg-[#222] text-white shadow-sm" : "bg-white text-gray-900 shadow-sm") : (isDark ? "text-slate-500 hover:text-white" : "text-gray-500 hover:text-gray-900")}`}><ImageIcon />{t.i2iMode}</button>
                 </div>
+
+                {ENABLE_IMAGE_SIZE_SELECTOR ? (
+                  <div className={`rounded-xl border ${isDark ? "border-white/5 bg-[#0A0A0A]" : "border-gray-200 bg-gray-50"}`}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsModelSelectorOpen(false);
+                        setIsSizeSelectorOpen(false);
+                        setIsAdvancedSettingsOpen((current) => !current);
+                      }}
+                      className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
+                    >
+                      <div className="min-w-0">
+                        <div className={`text-[10px] uppercase tracking-wider ${isDark ? "text-[#666]" : "text-gray-500"}`}>{t.advancedSettings}</div>
+                        <div className={`mt-1 truncate text-xs font-medium ${isDark ? "text-slate-300" : "text-gray-700"}`}>{advancedSettingsSummary}</div>
+                      </div>
+                      <div className={`shrink-0 transition-transform ${isAdvancedSettingsOpen ? "rotate-180" : ""} ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        <ChevronDownIcon />
+                      </div>
+                    </button>
+
+                    {isAdvancedSettingsOpen ? (
+                      <div className={`space-y-3 border-t px-3 pb-3 pt-3 ${isDark ? "border-white/5" : "border-gray-200"}`}>
+                        <div ref={sizeSelectorRef} className="relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isGeneratingImage || supportedImageSizes.length <= 1) return;
+                              setIsSizeSelectorOpen((current) => !current);
+                            }}
+                            disabled={isGeneratingImage}
+                            className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left transition ${isDark ? "border-white/5 bg-black/20 hover:border-cyan-500/30" : "border-gray-200 bg-white hover:border-cyan-400/50"} ${isGeneratingImage ? "cursor-not-allowed opacity-60" : ""}`}
+                          >
+                            <div className="min-w-0">
+                              <div className={`text-[10px] uppercase tracking-wider ${isDark ? "text-[#666]" : "text-gray-500"}`}>{t.imageSize}</div>
+                              <div className={`mt-1 truncate text-xs font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                                {selectedImageSizeLabel}
+                                <span className={`ml-2 text-[10px] font-normal ${isDark ? "text-slate-500" : "text-gray-500"}`}>{selectedImageSize}</span>
+                              </div>
+                            </div>
+                            <div className={`shrink-0 transition-transform ${isSizeSelectorOpen ? "rotate-180" : ""} ${supportedImageSizes.length <= 1 ? "opacity-30" : ""} ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                              <ChevronDownIcon />
+                            </div>
+                          </button>
+
+                          {isSizeSelectorOpen && supportedImageSizes.length > 0 ? (
+                            <div className={`absolute left-0 right-0 top-[calc(100%+8px)] z-20 grid max-h-64 grid-cols-2 gap-1 overflow-y-auto rounded-xl border p-1 shadow-2xl ${isDark ? "border-white/10 bg-[#111]" : "border-gray-200 bg-white"}`}>
+                              {supportedImageSizes.map((size) => {
+                                const isSelected = size === selectedImageSize;
+
+                                return (
+                                  <button
+                                    key={size}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedImageSizeByMode((current) => ({ ...current, [mode]: size }));
+                                      setIsSizeSelectorOpen(false);
+                                    }}
+                                    className={`rounded-lg px-2.5 py-2 text-left text-xs transition ${isDark ? "hover:bg-white/5" : "hover:bg-gray-50"} ${isSelected ? (isDark ? "bg-cyan-500/10 text-white" : "bg-cyan-50 text-gray-900") : (isDark ? "text-slate-300" : "text-gray-700")}`}
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="truncate font-medium">{getImageSizeLabel(size, locale)}</span>
+                                      {isSelected ? <CheckCircleIcon /> : null}
+                                    </div>
+                                    <div className={`${isDark ? "text-slate-500" : "text-gray-500"}`}>{size}</div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className={`rounded-lg border px-3 py-2 ${isDark ? "border-white/5 bg-black/20" : "border-gray-200 bg-white"}`}>
+                            <div className={`text-[10px] uppercase tracking-wider ${isDark ? "text-[#666]" : "text-gray-500"}`}>{t.generationCount}</div>
+                            <div className={`mt-1 text-xs font-medium ${isDark ? "text-slate-300" : "text-gray-700"}`}>1</div>
+                          </div>
+                          <div className={`rounded-lg border px-3 py-2 ${isDark ? "border-white/5 bg-black/20" : "border-gray-200 bg-white"}`}>
+                            <div className={`text-[10px] uppercase tracking-wider ${isDark ? "text-[#666]" : "text-gray-500"}`}>{mode === "i2i" ? t.referenceStrength : t.comingLater}</div>
+                            <div className={`mt-1 text-xs font-medium ${isDark ? "text-slate-300" : "text-gray-700"}`}>{t.comingLater}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 {renderReferenceUpload()}
 

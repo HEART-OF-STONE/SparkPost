@@ -56,6 +56,7 @@ playwright-report/
 test-results/
 .playwright-cli/
 .local-admin/
+start-sparkpost-preview.ps1
 
 # TypeScript incremental build cache
 *.tsbuildinfo
