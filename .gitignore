@@ -54,8 +54,12 @@ Thumbs.db
 # test artifacts
 playwright-report/
 test-results/
+.playwright-cli/
+.local-admin/
 
 # TypeScript incremental build cache
 *.tsbuildinfo
 .pages/
 .dev.vars
+.wrangler/
+workers/api/.wrangler/

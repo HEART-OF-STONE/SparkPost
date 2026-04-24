@@ -363,17 +363,47 @@ test("GET /api/models/image returns registered image models", async () => {
   const worker = await loadWorker();
   const response = await worker.fetch(new Request("https://sparkpost.test/api/models/image"), {
     IMAGE_DEFAULT_MODEL_ID: "gpt-image-2",
+    TEXT_TO_IMAGE_COST: "10",
+    IMAGE_TO_IMAGE_COST: "15",
   });
   const result = await readJsonResponse<{
     ok: boolean;
     defaultModelId: string;
-    items: Array<{ id: string; label: string; provider: string; model: string; isDefault: boolean }>;
+    items: Array<{
+      id: string;
+      label: string;
+      provider: string;
+      model: string;
+      isDefault: boolean;
+      supportedSizes: string[];
+      defaultSize: string;
+      costCredits: { t2i: number | null; i2i: number | null };
+    }>;
   }>(response);
 
   assert.equal(result.status, 200);
   assert.equal(result.body.ok, true);
   assert.equal(result.body.defaultModelId, "gpt-image-2");
-  assert.ok(result.body.items.some((item) => item.id === "gpt-image-2" && item.provider === "relay" && item.model === "gpt-image-1" && item.isDefault));
+  assert.ok(result.body.items.some((item) => item.id === "gpt-image-2" && item.provider === "relay" && item.model === "gpt-image-2" && item.isDefault));
+  assert.deepEqual(result.body.items.find((item) => item.id === "gpt-image-2")?.supportedSizes, [
+    "auto",
+    "1024x1024",
+    "1536x1024",
+    "1024x1536",
+    "2048x2048",
+    "2048x1152",
+    "3840x2160",
+    "2160x3840",
+  ]);
+  assert.equal(result.body.items.find((item) => item.id === "gpt-image-2")?.defaultSize, "auto");
+  assert.deepEqual(result.body.items.find((item) => item.id === "gpt-image-2")?.costCredits, {
+    t2i: 10,
+    i2i: 15,
+  });
+  assert.deepEqual(result.body.items.find((item) => item.id === "dall-e-3")?.costCredits, {
+    t2i: 10,
+    i2i: null,
+  });
 });
 
 test("POST /api/generate/image stores asset in R2 and returns Worker asset URL", async () => {
@@ -509,9 +539,10 @@ test("POST /api/generate/image can target the GPT-Image relay model via modelId"
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     if (url === "https://relay.example.com/v1/images/generations") {
       const request = input instanceof Request ? input : new Request(url, init);
-      const payload = await request.json() as { model?: string; prompt?: string };
-      assert.equal(payload.model, "gpt-image-1");
+      const payload = await request.json() as { model?: string; prompt?: string; size?: string };
+      assert.equal(payload.model, "gpt-image-2");
       assert.equal(typeof payload.prompt, "string");
+      assert.equal(payload.size, "1536x1024");
       return new Response(
         JSON.stringify({
           data: [
@@ -539,14 +570,18 @@ test("POST /api/generate/image can target the GPT-Image relay model via modelId"
           "content-type": "application/json",
           cookie: `sparkpost_session=${session}`,
         },
-        body: JSON.stringify({ modelId: "gpt-image-2", prompt: "a premium product render with sharp reflections" }),
+        body: JSON.stringify({
+          modelId: "gpt-image-2",
+          prompt: "a premium product render with sharp reflections",
+          size: "1536x1024",
+        }),
       }),
       {
         SPARKPOST_DB: createFakeDb(state),
         SPARKPOST_R2: fakeR2.bucket,
         SESSION_SECRET: secret,
-        RELAY_IMAGE_API_KEY: "relay-test-key",
-        RELAY_IMAGE_BASE_URL: "https://relay.example.com/v1",
+        RELAY_IMAGE_API_KEY_MICU: "relay-test-key",
+        RELAY_IMAGE_BASE_URL_MICU: "https://relay.example.com/v1",
         TEXT_TO_IMAGE_COST: "10",
       },
     );
@@ -563,7 +598,7 @@ test("POST /api/generate/image can target the GPT-Image relay model via modelId"
     assert.equal(result.status, 200);
     assert.equal(result.body.ok, true);
     assert.equal(result.body.task.status, "succeeded");
-    assert.equal(result.body.task.model, "gpt-image-1");
+    assert.equal(result.body.task.model, "gpt-image-2");
     assert.equal(result.body.task.remainingCredits, 10);
   } finally {
     globalThis.fetch = originalFetch;
@@ -619,6 +654,7 @@ test("POST /api/generate/image supports image-to-image requests", async () => {
       assert.match(String(compiledPrompt), /Follow the pose, composition, or camera language from R2\./);
       assert.match(String(compiledPrompt), /Preserve the key identity, silhouette, and recognizable subject cues from R1\./);
       assert.match(String(compiledPrompt), /User intent:\r?\n参考@R2，将@R1换成@R2的风格姿势，并保留@R1的主体轮廓/);
+      assert.equal(formData.get("size"), "1024x1536");
       const files = formData.getAll("image");
       assert.equal(files.length, 2);
       const uploadedImage = files[0];
@@ -659,6 +695,7 @@ test("POST /api/generate/image supports image-to-image requests", async () => {
         body: JSON.stringify({
           mode: "i2i",
           prompt: "参考@R2，将@R1换成@R2的风格姿势，并保留@R1的主体轮廓",
+          size: "1024x1536",
           referenceImages: [referenceImage, styleReferenceImage],
         }),
       }),
@@ -1162,4 +1199,30 @@ test("GET /api/assets/* returns stored image bytes from R2", async () => {
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("content-type"), "image/png");
   assert.equal(await response.text(), "binary-image");
+});
+
+test("POST protected API routes reject disallowed browser origins", async () => {
+  const worker = await loadWorker();
+  const response = await worker.fetch(
+    new Request("https://api.776607.xyz/api/prompt/inspire", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://attacker.example",
+      },
+      body: JSON.stringify({
+        mode: "t2i",
+        prompt: "A test prompt",
+      }),
+    }),
+    {
+      ALLOWED_ORIGINS: "https://776607.xyz,https://sparkpost.pages.dev",
+      DEEPSEEK_API_KEY: "deepseek-test-key",
+      DEEPSEEK_BASE_URL: "https://deepseek.example.com/v1",
+    },
+  );
+
+  const result = await readJsonResponse<{ error: string }>(response);
+  assert.equal(result.status, 403);
+  assert.equal(result.body.error, "Forbidden origin.");
 });

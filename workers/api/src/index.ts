@@ -35,6 +35,11 @@ export interface Env {
     IMAGE_BASE_URL?: string;
     OPENAI_IMAGE_API_KEY?: string;
     RELAY_IMAGE_API_KEY?: string;
+    RELAY_IMAGE_API_KEY_MICU?: string;
+    GPT_IMAGE_RELAY_API_KEY?: string;
+    RELAY_IMAGE_BASE_URL_MICU?: string;
+    IMAGE_RELAY_BASE_URL_MICU?: string;
+    GPT_IMAGE_RELAY_BASE_URL?: string;
     RELAY_IMAGE_BASE_URL?: string;
     OPENAI_API_KEY?: string;
     DEEPSEEK_API_KEY?: string;
@@ -58,6 +63,7 @@ export interface Env {
   AUTH_SESSION_TTL_DAYS?: string;
   SIGNUP_BONUS_CREDITS?: string;
   DAILY_CHECK_IN_CREDITS?: string;
+  ALLOWED_ORIGINS?: string;
 }
 
 type JsonRecord = Record<string, unknown>;
@@ -108,6 +114,17 @@ type PromptAssistAction = "inspire" | "enhance";
 
 type ImageMode = "t2i" | "i2i";
 type ImageProviderKey = "official" | "relay";
+type ImageSize =
+  | "auto"
+  | "1024x1024"
+  | "1536x1024"
+  | "1024x1536"
+  | "2048x2048"
+  | "2048x1152"
+  | "3840x2160"
+  | "2160x3840"
+  | "1792x1024"
+  | "1024x1792";
 
 type ImageModelDefinition = {
   id: string;
@@ -115,6 +132,9 @@ type ImageModelDefinition = {
   provider: ImageProviderKey;
   remoteModel: string;
   supports: Record<ImageMode, boolean>;
+  supportedSizes: ImageSize[];
+  defaultSize: ImageSize;
+  relayConfigKey?: "default" | "micu";
 };
 
 type ResolvedImageConfig = {
@@ -127,7 +147,11 @@ type ResolvedImageConfig = {
   textToImageCost: number;
   imageToImageCost: number;
   supports: Record<ImageMode, boolean>;
+  supportedSizes: ImageSize[];
+  defaultSize: ImageSize;
   status: "available" | "unavailable";
+  statusCode?: string;
+  statusMessage?: string;
 };
 
 type PromptAssistConfig = {
@@ -200,6 +224,8 @@ type CreditPackageDefinition = {
   priceUsd: string;
 };
 
+const withErrorCode = (code: string, error: string) => ({ code, error });
+
 type CreditSummaryResponse = {
   creditBalance: number;
   hasCheckedInToday: boolean;
@@ -241,6 +267,37 @@ const DEFAULT_SESSION_TTL_DAYS = 7;
 const DEFAULT_SIGNUP_BONUS_CREDITS = 20;
 const DEFAULT_DAILY_CHECK_IN_CREDITS = 20;
 const DEFAULT_CREDIT_TIMEZONE = "Asia/Shanghai";
+const DEFAULT_ALLOWED_ORIGINS = [
+  "https://776607.xyz",
+  "https://www.776607.xyz",
+  "https://sparkpost.pages.dev",
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:3002",
+  "http://localhost:3003",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3001",
+  "http://127.0.0.1:3002",
+  "http://127.0.0.1:3003",
+];
+const PROTECTED_ROUTE_PREFIXES = [
+  "/api/auth/",
+  "/api/credits/",
+  "/api/generate/image",
+  "/api/prompt/",
+];
+const GPT_IMAGE_SIZES: ImageSize[] = [
+  "auto",
+  "1024x1024",
+  "1536x1024",
+  "1024x1536",
+  "2048x2048",
+  "2048x1152",
+  "3840x2160",
+  "2160x3840",
+];
+const DALLE_IMAGE_SIZES: ImageSize[] = ["1024x1024", "1792x1024", "1024x1792"];
+const DEFAULT_IMAGE_SIZE: ImageSize = "auto";
 const DAILY_CHECK_IN_EXPIRY_DAYS = 7;
 const SESSION_COOKIE_NAME = "sparkpost_session";
 const SESSION_COOKIE_PATH = "/";
@@ -258,13 +315,19 @@ const IMAGE_MODEL_REGISTRY: Record<string, ImageModelDefinition> = {
     provider: "relay",
     remoteModel: "gemini-3.1-flash-image-openai",
     supports: { t2i: true, i2i: true },
+    supportedSizes: GPT_IMAGE_SIZES,
+    defaultSize: DEFAULT_IMAGE_SIZE,
+    relayConfigKey: "default",
   },
   "gpt-image-2": {
     id: "gpt-image-2",
     label: "GPT-Image 2",
     provider: "relay",
-    remoteModel: "gpt-image-1",
+    remoteModel: "gpt-image-2",
     supports: { t2i: true, i2i: true },
+    supportedSizes: GPT_IMAGE_SIZES,
+    defaultSize: DEFAULT_IMAGE_SIZE,
+    relayConfigKey: "micu",
   },
   "dall-e-3": {
     id: "dall-e-3",
@@ -272,13 +335,14 @@ const IMAGE_MODEL_REGISTRY: Record<string, ImageModelDefinition> = {
     provider: "official",
     remoteModel: "dall-e-3",
     supports: { t2i: true, i2i: false },
+    supportedSizes: DALLE_IMAGE_SIZES,
+    defaultSize: "1024x1024",
   },
 };
 
 const IMAGE_MODEL_ALIAS_MAP: Record<string, string> = {
   "gemini-3.1-flash-image-openai": "nano-banana-2",
   "gemini-3.1-image-openai": "nano-banana-2",
-  "gpt-image-1": "gpt-image-2",
   "gpt-image-2": "gpt-image-2",
   "dall-e-3": "dall-e-3",
 };
@@ -319,6 +383,29 @@ const getDefaultImageModelId = (env: Env) => {
   return DEFAULT_IMAGE_MODEL_ID;
 };
 
+const getRelayProviderConfig = (env: Env, registryModel?: ImageModelDefinition) => {
+  if (registryModel?.relayConfigKey === "micu") {
+    return {
+      apiKey: env.RELAY_IMAGE_API_KEY_MICU?.trim() || "",
+      baseUrl: (
+        env.RELAY_IMAGE_BASE_URL_MICU?.trim() ||
+        env.IMAGE_RELAY_BASE_URL_MICU?.trim() ||
+        ""
+      ).replace(/\/$/, ""),
+    };
+  }
+
+  return {
+    apiKey: env.RELAY_IMAGE_API_KEY?.trim() || env.IMAGE_API_KEY?.trim() || "",
+    baseUrl: (
+      env.RELAY_IMAGE_BASE_URL_MICU?.trim() ||
+      env.IMAGE_RELAY_BASE_URL_MICU?.trim() ||
+      env.RELAY_IMAGE_BASE_URL?.trim() ||
+      env.IMAGE_BASE_URL?.trim() ||
+      ""
+    ).replace(/\/$/, ""),
+  };
+};
 // 中文说明：
 // 这里优先使用新的 modelId 注册表来选择图片模型；如果线上仍然只配置了旧的 IMAGE_MODEL，
 // 也会回退到旧逻辑，避免现有 Cloudflare 环境立刻失效。
@@ -329,21 +416,45 @@ const getImageConfig = (env: Env, requestedModelId?: string): ResolvedImageConfi
   const textToImageCost = getNumberEnv(env.TEXT_TO_IMAGE_COST, DEFAULT_TEXT_TO_IMAGE_COST);
   const imageToImageCost = getNumberEnv(env.IMAGE_TO_IMAGE_COST, DEFAULT_IMAGE_TO_IMAGE_COST);
   const openAiApiKey = env.OPENAI_IMAGE_API_KEY?.trim() || env.IMAGE_API_KEY?.trim() || "";
-  const relayApiKey = env.RELAY_IMAGE_API_KEY?.trim() || env.IMAGE_API_KEY?.trim() || "";
-  const relayBaseUrl = (env.RELAY_IMAGE_BASE_URL?.trim() || env.IMAGE_BASE_URL?.trim() || "").replace(/\/$/, "");
   const registryModel = IMAGE_MODEL_REGISTRY[resolvedModelId];
+  const relayProviderConfig = getRelayProviderConfig(env, registryModel);
 
   const effectiveBackend = registryModel?.provider ?? (backend === "relay" ? "relay" : "official");
   const effectiveModel = registryModel?.remoteModel ?? (env.IMAGE_MODEL?.trim() || DEFAULT_IMAGE_MODEL);
   const providerConfig =
     effectiveBackend === "relay"
       ? {
-          apiKey: relayApiKey,
-          baseUrl: relayBaseUrl,
+          apiKey: relayProviderConfig.apiKey,
+          baseUrl: relayProviderConfig.baseUrl,
         }
       : {
           apiKey: openAiApiKey,
           baseUrl: DEFAULT_OPENAI_IMAGE_BASE_URL,
+        };
+
+  const statusReason =
+    effectiveBackend === "official"
+      ? {
+          code: providerConfig.apiKey.length > 0 ? undefined : "OFFICIAL_IMAGE_API_KEY_MISSING",
+          message: providerConfig.apiKey.length > 0 ? undefined : "Official image API key is not configured.",
+        }
+      : {
+          code:
+            providerConfig.baseUrl.length === 0
+              ? "RELAY_BASE_URL_MISSING"
+              : providerConfig.apiKey.length === 0
+                ? registryModel?.relayConfigKey === "micu"
+                  ? "RELAY_IMAGE_API_KEY_MICU_MISSING"
+                  : "RELAY_IMAGE_API_KEY_MISSING"
+                : undefined,
+          message:
+            providerConfig.baseUrl.length === 0
+              ? "Relay base URL is not configured."
+              : providerConfig.apiKey.length === 0
+                ? registryModel?.relayConfigKey === "micu"
+                  ? "Relay image API key for the micu provider is not configured."
+                  : "Relay image API key is not configured."
+                : undefined,
         };
 
   return {
@@ -356,6 +467,8 @@ const getImageConfig = (env: Env, requestedModelId?: string): ResolvedImageConfi
     textToImageCost,
     imageToImageCost,
     supports: registryModel?.supports ?? { t2i: true, i2i: true },
+    supportedSizes: registryModel?.supportedSizes ?? GPT_IMAGE_SIZES,
+    defaultSize: registryModel?.defaultSize ?? DEFAULT_IMAGE_SIZE,
     status:
       (
         (effectiveBackend === "official" && providerConfig.apiKey.length > 0) ||
@@ -363,6 +476,8 @@ const getImageConfig = (env: Env, requestedModelId?: string): ResolvedImageConfi
       )
         ? "available"
         : "unavailable",
+    statusCode: statusReason.code,
+    statusMessage: statusReason.message,
   };
 };
 
@@ -502,22 +617,75 @@ const sendVerificationCodeEmail = async (email: string, code: string, env: Env) 
   }
 };
 
-const getCorsHeaders = (request: Request) => {
+const normalizeOrigin = (value: string | null) => {
+  if (!value) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+};
+
+const getAllowedOrigins = (env: Env) => {
+  const configuredOrigins = (env.ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((item) => normalizeOrigin(item.trim()))
+    .filter((item): item is string => Boolean(item));
+
+  return new Set(configuredOrigins.length > 0 ? configuredOrigins : DEFAULT_ALLOWED_ORIGINS);
+};
+
+const getRequestSourceOrigin = (request: Request) => {
+  const origin = normalizeOrigin(request.headers.get("origin"));
+  if (origin) return origin;
+
+  const referer = request.headers.get("referer");
+  if (!referer) return null;
+
+  try {
+    return new URL(referer).origin;
+  } catch {
+    return null;
+  }
+};
+
+const isLocalOrTestHost = (hostname: string) =>
+  hostname === "localhost" ||
+  hostname === "127.0.0.1" ||
+  hostname.endsWith(".test");
+
+const isProtectedRoute = (request: Request, url: URL) =>
+  request.method !== "GET" &&
+  PROTECTED_ROUTE_PREFIXES.some((prefix) => url.pathname.startsWith(prefix));
+
+const isRequestFromAllowedOrigin = (request: Request, env: Env, url: URL) => {
+  if (!isProtectedRoute(request, url)) return true;
+  if (isLocalOrTestHost(url.hostname)) return true;
+
+  const sourceOrigin = getRequestSourceOrigin(request);
+  if (!sourceOrigin) return false;
+
+  return getAllowedOrigins(env).has(sourceOrigin);
+};
+
+const getCorsHeaders = (request: Request, env: Env) => {
   const origin = request.headers.get("origin");
+  const normalizedOrigin = normalizeOrigin(origin);
+  const allowOrigin = normalizedOrigin && getAllowedOrigins(env).has(normalizedOrigin);
 
   return {
-    "access-control-allow-origin": origin ?? "*",
-    "access-control-allow-credentials": origin ? "true" : "false",
+    ...(allowOrigin ? { "access-control-allow-origin": normalizedOrigin } : {}),
+    "access-control-allow-credentials": allowOrigin ? "true" : "false",
     "access-control-allow-methods": "GET,POST,OPTIONS",
     "access-control-allow-headers": "Content-Type",
     vary: "Origin",
   };
 };
 
-const withCors = (request: Request, response: Response) => {
+const withCors = (request: Request, response: Response, env: Env) => {
   const headers = new Headers(response.headers);
 
-  for (const [key, value] of Object.entries(getCorsHeaders(request))) {
+  for (const [key, value] of Object.entries(getCorsHeaders(request, env))) {
     headers.set(key, value);
   }
 
@@ -1528,10 +1696,20 @@ const isRecord = (input: unknown): input is Record<string, unknown> =>
 const isSupportedReferenceImage = (value: string) =>
   /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(value);
 
+const normalizeImageSize = (value: unknown) => (typeof value === "string" ? value.trim().toLowerCase() : "");
+
 const validateGenerateImageInput = (input: unknown) => {
   const prompt = isRecord(input) && "prompt" in input ? input.prompt : undefined;
   const mode = isRecord(input) && "mode" in input ? input.mode : undefined;
   const modelId = isRecord(input) && "modelId" in input ? input.modelId : undefined;
+  const requestedSize =
+    isRecord(input) && "size" in input
+      ? input.size
+      : isRecord(input) && "imageSize" in input
+        ? input.imageSize
+        : isRecord(input) && "resolution" in input
+          ? input.resolution
+          : undefined;
   const referenceImages = isRecord(input) && "referenceImages" in input ? input.referenceImages : undefined;
 
   if (typeof prompt !== "string") {
@@ -1549,12 +1727,22 @@ const validateGenerateImageInput = (input: unknown) => {
   const normalizedMode =
     mode === "i2i" || mode === "t2i" ? mode : Array.isArray(referenceImages) && referenceImages.length > 0 ? "i2i" : "t2i";
   const normalizedModelId = typeof modelId === "string" && modelId.trim().length > 0 ? modelId.trim().toLowerCase() : undefined;
+  const normalizedSize = normalizeImageSize(requestedSize);
+  const size = normalizedSize.length > 0 ? (normalizedSize as ImageSize) : undefined;
+  const supportedSizes = IMAGE_MODEL_REGISTRY[normalizedModelId ?? DEFAULT_IMAGE_MODEL_ID]?.supportedSizes ?? GPT_IMAGE_SIZES;
+  if (size && !supportedSizes.includes(size)) {
+    return {
+      ok: false as const,
+      error: `Unsupported image size. Supported sizes: ${supportedSizes.join(", ")}.`,
+    };
+  }
 
   if (normalizedMode === "t2i") {
     return {
       ok: true as const,
       mode: normalizedMode,
       modelId: normalizedModelId,
+      size,
       prompt: normalizedPrompt,
       referenceImages: [] as string[],
     };
@@ -1576,6 +1764,7 @@ const validateGenerateImageInput = (input: unknown) => {
     ok: true as const,
     mode: normalizedMode,
     modelId: normalizedModelId,
+    size,
     prompt: normalizedPrompt,
     referenceImages,
   };
@@ -1815,7 +2004,11 @@ const fetchRemoteImageBytes = async (url: string) => {
   return { bytes, mimeType };
 };
 
-const callOfficialImageProvider = async (prompt: string, imageConfig: ResolvedImageConfig): Promise<ProviderResult> => {
+const callOfficialImageProvider = async (
+  prompt: string,
+  imageConfig: ResolvedImageConfig,
+  size: ImageSize,
+): Promise<ProviderResult> => {
   if (imageConfig.status !== "available") {
     throw new ImageGenerationConfigError("Image generation provider is not configured.");
   }
@@ -1826,7 +2019,7 @@ const callOfficialImageProvider = async (prompt: string, imageConfig: ResolvedIm
       "Content-Type": "application/json",
       Authorization: `Bearer ${imageConfig.apiKey}`,
     },
-    body: JSON.stringify({ model: imageConfig.model, prompt }),
+    body: JSON.stringify({ model: imageConfig.model, prompt, size }),
   });
 
   const body = (await response.json().catch(() => null)) as
@@ -1859,6 +2052,7 @@ const callOfficialImageEditProvider = async (
   prompt: string,
   referenceImages: string[],
   imageConfig: ResolvedImageConfig,
+  size: ImageSize,
 ): Promise<ProviderResult> => {
   if (imageConfig.status !== "available") {
     throw new ImageGenerationConfigError("Image generation provider is not configured.");
@@ -1869,6 +2063,7 @@ const callOfficialImageEditProvider = async (
     const formData = new FormData();
     formData.set("model", imageConfig.model);
     formData.set("prompt", prompt);
+    formData.set("size", size);
 
     referenceImages.forEach((imageUrl, index) => {
       const mimeType = getMimeTypeFromDataUrl(imageUrl);
@@ -1931,17 +2126,21 @@ const callOfficialImageEditProvider = async (
 const generateProviderImage = async (
   prompt: string,
   env: Env,
-  options?: { mode?: ImageMode; modelId?: string; referenceImages?: string[] },
+  options?: { mode?: ImageMode; modelId?: string; referenceImages?: string[]; size?: ImageSize },
 ) => {
   const imageConfig = getImageConfig(env, options?.modelId);
+  const size = options?.size ?? imageConfig.defaultSize;
+  if (!imageConfig.supportedSizes.includes(size)) {
+    throw new ImageGenerationConfigError(`Selected image model does not support size ${size}.`);
+  }
   if (!imageConfig.supports[options?.mode ?? "t2i"]) {
     throw new ImageGenerationConfigError(`Selected image model does not support ${options?.mode ?? "t2i"}.`);
   }
   if (["official", "relay"].includes(imageConfig.backend)) {
     if (options?.mode === "i2i") {
-      return callOfficialImageEditProvider(prompt, options.referenceImages ?? [], imageConfig);
+      return callOfficialImageEditProvider(prompt, options.referenceImages ?? [], imageConfig, size);
     }
-    return callOfficialImageProvider(prompt, imageConfig);
+    return callOfficialImageProvider(prompt, imageConfig, size);
   }
   throw new ImageGenerationConfigError(`Unsupported IMAGE_BACKEND: ${imageConfig.backend}`);
 };
@@ -2019,6 +2218,7 @@ const generateTextToImageForUser = async (
   prompt: string,
   env: Env,
   modelId?: string,
+  size?: ImageSize,
 ) => {
   if (!env.SPARKPOST_DB) {
     throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
@@ -2056,7 +2256,7 @@ const generateTextToImageForUser = async (
   ).run();
 
   try {
-    const providerResult = await generateProviderImage(compiledPrompt, env, { mode: "t2i", modelId });
+    const providerResult = await generateProviderImage(compiledPrompt, env, { mode: "t2i", modelId, size });
     const storedAsset = await persistGeneratedAsset(request, env, userId, taskId, providerResult);
     const completedAt = new Date();
     const remainingCredits = await spendCreditsForUser(userId, env, {
@@ -2115,6 +2315,7 @@ const generateImageToImageForUser = async (
   referenceImages: string[],
   env: Env,
   modelId?: string,
+  size?: ImageSize,
 ) => {
   if (!env.SPARKPOST_DB) {
     throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
@@ -2156,6 +2357,7 @@ const generateImageToImageForUser = async (
     const providerResult = await generateProviderImage(compiledPrompt, env, {
       mode: "i2i",
       modelId,
+      size,
       referenceImages,
     });
     const storedAsset = await persistGeneratedAsset(request, env, userId, taskId, providerResult);
@@ -2448,8 +2650,10 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
       if (!input.ok) return json({ error: input.error }, { status: 400 });
 
       const authenticatedUser = await getAuthenticatedUser(request, env);
-      if (!authenticatedUser.ok) return json({ error: "Generation service is temporarily unavailable." }, { status: 503 });
-      if (!authenticatedUser.user) return json({ error: "Authentication required." }, { status: 401 });
+      if (!authenticatedUser.ok) {
+        return json(withErrorCode("AUTH_SERVICE_UNAVAILABLE", "Generation service is temporarily unavailable."), { status: 503 });
+      }
+      if (!authenticatedUser.user) return json(withErrorCode("AUTH_REQUIRED", "Authentication required."), { status: 401 });
 
       try {
         const task =
@@ -2461,19 +2665,20 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
                   input.referenceImages,
                   env,
                   input.modelId,
+                  input.size,
                 )
-              : await generateTextToImageForUser(request, authenticatedUser.user.id, input.prompt, env, input.modelId);
+              : await generateTextToImageForUser(request, authenticatedUser.user.id, input.prompt, env, input.modelId, input.size);
         return json({ ok: true, task });
       } catch (error) {
         if (error instanceof ImageGenerationCreditsError) {
-          return json({ error: error.message }, { status: 402 });
+          return json(withErrorCode("INSUFFICIENT_CREDITS", error.message), { status: 402 });
         }
         if (error instanceof ImageGenerationAuthError) {
-          return json({ error: error.message }, { status: 403 });
+          return json(withErrorCode("IMAGE_PROVIDER_AUTH_FAILED", error.message), { status: 403 });
         }
         if (error instanceof ImageGenerationConfigError || error instanceof ImageGenerationProviderError) {
           console.error("Image generation failed.", error);
-          return json({ error: "Image generation service is temporarily unavailable." }, { status: 503 });
+          return json(withErrorCode("IMAGE_PROVIDER_UNAVAILABLE", "Image generation service is temporarily unavailable."), { status: 503 });
         }
         throw error;
       }
@@ -2537,14 +2742,26 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
         return json({
           ok: true,
           defaultModelId,
-          items: Object.values(IMAGE_MODEL_REGISTRY).map((item) => ({
-            id: item.id,
-            label: item.label,
-            provider: item.provider,
-            model: item.remoteModel,
-            supports: item.supports,
-            isDefault: item.id === defaultModelId,
-          })),
+          items: Object.values(IMAGE_MODEL_REGISTRY).map((item) => {
+            const itemConfig = getImageConfig(env, item.id);
+            return {
+              id: item.id,
+              label: item.label,
+              provider: item.provider,
+              model: item.remoteModel,
+              supports: item.supports,
+              isDefault: item.id === defaultModelId,
+              supportedSizes: item.supportedSizes,
+              defaultSize: item.defaultSize,
+              status: itemConfig.status,
+              code: itemConfig.statusCode ?? null,
+              message: itemConfig.statusMessage ?? null,
+              costCredits: {
+                t2i: item.supports.t2i ? itemConfig.textToImageCost : null,
+                i2i: item.supports.i2i ? itemConfig.imageToImageCost : null,
+              },
+            };
+          }),
         });
       },
     },
@@ -2552,25 +2769,33 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    if (request.method === "OPTIONS") {
-      return withCors(request, new Response(null, { status: 204 }));
-    }
-
     const url = new URL(request.url);
 
+    if (request.method === "OPTIONS") {
+      if (!isRequestFromAllowedOrigin(request, env, url)) {
+        return withCors(request, json({ error: "Forbidden origin." }, { status: 403 }), env);
+      }
+
+      return withCors(request, new Response(null, { status: 204 }), env);
+    }
+
     try {
+      if (!isRequestFromAllowedOrigin(request, env, url)) {
+        return withCors(request, json({ error: "Forbidden origin." }, { status: 403 }), env);
+      }
+
       if (request.method === "GET" && url.pathname.startsWith("/api/assets/")) {
-        return withCors(request, await getGeneratedAssetResponse(request, env, url));
+        return withCors(request, await getGeneratedAssetResponse(request, env, url), env);
       }
 
       const match = routes.find((route) => route.method === request.method && route.pathname === url.pathname);
       if (match) {
-        return withCors(request, await match.handler(request, env, url));
+        return withCors(request, await match.handler(request, env, url), env);
       }
-      return withCors(request, json({ ok: false, error: "Route not found." }, { status: 404 }));
+      return withCors(request, json({ ok: false, error: "Route not found." }, { status: 404 }), env);
     } catch (error) {
       console.error("Workers API route failed.", error);
-      return withCors(request, json({ error: "Unexpected server error." }, { status: 500 }));
+      return withCors(request, json({ error: "Unexpected server error." }, { status: 500 }), env);
     }
   },
 };
