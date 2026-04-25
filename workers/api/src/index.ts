@@ -36,6 +36,8 @@ export interface Env {
     OPENAI_IMAGE_API_KEY?: string;
     RELAY_IMAGE_API_KEY?: string;
     RELAY_IMAGE_API_KEY_MICU?: string;
+    GPT_IMAGE_2_RELAY_PROVIDER?: string;
+    GPT_IMAGE_RELAY_PROVIDER?: string;
     GPT_IMAGE_RELAY_API_KEY?: string;
     RELAY_IMAGE_BASE_URL_MICU?: string;
     IMAGE_RELAY_BASE_URL_MICU?: string;
@@ -136,8 +138,10 @@ type ImageModelDefinition = {
   supportedSizes: ImageSize[];
   defaultSize: ImageSize;
   defaultQuality?: ImageQuality;
-  relayConfigKey?: "default" | "micu";
+  relayConfigKey?: RelayConfigKey;
 };
+
+type RelayConfigKey = "default" | "micu";
 
 type ResolvedImageConfig = {
   backend: ImageProviderKey;
@@ -357,18 +361,7 @@ const IMAGE_MODEL_REGISTRY: Record<string, ImageModelDefinition> = {
   },
   "gpt-image-2": {
     id: "gpt-image-2",
-    label: "GPT-Image 2 (micu)",
-    provider: "relay",
-    remoteModel: "gpt-image-2",
-    supports: { t2i: true, i2i: true },
-    supportedSizes: GPT_IMAGE_SIZES,
-    defaultSize: DEFAULT_IMAGE_SIZE,
-    defaultQuality: "high",
-    relayConfigKey: "micu",
-  },
-  "gpt-image-2-duojie": {
-    id: "gpt-image-2-duojie",
-    label: "GPT-Image 2 (duojie)",
+    label: "GPT-Image 2",
     provider: "relay",
     remoteModel: "gpt-image2",
     supports: { t2i: true, i2i: true },
@@ -392,7 +385,7 @@ const IMAGE_MODEL_ALIAS_MAP: Record<string, string> = {
   "gemini-3.1-flash-image-openai": "nano-banana-2",
   "gemini-3.1-image-openai": "nano-banana-2",
   "gpt-image-2": "gpt-image-2",
-  "gpt-image2": "gpt-image-2-duojie",
+  "gpt-image2": "gpt-image-2",
   "dall-e-3": "dall-e-3",
 };
 
@@ -432,8 +425,34 @@ const getDefaultImageModelId = (env: Env) => {
   return DEFAULT_IMAGE_MODEL_ID;
 };
 
+const getGptImage2RelayConfigKey = (env: Env): RelayConfigKey => {
+  const configuredProvider = (
+    env.GPT_IMAGE_2_RELAY_PROVIDER?.trim() ||
+    env.GPT_IMAGE_RELAY_PROVIDER?.trim() ||
+    "duojie"
+  ).toLowerCase();
+  return configuredProvider === "micu" ? "micu" : "default";
+};
+
+const getRelayConfigKey = (env: Env, registryModel?: ImageModelDefinition): RelayConfigKey => {
+  if (registryModel?.id === "gpt-image-2") {
+    return getGptImage2RelayConfigKey(env);
+  }
+
+  return registryModel?.relayConfigKey ?? "default";
+};
+
+const getRelayRemoteModel = (env: Env, registryModel?: ImageModelDefinition) => {
+  if (registryModel?.id === "gpt-image-2" && getGptImage2RelayConfigKey(env) === "micu") {
+    return "gpt-image-2";
+  }
+
+  return registryModel?.remoteModel;
+};
+
 const getRelayProviderConfig = (env: Env, registryModel?: ImageModelDefinition) => {
-  if (registryModel?.relayConfigKey === "micu") {
+  const relayConfigKey = getRelayConfigKey(env, registryModel);
+  if (relayConfigKey === "micu") {
     return {
       apiKey: env.RELAY_IMAGE_API_KEY_MICU?.trim() || "",
       baseUrl: (
@@ -464,10 +483,11 @@ const getImageConfig = (env: Env, requestedModelId?: string): ResolvedImageConfi
   const imageToImageCost = getNumberEnv(env.IMAGE_TO_IMAGE_COST, DEFAULT_IMAGE_TO_IMAGE_COST);
   const openAiApiKey = env.OPENAI_IMAGE_API_KEY?.trim() || env.IMAGE_API_KEY?.trim() || "";
   const registryModel = IMAGE_MODEL_REGISTRY[resolvedModelId];
+  const relayConfigKey = getRelayConfigKey(env, registryModel);
   const relayProviderConfig = getRelayProviderConfig(env, registryModel);
 
   const effectiveBackend = registryModel?.provider ?? (backend === "relay" ? "relay" : "official");
-  const effectiveModel = registryModel?.remoteModel ?? (env.IMAGE_MODEL?.trim() || DEFAULT_IMAGE_MODEL);
+  const effectiveModel = getRelayRemoteModel(env, registryModel) ?? (env.IMAGE_MODEL?.trim() || DEFAULT_IMAGE_MODEL);
   const providerConfig =
     effectiveBackend === "relay"
       ? {
@@ -490,7 +510,7 @@ const getImageConfig = (env: Env, requestedModelId?: string): ResolvedImageConfi
             providerConfig.baseUrl.length === 0
               ? "RELAY_BASE_URL_MISSING"
               : providerConfig.apiKey.length === 0
-                ? registryModel?.relayConfigKey === "micu"
+                ? relayConfigKey === "micu"
                   ? "RELAY_IMAGE_API_KEY_MICU_MISSING"
                   : "RELAY_IMAGE_API_KEY_MISSING"
                 : undefined,
@@ -498,7 +518,7 @@ const getImageConfig = (env: Env, requestedModelId?: string): ResolvedImageConfi
             providerConfig.baseUrl.length === 0
               ? "Relay base URL is not configured."
               : providerConfig.apiKey.length === 0
-                ? registryModel?.relayConfigKey === "micu"
+                ? relayConfigKey === "micu"
                   ? "Relay image API key for the micu provider is not configured."
                   : "Relay image API key is not configured."
                 : undefined,
@@ -2694,7 +2714,7 @@ const getImageModelsPayload = (env: Env) => {
         id: item.id,
         label: item.label,
         provider: item.provider,
-        model: item.remoteModel,
+        model: itemConfig.model,
         supports: item.supports,
         isDefault: item.id === defaultModelId,
         supportedSizes: item.supportedSizes,
