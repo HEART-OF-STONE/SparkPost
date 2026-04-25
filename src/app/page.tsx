@@ -643,6 +643,7 @@ export default function Home() {
   const activeEditorRef = useRef<HTMLDivElement | null>(null);
   const savedRangeRef = useRef<Range | null>(null);
   const isTypingRef = useRef(false);
+  const generationHistoryAutoLoadKeyRef = useRef<string | null>(null);
 
   const rememberPromptEditor = useCallback((surface: "landing" | "workspace", editor: HTMLDivElement) => {
     activeEditorRef.current = editor;
@@ -1055,23 +1056,25 @@ export default function Home() {
     setDashboardCreditHistory(data.items);
   }, [historyFilter, locale, user]);
 
+  const generationHistoryLoadFailedText = billingCopy.generationHistoryLoadFailed;
+
   const loadGenerationHistory = useCallback(async () => {
-    if (!user) return;
+    if (!user?.id) return;
     setIsGenerationHistoryLoading(true);
     setGenerationHistoryNotice(null);
     try {
       const response = await fetchApi("/api/generations/history?limit=24", { cache: "no-store" });
       const data = (await response.json().catch(() => null)) as GenerationHistoryResponse | null;
       if (!response.ok || !data || !("ok" in data) || data.ok !== true) {
-        throw new Error(billingCopy.generationHistoryLoadFailed);
+        throw new Error(generationHistoryLoadFailedText);
       }
       setGenerationHistoryItems(data.items);
     } catch (error) {
-      setGenerationHistoryNotice(error instanceof Error ? error.message : billingCopy.generationHistoryLoadFailed);
+      setGenerationHistoryNotice(error instanceof Error ? error.message : generationHistoryLoadFailedText);
     } finally {
       setIsGenerationHistoryLoading(false);
     }
-  }, [billingCopy.generationHistoryLoadFailed, user]);
+  }, [generationHistoryLoadFailedText, user?.id]);
 
   useEffect(() => {
     if (!user) {
@@ -1098,9 +1101,16 @@ export default function Home() {
   }, [loadDashboardCreditHistory, user]);
 
   useEffect(() => {
-    if (!showGenerationHistory || !user) return;
+    if (!showGenerationHistory || !user?.id) {
+      generationHistoryAutoLoadKeyRef.current = null;
+      return;
+    }
+
+    const autoLoadKey = `${user.id}:${locale}`;
+    if (generationHistoryAutoLoadKeyRef.current === autoLoadKey) return;
+    generationHistoryAutoLoadKeyRef.current = autoLoadKey;
     void loadGenerationHistory();
-  }, [loadGenerationHistory, showGenerationHistory, user]);
+  }, [loadGenerationHistory, locale, showGenerationHistory, user?.id]);
 
   const getLivePromptValue = useCallback(() => {
     const editor = getRenderedPromptEditor();
