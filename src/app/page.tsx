@@ -603,6 +603,8 @@ export default function Home() {
   const emailRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
   const promptRef = useRef<HTMLDivElement>(null);
+  const landingPromptRef = useRef<HTMLDivElement>(null);
+  const workspacePromptRef = useRef<HTMLDivElement>(null);
   const playgroundRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const modelSelectorRef = useRef<HTMLDivElement>(null);
@@ -612,6 +614,24 @@ export default function Home() {
   const activeEditorRef = useRef<HTMLDivElement | null>(null);
   const savedRangeRef = useRef<Range | null>(null);
   const isTypingRef = useRef(false);
+
+  const rememberPromptEditor = useCallback((surface: "landing" | "workspace", editor: HTMLDivElement) => {
+    activeEditorRef.current = editor;
+    promptRef.current = editor;
+    if (surface === "workspace") {
+      workspacePromptRef.current = editor;
+    } else {
+      landingPromptRef.current = editor;
+    }
+  }, []);
+
+  const getRenderedPromptEditor = useCallback(() => {
+    const preferredEditor = user ? workspacePromptRef.current : landingPromptRef.current;
+    if (preferredEditor?.isConnected) return preferredEditor;
+    if (activeEditorRef.current?.isConnected) return activeEditorRef.current;
+    if (promptRef.current?.isConnected) return promptRef.current;
+    return null;
+  }, [user]);
 
   const t = copy[locale];
   const authStatus: AuthStatus = isLoadingSession ? "checking" : user ? "signedIn" : "signedOut";
@@ -896,15 +916,16 @@ export default function Home() {
   }, [showLoginPanel]);
 
   useEffect(() => {
-    if (authStatus === "signedIn" && !pendingGenerateAfterLogin) promptRef.current?.focus();
-  }, [authStatus, pendingGenerateAfterLogin]);
+    if (authStatus === "signedIn" && !pendingGenerateAfterLogin) getRenderedPromptEditor()?.focus();
+  }, [authStatus, getRenderedPromptEditor, pendingGenerateAfterLogin]);
 
   useEffect(() => {
-    if (!isTypingRef.current && activeEditorRef.current) {
-      syncEditorHTML(prompts[mode], activeEditorRef.current, uploadedImages, mode);
+    const editor = getRenderedPromptEditor();
+    if (!isTypingRef.current && editor) {
+      syncEditorHTML(prompts[mode], editor, uploadedImages, mode);
     }
     isTypingRef.current = false;
-  }, [isDark, mode, prompts, uploadedImages]);
+  }, [getRenderedPromptEditor, isDark, mode, prompts, uploadedImages]);
 
   useEffect(() => {
     function closeMenu(event: MouseEvent) {
@@ -1006,10 +1027,10 @@ export default function Home() {
   }, [loadDashboardCreditHistory, user]);
 
   const getLivePromptValue = useCallback(() => {
-    const editor = promptRef.current ?? activeEditorRef.current;
+    const editor = getRenderedPromptEditor();
     if (!editor) return currentPrompt;
     return editor.innerText.replace(/\u00A0/g, " ");
-  }, [currentPrompt]);
+  }, [currentPrompt, getRenderedPromptEditor]);
 
   const generateImage = useCallback(async () => {
     setGenerationNotice(null);
@@ -1261,10 +1282,9 @@ export default function Home() {
     if (editor.innerHTML !== html) editor.innerHTML = html;
   }
 
-  function handleEditorInput(event: FormEvent<HTMLDivElement>, currentMode: Mode) {
+  function handleEditorInput(event: FormEvent<HTMLDivElement>, currentMode: Mode, surface: "landing" | "workspace") {
     const editor = event.currentTarget;
-    activeEditorRef.current = editor;
-    promptRef.current = editor;
+    rememberPromptEditor(surface, editor);
     isTypingRef.current = true;
 
     const nextValue = editor.innerText.replace(/\u00A0/g, " ");
@@ -1312,11 +1332,10 @@ export default function Home() {
     setMentionMenuPos(null);
   }
 
-  function handleEditorPaste(event: ClipboardEvent<HTMLDivElement>, currentMode: Mode) {
+  function handleEditorPaste(event: ClipboardEvent<HTMLDivElement>, currentMode: Mode, surface: "landing" | "workspace") {
     event.preventDefault();
     const editor = event.currentTarget;
-    activeEditorRef.current = editor;
-    promptRef.current = editor;
+    rememberPromptEditor(surface, editor);
 
     const plainText = event.clipboardData.getData("text/plain").replace(/\r\n/g, "\n");
     if (!plainText) return;
@@ -1512,18 +1531,16 @@ export default function Home() {
           key={`${surface}-${mode}`}
           ref={(editor) => {
             if (!editor) return;
-            if (surface === "workspace") promptRef.current = editor;
-            if (!activeEditorRef.current || activeEditorRef.current === editor) activeEditorRef.current = editor;
+            if (surface === "workspace" || !user) rememberPromptEditor(surface, editor);
             if (editor.innerHTML === "") syncEditorHTML(prompts[mode], editor, uploadedImages, mode);
           }}
           contentEditable={!isGeneratingImage}
           suppressContentEditableWarning
           onFocus={(event) => {
-            activeEditorRef.current = event.currentTarget;
-            if (surface === "workspace") promptRef.current = event.currentTarget;
+            rememberPromptEditor(surface, event.currentTarget);
           }}
-          onInput={(event) => handleEditorInput(event, mode)}
-          onPaste={(event) => handleEditorPaste(event, mode)}
+          onInput={(event) => handleEditorInput(event, mode, surface)}
+          onPaste={(event) => handleEditorPaste(event, mode, surface)}
           className={`prompt-editor w-full flex-1 rounded-xl border p-4 text-sm outline-none transition ${commonClassName} ${mode === "i2i" ? "leading-[26px]" : isWorkspace ? "leading-7" : "leading-relaxed"}`}
           data-placeholder={mode === "i2i" ? i2iPromptPlaceholder : t.promptPlaceholder}
           style={{ minHeight: "140px", whiteSpace: "pre-wrap", wordBreak: "break-word" }}
@@ -2295,18 +2312,6 @@ export default function Home() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
