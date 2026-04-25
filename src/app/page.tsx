@@ -1036,10 +1036,16 @@ export default function Home() {
     const editor = getRenderedPromptEditor();
     if (!editor) return;
 
+    const selection = window.getSelection();
+    const activeElement = document.activeElement;
+    const editorHasFocus = activeElement === editor || (activeElement instanceof Node && editor.contains(activeElement));
+    const selectionInsideEditor = selection?.anchorNode ? editor.contains(selection.anchorNode) : false;
+    if (!editorHasFocus && !selectionInsideEditor) return;
+
     const nextValue = editor.innerText.replace(/\u00A0/g, " ");
     setPrompts((current) => (current[mode] === nextValue ? current : { ...current, [mode]: nextValue }));
     editor.blur();
-    window.getSelection()?.removeAllRanges();
+    selection?.removeAllRanges();
   }, [getRenderedPromptEditor, mode]);
 
   const generateImage = useCallback(async () => {
@@ -1827,7 +1833,13 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className={`relative flex flex-1 items-center justify-center bg-[background-size:24px_24px] p-6 transition-colors duration-300 ${isDark ? "bg-[#000] bg-[radial-gradient(#222_1px,transparent_1px)]" : "bg-gray-50 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)]"}`}>
+                <div
+                  className={`relative flex flex-1 items-center justify-center bg-[background-size:24px_24px] p-6 transition-colors duration-300 ${isDark ? "bg-[#000] bg-[radial-gradient(#222_1px,transparent_1px)]" : "bg-gray-50 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)]"}`}
+                  onContextMenuCapture={blurPromptEditor}
+                  onPointerDownCapture={blurPromptEditor}
+                  onPointerOverCapture={blurPromptEditor}
+                  onWheelCapture={blurPromptEditor}
+                >
                   <div className="w-full max-w-sm">{renderSurface}</div>
                 </div>
               </div>
@@ -2051,6 +2063,8 @@ export default function Home() {
               className={`relative flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-8 transition-colors duration-300 ${isDark ? "bg-[#000] bg-[radial-gradient(#222_1px,transparent_1px)]" : "bg-gray-50 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)]"} [background-size:24px_24px]`}
               onContextMenuCapture={blurPromptEditor}
               onPointerDownCapture={blurPromptEditor}
+              onPointerOverCapture={blurPromptEditor}
+              onWheelCapture={blurPromptEditor}
             >
               {generatedImageUrl && !previewLoadFailed && !isGeneratingImage ? (
                 <div className="relative w-full h-full max-h-full flex items-center justify-center animate-in fade-in duration-700">
