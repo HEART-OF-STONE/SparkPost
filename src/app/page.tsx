@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 
 import { fetchApi, resolveApiAssetUrl } from "@/lib/api/client";
 
@@ -1032,6 +1032,30 @@ export default function Home() {
     return editor.innerText.replace(/\u00A0/g, " ");
   }, [currentPrompt, getRenderedPromptEditor]);
 
+  const releasePromptFocus = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+    const editor = getRenderedPromptEditor();
+    if (!editor || !(event.target instanceof Node) || editor.contains(event.target)) return;
+    if (document.activeElement !== editor) return;
+
+    const pageScrollX = window.scrollX;
+    const pageScrollY = window.scrollY;
+    const scrollContainers = [editor.closest("aside"), event.currentTarget]
+      .filter((element): element is HTMLElement => element instanceof HTMLElement)
+      .map((element) => ({ element, scrollTop: element.scrollTop, scrollLeft: element.scrollLeft }));
+
+    editor.blur();
+    const selection = window.getSelection();
+    if (selection?.anchorNode && editor.contains(selection.anchorNode)) selection.removeAllRanges();
+
+    requestAnimationFrame(() => {
+      window.scrollTo(pageScrollX, pageScrollY);
+      scrollContainers.forEach(({ element, scrollTop, scrollLeft }) => {
+        element.scrollTop = scrollTop;
+        element.scrollLeft = scrollLeft;
+      });
+    });
+  }, [getRenderedPromptEditor]);
+
   const generateImage = useCallback(async () => {
     setGenerationNotice(null);
     const promptForRequest = getLivePromptValue();
@@ -2037,7 +2061,10 @@ export default function Home() {
               </div>
             </aside>
 
-            <main className={`relative flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-8 transition-colors duration-300 ${isDark ? "bg-[#000] bg-[radial-gradient(#222_1px,transparent_1px)]" : "bg-gray-50 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)]"} [background-size:24px_24px]`}>
+            <main
+              className={`relative flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-8 transition-colors duration-300 ${isDark ? "bg-[#000] bg-[radial-gradient(#222_1px,transparent_1px)]" : "bg-gray-50 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)]"} [background-size:24px_24px]`}
+              onPointerDownCapture={releasePromptFocus}
+            >
               {generatedImageUrl && !previewLoadFailed && !isGeneratingImage ? (
                 <div className="relative w-full h-full max-h-full flex items-center justify-center animate-in fade-in duration-700">
                   <Image src={generatedImageUrl} alt="Generated result" fill unoptimized className="object-contain rounded-md shadow-2xl" onError={() => setPreviewLoadFailed(true)} />
