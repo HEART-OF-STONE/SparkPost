@@ -128,6 +128,7 @@ type Copy = {
   promptLabel: string;
   promptPlaceholder: string;
   renderNow: string;
+  refresh: string;
   rendering: string;
   promptHint: string;
   t2iMode: string;
@@ -230,7 +231,8 @@ const copy: Record<Locale, Copy> = {
     playgroundBody: "在下方直接输入你的灵感，无需登录即可预览生图工作台的交互结构。",
     promptLabel: "PROMPT（提示词）",
     promptPlaceholder: "例如：一张电影级的高科技产品特写，半透明玻璃材质，深灰背景，青蓝色环境光，8K，Octane Render。",
-    renderNow: "立即渲染",
+    renderNow: "立即生成",
+    refresh: "刷新",
     rendering: "生成中...",
     promptHint: "当前优先接入真实文生图链路。登录前后会保留你的提示词。",
     t2iMode: "文生图",
@@ -332,6 +334,7 @@ const copy: Record<Locale, Copy> = {
     promptLabel: "PROMPT",
     promptPlaceholder: "e.g., A cinematic close-up of a high-tech product, translucent glass, dark gray background, soft cyan ambient light, 8k, Octane render.",
     renderNow: "Render Now",
+    refresh: "Refresh",
     rendering: "Rendering...",
     promptHint: "The current vertical slice is real text-to-image. Your prompt stays intact across sign-in.",
     t2iMode: "Text to Image",
@@ -1766,7 +1769,7 @@ export default function Home() {
               <p className={`mt-2 text-sm ${isDark ? "text-slate-500" : "text-gray-500"}`}>{billingCopy.generationHistorySubtitle}</p>
             </div>
             <button type="button" onClick={() => void loadGenerationHistory()} disabled={isGenerationHistoryLoading} className={`rounded-xl border px-4 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>
-              {isGenerationHistoryLoading ? t.checking : billingCopy.history}
+              {isGenerationHistoryLoading ? t.checking : t.refresh}
             </button>
           </div>
 
