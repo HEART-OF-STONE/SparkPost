@@ -37,7 +37,28 @@ type ImageTaskResult = {
     height: number | null;
   }>;
 };
+type GenerationHistoryAsset = {
+  id: string;
+  fileUrl: string;
+  width: number | null;
+  height: number | null;
+  createdAt: string;
+};
+type GenerationHistoryItem = {
+  id: string;
+  taskType: string;
+  status: string;
+  prompt: string;
+  requestedSize: string | null;
+  model: string | null;
+  costCredits: number;
+  errorMessage: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  assets: GenerationHistoryAsset[];
+};
 type GenerateImageResponse = { ok: true; task: ImageTaskResult } | { code?: string; error: string };
+type GenerationHistoryResponse = { ok: true; items: GenerationHistoryItem[] } | { error: string };
 type PromptAssistResponse = { ok: true; prompt: string; provider: string; model: string } | { error: string };
 type ImageModelItem = {
   id: string;
@@ -401,6 +422,7 @@ const formatDate = (value: string | null, locale: Locale) =>
   value ? new Date(value).toLocaleString(locale === "zh" ? "zh-CN" : "en-US", { hour12: false }) : "-";
 const formatTemplate = (template: string, values: Record<string, string | number>) => template.replace(/\{(\w+)\}/g, (_, key: string) => String(values[key] ?? ""));
 const primaryImageUrl = (task: ImageTaskResult | null) => resolveApiAssetUrl(task?.assets[0]?.fileUrl ?? null);
+const primaryHistoryImageUrl = (item: GenerationHistoryItem) => resolveApiAssetUrl(item.assets[0]?.fileUrl ?? null);
 const DEFAULT_IMAGE_MODEL_ID = "nano-banana-2";
 const DEFAULT_IMAGE_MODEL_COST: Record<Mode, number> = {
   t2i: 10,
@@ -570,6 +592,7 @@ export default function Home() {
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
+  const [showGenerationHistory, setShowGenerationHistory] = useState(false);
   const [hasCheckedIn, setHasCheckedIn] = useState(false);
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const [activeBillingTab, setActiveBillingTab] = useState<"topup" | "history">("topup");
@@ -578,6 +601,9 @@ export default function Home() {
   const [dashboardCreditHistory, setDashboardCreditHistory] = useState<TransactionItem[]>([]);
   const [usageLast7Days, setUsageLast7Days] = useState<number[]>(Array(7).fill(0));
   const [dailyCheckInCredits, setDailyCheckInCredits] = useState(20);
+  const [generationHistoryItems, setGenerationHistoryItems] = useState<GenerationHistoryItem[]>([]);
+  const [isGenerationHistoryLoading, setIsGenerationHistoryLoading] = useState(false);
+  const [generationHistoryNotice, setGenerationHistoryNotice] = useState<string | null>(null);
   const [pendingGenerateAfterLogin, setPendingGenerateAfterLogin] = useState(false);
   const [cooldownEndsAt, setCooldownEndsAt] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -703,6 +729,13 @@ export default function Home() {
             insufficientCredits: `积分不足，本次渲染需要 ${currentCost} 积分。`,
             checkInSuccess: `签到成功，获得 ${dailyCheckInCredits} 积分。`,
             noHistory: "暂无相关记录",
+            generationHistory: "生成历史",
+            generationHistoryTitle: "我的生成历史",
+            generationHistorySubtitle: "查看你最近生成的图片、提示词和参数。",
+            generationHistoryLoadFailed: "无法加载生成历史。",
+            noGenerationHistory: "暂无生成记录",
+            openResult: "查看结果",
+            dimensions: "尺寸",
             billingCenter: "账单与订阅中心",
             starterPack: "轻量创作包",
             creatorPack: "进阶灵感包",
@@ -730,6 +763,13 @@ export default function Home() {
             insufficientCredits: `Insufficient credits. This render requires ${currentCost} credits.`,
             checkInSuccess: `Check-in successful. +${dailyCheckInCredits} credits.`,
             noHistory: "No transactions yet.",
+            generationHistory: "Generation History",
+            generationHistoryTitle: "My Generation History",
+            generationHistorySubtitle: "Review your recent images, prompts, and render parameters.",
+            generationHistoryLoadFailed: "Unable to load generation history.",
+            noGenerationHistory: "No generations yet.",
+            openResult: "Open result",
+            dimensions: "Dimensions",
             billingCenter: "Billing & Subscription",
             starterPack: "Starter Pack",
             creatorPack: "Creator Pack",
@@ -1004,12 +1044,32 @@ export default function Home() {
     setDashboardCreditHistory(data.items);
   }, [historyFilter, locale, user]);
 
+  const loadGenerationHistory = useCallback(async () => {
+    if (!user) return;
+    setIsGenerationHistoryLoading(true);
+    setGenerationHistoryNotice(null);
+    try {
+      const response = await fetchApi("/api/generations/history?limit=24", { cache: "no-store" });
+      const data = (await response.json().catch(() => null)) as GenerationHistoryResponse | null;
+      if (!response.ok || !data || !("ok" in data) || data.ok !== true) {
+        throw new Error(billingCopy.generationHistoryLoadFailed);
+      }
+      setGenerationHistoryItems(data.items);
+    } catch (error) {
+      setGenerationHistoryNotice(error instanceof Error ? error.message : billingCopy.generationHistoryLoadFailed);
+    } finally {
+      setIsGenerationHistoryLoading(false);
+    }
+  }, [billingCopy.generationHistoryLoadFailed, user]);
+
   useEffect(() => {
     if (!user) {
       setHasCheckedIn(false);
       setRecentCreditHistory([]);
       setDashboardCreditHistory([]);
       setUsageLast7Days(Array(7).fill(0));
+      setGenerationHistoryItems([]);
+      setShowGenerationHistory(false);
       return;
     }
 
@@ -1025,6 +1085,11 @@ export default function Home() {
     if (!user) return;
     void loadDashboardCreditHistory().catch(() => {});
   }, [loadDashboardCreditHistory, user]);
+
+  useEffect(() => {
+    if (!showGenerationHistory || !user) return;
+    void loadGenerationHistory();
+  }, [loadGenerationHistory, showGenerationHistory, user]);
 
   const getLivePromptValue = useCallback(() => {
     const editor = getRenderedPromptEditor();
@@ -1222,6 +1287,7 @@ export default function Home() {
       setCode("");
       setShowAccountMenu(false);
       setShowDashboard(false);
+      setShowGenerationHistory(false);
       setIsDrawerOpen(false);
       setShowLoginPanel(false);
       setPendingGenerateAfterLogin(false);
@@ -1231,6 +1297,7 @@ export default function Home() {
       setHasCheckedIn(false);
       setRecentCreditHistory([]);
       setDashboardCreditHistory([]);
+      setGenerationHistoryItems([]);
       setUsageLast7Days(Array(7).fill(0));
       setAuthNotice({ type: "info", text: t.signedOutNotice });
     } catch (error) {
@@ -1762,6 +1829,17 @@ export default function Home() {
                             <CreditCardIcon />
                             {billingCopy.billingCenter}
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowAccountMenu(false);
+                              setShowGenerationHistory(true);
+                            }}
+                            className={`mb-1 flex w-full items-center gap-2 text-left rounded-lg px-3 py-2 text-xs transition-colors ${isDark ? "text-[#CCC] hover:bg-white/10 hover:text-white" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}`}
+                          >
+                            <ImageIcon />
+                            {billingCopy.generationHistory}
+                          </button>
                         <button type="button" onClick={() => void handleLogout()} className={`w-full text-left rounded-lg px-3 py-2 text-xs transition-colors ${isDark ? "text-[#CCC] hover:bg-white/10 hover:text-white" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}`}>
                           {t.signOut}
                         </button>
@@ -2170,6 +2248,86 @@ export default function Home() {
                   <div className={`rounded-xl border px-4 py-6 text-center text-sm ${isDark ? "border-white/5 text-slate-400" : "border-gray-200 text-gray-500"}`}>{billingCopy.noHistory}</div>
                 )}
               </div>
+            )}
+          </div>
+        </div>
+
+        <div className={`fixed inset-0 z-[195] overflow-y-auto transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${showGenerationHistory ? "translate-y-0 opacity-100" : "translate-y-12 opacity-0 pointer-events-none"} ${isDark ? "bg-[#000]" : "bg-gray-50"}`}>
+          <header className={`sticky top-0 z-10 flex h-16 items-center border-b px-6 backdrop-blur-xl ${isDark ? "border-white/10 bg-[#000]/60" : "border-gray-200 bg-white/70"}`}>
+            <button type="button" onClick={() => setShowGenerationHistory(false)} className={`flex items-center gap-2 text-sm font-medium transition-colors ${isDark ? "text-slate-400 hover:text-white" : "text-gray-500 hover:text-gray-900"}`}>
+              <ArrowLeftIcon />
+              {billingCopy.backToWorkspace}
+            </button>
+            <div className={`mx-auto text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{billingCopy.generationHistoryTitle}</div>
+            <div className="w-[120px]" />
+          </header>
+
+          <div className="mx-auto max-w-6xl px-6 py-8">
+            <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{billingCopy.generationHistoryTitle}</h2>
+                <p className={`mt-2 text-sm ${isDark ? "text-slate-500" : "text-gray-500"}`}>{billingCopy.generationHistorySubtitle}</p>
+              </div>
+              <button type="button" onClick={() => void loadGenerationHistory()} disabled={isGenerationHistoryLoading} className={`rounded-xl border px-4 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>
+                {isGenerationHistoryLoading ? t.checking : billingCopy.history}
+              </button>
+            </div>
+
+            {generationHistoryNotice ? (
+              <div className="mb-4"><NoticeBanner notice={{ type: "error", text: generationHistoryNotice }} /></div>
+            ) : null}
+
+            {isGenerationHistoryLoading && generationHistoryItems.length === 0 ? (
+              <div className={`rounded-2xl border p-12 text-center text-sm ${isDark ? "border-white/5 bg-[#111] text-slate-400" : "border-gray-200 bg-white text-gray-500"}`}>{t.checking}</div>
+            ) : generationHistoryItems.length > 0 ? (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {generationHistoryItems.map((item) => {
+                  const imageUrl = primaryHistoryImageUrl(item);
+                  const dimensions = item.assets[0]?.width && item.assets[0]?.height ? `${item.assets[0].width}x${item.assets[0].height}` : item.requestedSize ?? "-";
+
+                  return (
+                    <article key={item.id} className={`overflow-hidden rounded-2xl border shadow-sm ${isDark ? "border-white/5 bg-[#111]" : "border-gray-200 bg-white"}`}>
+                      <div className={`relative flex aspect-[4/3] items-center justify-center border-b ${isDark ? "border-white/5 bg-black" : "border-gray-100 bg-gray-50"}`}>
+                        {imageUrl ? (
+                          <Image src={imageUrl} alt={item.prompt} fill unoptimized className="object-contain" />
+                        ) : (
+                          <div className={`flex flex-col items-center gap-3 text-sm ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                            <ImageIcon />
+                            {item.status}
+                          </div>
+                        )}
+                      </div>
+                      <div className="space-y-4 p-4">
+                        <div>
+                          <div className="mb-2 flex flex-wrap items-center gap-2">
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${item.status === "succeeded" ? "bg-emerald-500/10 text-emerald-400" : item.status === "failed" ? "bg-rose-500/10 text-rose-400" : "bg-cyan-500/10 text-cyan-400"}`}>{item.status}</span>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] ${isDark ? "bg-white/5 text-slate-300" : "bg-gray-100 text-gray-600"}`}>{getDisplayImageModel(item.model)}</span>
+                          </div>
+                          <p className={`line-clamp-3 text-sm leading-6 ${isDark ? "text-slate-200" : "text-gray-800"}`}>{item.prompt}</p>
+                        </div>
+                        <div className={`grid grid-cols-2 gap-3 text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          <div>
+                            <div className="uppercase tracking-wide opacity-60">{billingCopy.dimensions}</div>
+                            <div className={`mt-1 font-mono ${isDark ? "text-slate-200" : "text-gray-800"}`}>{dimensions}</div>
+                          </div>
+                          <div>
+                            <div className="uppercase tracking-wide opacity-60">{t.cost}</div>
+                            <div className={`mt-1 font-mono ${isDark ? "text-slate-200" : "text-gray-800"}`}>{item.costCredits} {t.credits}</div>
+                          </div>
+                        </div>
+                        <div className={`flex items-center justify-between border-t pt-3 text-xs ${isDark ? "border-white/5 text-slate-500" : "border-gray-100 text-gray-500"}`}>
+                          <span>{formatDate(item.completedAt ?? item.createdAt, locale)}</span>
+                          {imageUrl ? (
+                            <a href={imageUrl} target="_blank" rel="noreferrer" className={`font-semibold transition-colors ${isDark ? "text-cyan-300 hover:text-cyan-200" : "text-cyan-600 hover:text-cyan-500"}`}>{billingCopy.openResult}</a>
+                          ) : null}
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className={`rounded-2xl border p-12 text-center text-sm ${isDark ? "border-white/5 bg-[#111] text-slate-400" : "border-gray-200 bg-white text-gray-500"}`}>{billingCopy.noGenerationHistory}</div>
             )}
           </div>
         </div>

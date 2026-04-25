@@ -184,6 +184,36 @@ type GenerationTaskRow = {
   costCredits: number;
 };
 
+type GenerationHistoryAssetItem = {
+  id: string;
+  fileUrl: string;
+  width: number | null;
+  height: number | null;
+  createdAt: string;
+};
+
+type GenerationHistoryItem = {
+  id: string;
+  taskType: string;
+  status: string;
+  prompt: string;
+  requestedSize: string | null;
+  model: string | null;
+  costCredits: number;
+  errorMessage: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  assets: GenerationHistoryAssetItem[];
+};
+
+type GenerationHistoryRow = Omit<GenerationHistoryItem, "assets"> & {
+  assetId: string | null;
+  fileUrl: string | null;
+  width: number | null;
+  height: number | null;
+  assetCreatedAt: string | null;
+};
+
 type CreditTransactionRow = {
   id: string;
   type: string;
@@ -1105,6 +1135,79 @@ const getCreditTransactionsForUser = async (
   ).bind(...values).all<CreditTransactionRow>();
 
   return (result.results ?? []).map((row) => mapCreditTransactionItem(row, options.locale));
+};
+
+const getGenerationHistoryForUser = async (
+  userId: string,
+  env: Env,
+  options: { limit: number },
+): Promise<GenerationHistoryItem[]> => {
+  if (!env.SPARKPOST_DB) {
+    throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
+  }
+
+  const result = await env.SPARKPOST_DB.prepare(
+    `SELECT
+       gt.id,
+       gt.task_type AS taskType,
+       gt.status,
+       gt.prompt,
+       gt.requested_size AS requestedSize,
+       gt.model,
+       gt.cost_credits AS costCredits,
+       gt.error_message AS errorMessage,
+       gt.created_at AS createdAt,
+       gt.completed_at AS completedAt,
+       ga.id AS assetId,
+       ga.file_url AS fileUrl,
+       ga.width,
+       ga.height,
+       ga.created_at AS assetCreatedAt
+     FROM (
+       SELECT *
+       FROM generation_tasks
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT ?
+     ) gt
+     LEFT JOIN generated_assets ga ON ga.task_id = gt.id
+     ORDER BY gt.created_at DESC, ga.created_at ASC`,
+  ).bind(userId, options.limit).all<GenerationHistoryRow>();
+
+  const itemsById = new Map<string, GenerationHistoryItem>();
+
+  for (const row of result.results ?? []) {
+    const existing = itemsById.get(row.id);
+    const item =
+      existing ??
+      {
+        id: row.id,
+        taskType: row.taskType,
+        status: row.status,
+        prompt: row.prompt,
+        requestedSize: row.requestedSize,
+        model: row.model,
+        costCredits: row.costCredits,
+        errorMessage: row.errorMessage,
+        createdAt: row.createdAt,
+        completedAt: row.completedAt,
+        assets: [],
+      };
+
+    if (!existing) itemsById.set(row.id, item);
+
+    if (row.assetId && row.fileUrl) {
+      item.assets.push({
+        id: row.assetId,
+        fileUrl: row.fileUrl,
+        width: row.width,
+        height: row.height,
+        createdAt: row.assetCreatedAt ?? row.completedAt ?? row.createdAt,
+      });
+    }
+  }
+
+  return [...itemsById.values()];
 };
 
 const performDailyCheckInForUser = async (userId: string, env: Env) => {
@@ -2611,6 +2714,22 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
       });
 
       return json({ ok: true, items: transactions });
+    },
+  },
+  {
+    method: "GET",
+    pathname: "/api/generations/history",
+    handler: async (request, env, url) => {
+      const authenticatedUser = await getAuthenticatedUser(request, env);
+      if (!authenticatedUser.ok) return authenticatedUser.response;
+      if (!authenticatedUser.user) return json({ error: "Authentication required." }, { status: 401 });
+
+      const limit = Number.parseInt(url.searchParams.get("limit") ?? "24", 10);
+      const items = await getGenerationHistoryForUser(authenticatedUser.user.id, env, {
+        limit: Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 100) : 24,
+      });
+
+      return json({ ok: true, items });
     },
   },
   {

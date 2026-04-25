@@ -1,4 +1,3 @@
-﻿/* eslint-disable @typescript-eslint/no-require-imports */
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 
@@ -49,6 +48,25 @@ type FakeState = {
   generatedAssetUrl: string | null;
   hasCheckedInToday?: boolean;
   creditTransactions?: FakeCreditTransaction[];
+  generationHistory?: Array<{
+    id: string;
+    taskType: string;
+    status: string;
+    prompt: string;
+    requestedSize?: string | null;
+    model: string | null;
+    costCredits: number;
+    errorMessage?: string | null;
+    createdAt: string;
+    completedAt: string | null;
+    assets: Array<{
+      id: string;
+      fileUrl: string;
+      width: number | null;
+      height: number | null;
+      createdAt: string;
+    }>;
+  }>;
 };
 
 function createSessionToken(userId: string, email: string, secret: string) {
@@ -137,6 +155,74 @@ function createFakeDb(state: FakeState) {
                     paymentSessionId: item.paymentSessionId ?? null,
                   })) as T[],
                 };
+              }
+
+              if (sql.includes("FROM generation_tasks") && sql.includes("LEFT JOIN generated_assets")) {
+                const userId = String(values[0]);
+                const limit = Number(values[1]);
+                const rows: Array<{
+                  id: string;
+                  taskType: string;
+                  status: string;
+                  prompt: string;
+                  requestedSize: string | null;
+                  model: string | null;
+                  costCredits: number;
+                  errorMessage: string | null;
+                  createdAt: string;
+                  completedAt: string | null;
+                  assetId: string | null;
+                  fileUrl: string | null;
+                  width: number | null;
+                  height: number | null;
+                  assetCreatedAt: string | null;
+                }> = [];
+
+                for (const item of (state.generationHistory ?? [])
+                  .filter(() => userId === state.user.id)
+                  .slice(0, Number.isFinite(limit) ? limit : 24)) {
+                  if (item.assets.length > 0) {
+                    for (const asset of item.assets) {
+                      rows.push({
+                          id: item.id,
+                          taskType: item.taskType,
+                          status: item.status,
+                          prompt: item.prompt,
+                          requestedSize: item.requestedSize ?? null,
+                          model: item.model,
+                          costCredits: item.costCredits,
+                          errorMessage: item.errorMessage ?? null,
+                          createdAt: item.createdAt,
+                          completedAt: item.completedAt,
+                          assetId: asset.id,
+                          fileUrl: asset.fileUrl,
+                          width: asset.width,
+                          height: asset.height,
+                          assetCreatedAt: asset.createdAt,
+                      });
+                    }
+                  } else {
+                    rows.push({
+                          id: item.id,
+                          taskType: item.taskType,
+                          status: item.status,
+                          prompt: item.prompt,
+                          requestedSize: item.requestedSize ?? null,
+                          model: item.model,
+                          costCredits: item.costCredits,
+                          errorMessage: item.errorMessage ?? null,
+                          createdAt: item.createdAt,
+                          completedAt: item.completedAt,
+                          assetId: null,
+                          fileUrl: null,
+                          width: null,
+                          height: null,
+                          assetCreatedAt: null,
+                    });
+                  }
+                }
+
+                return { results: rows as T[] };
               }
 
               return { results: [] as T[] };
@@ -621,6 +707,83 @@ test("POST /api/generate/image can target the GPT-Image relay model via modelId"
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("GET /api/generations/history returns private generation records", async () => {
+  const worker = await loadWorker();
+  const createdAt = new Date().toISOString();
+  const state: FakeState = {
+    user: {
+      id: "user-1",
+      email: "demo@example.com",
+      createdAt,
+      emailVerifiedAt: createdAt,
+      lastLoginAt: createdAt,
+      creditBalance: 20,
+    },
+    creditBalance: 20,
+    generatedTask: null,
+    generatedAssetUrl: null,
+    hasCheckedInToday: false,
+    creditTransactions: [],
+    generationHistory: [
+      {
+        id: "task-1",
+        taskType: "text_to_image",
+        status: "succeeded",
+        prompt: "a luminous glass observatory",
+        requestedSize: "1536x1024",
+        model: "gpt-image-2",
+        costCredits: 10,
+        errorMessage: null,
+        createdAt,
+        completedAt: createdAt,
+        assets: [
+          {
+            id: "asset-1",
+            fileUrl: "https://sparkpost.test/api/assets/generated/user-1/task-1/asset.png",
+            width: 1536,
+            height: 1024,
+            createdAt,
+          },
+        ],
+      },
+    ],
+  };
+  const secret = "workers-smoke-secret";
+  const session = createSessionToken(state.user.id, state.user.email, secret);
+
+  const response = await worker.fetch(
+    new Request("https://sparkpost.test/api/generations/history?limit=10", {
+      headers: {
+        cookie: `sparkpost_session=${session}`,
+      },
+    }),
+    {
+      SPARKPOST_DB: createFakeDb(state),
+      SESSION_SECRET: secret,
+    },
+  );
+
+  const result = await readJsonResponse<{
+    ok: boolean;
+    items: Array<{
+      id: string;
+      prompt: string;
+      requestedSize: string | null;
+      model: string | null;
+      assets: Array<{ fileUrl: string; width: number | null; height: number | null }>;
+    }>;
+  }>(response);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, true);
+  assert.equal(result.body.items.length, 1);
+  assert.equal(result.body.items[0]?.id, "task-1");
+  assert.equal(result.body.items[0]?.prompt, "a luminous glass observatory");
+  assert.equal(result.body.items[0]?.requestedSize, "1536x1024");
+  assert.equal(result.body.items[0]?.model, "gpt-image-2");
+  assert.equal(result.body.items[0]?.assets[0]?.width, 1536);
 });
 
 test("POST /api/generate/image supports image-to-image requests", async () => {
