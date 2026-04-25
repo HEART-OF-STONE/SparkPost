@@ -20,7 +20,7 @@ type AuthUser = {
   lastLoginAt: string | null;
   creditBalance: number;
 };
-type MeResponse = { user: AuthUser | null };
+type ImageStatusResponse = { status?: SystemStatus; model?: string; modelId?: string; label?: string };
 type ImageTaskResult = {
   id: string;
   status: string;
@@ -98,6 +98,16 @@ type CreditSummaryResponse =
     }
   | { error: string };
 type CreditTransactionsResponse = { ok: true; items: TransactionItem[] } | { error: string };
+type BootstrapResponse =
+  | {
+      ok: true;
+      user: AuthUser | null;
+      imageStatus: ImageStatusResponse;
+      imageModels: SuccessfulImageModelsResponse;
+      creditSummary: Extract<CreditSummaryResponse, { ok: true }> | null;
+      recentCreditHistory: TransactionItem[];
+    }
+  | { error: string };
 type CreditCheckInResponse =
   | {
       ok: true;
@@ -572,6 +582,7 @@ function VisualHero({ isDark }: { isDark: boolean }) {
 export default function Home() {
   const [isDark, setIsDark] = useState(true);
   const [locale, setLocale] = useState<Locale>("en");
+  const [isLocaleReady, setIsLocaleReady] = useState(false);
   const [mode, setMode] = useState<Mode>("t2i");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -795,159 +806,117 @@ export default function Home() {
   useEffect(() => {
     const saved = window.localStorage.getItem("sparkpost-locale");
     if (saved === "zh" || saved === "en") setLocale(saved);
+    setIsLocaleReady(true);
   }, []);
 
   useEffect(() => {
     window.localStorage.setItem("sparkpost-locale", locale);
   }, [locale]);
 
+  const applyImageModels = useCallback((data: SuccessfulImageModelsResponse) => {
+    const normalizedItems = data.items
+      .filter((item) => item && typeof item.id === "string" && typeof item.label === "string")
+      .map((item) => {
+        const supports = {
+          t2i: Boolean(item.supports?.t2i),
+          i2i: Boolean(item.supports?.i2i),
+        };
 
-  useEffect(() => {
-    const controller = new AbortController();
-    async function loadGenerateStatus() {
-      try {
-        const response = await fetchApi("/api/generate/status", { cache: "no-store", signal: controller.signal });
-        if (!response.ok) return;
-        const data = (await response.json()) as { status?: SystemStatus };
-        if (!controller.signal.aborted && (data.status === "available" || data.status === "unavailable" || data.status === "unknown")) {
-          setSystemStatus(data.status);
-        }
-      } catch {}
-    }
-    void loadGenerateStatus();
-    return () => controller.abort();
+        return {
+          id: item.id,
+          label: item.label,
+          isDefault: Boolean(item.isDefault),
+          supports,
+          supportedSizes: Array.isArray(item.supportedSizes) ? item.supportedSizes.filter((size) => typeof size === "string") : undefined,
+          defaultSize: typeof item.defaultSize === "string" ? item.defaultSize : undefined,
+          costCredits: {
+            t2i: typeof item.costCredits?.t2i === "number" ? item.costCredits.t2i : supports.t2i ? DEFAULT_IMAGE_MODEL_COST.t2i : null,
+            i2i: typeof item.costCredits?.i2i === "number" ? item.costCredits.i2i : supports.i2i ? DEFAULT_IMAGE_MODEL_COST.i2i : null,
+          },
+        } satisfies ImageModelItem;
+      });
+
+    setAvailableImageModels(normalizedItems);
+    setSelectedImageModelByMode((current) => {
+      const next = { ...current };
+      (["t2i", "i2i"] as const).forEach((targetMode) => {
+        const supportedItems = normalizedItems.filter((item) => item.supports[targetMode]);
+        const selectedItem = supportedItems.find((item) => item.id === current[targetMode]);
+        if (selectedItem) return;
+        next[targetMode] =
+          supportedItems.find((item) => item.id === data.defaultModelId)?.id ??
+          supportedItems.find((item) => item.isDefault)?.id ??
+          supportedItems[0]?.id ??
+          current[targetMode];
+      });
+      return next;
+    });
   }, []);
+
+  const loadBootstrap = useCallback(async (signal?: AbortSignal) => {
+    if (shouldUseLocalPreview()) {
+      const previewUser = createLocalPreviewUser();
+      setUser(previewUser);
+      setEmail(previewUser.email);
+      applyImageModels(getFallbackImageModelsResponse());
+      setSystemStatus("available");
+      setHasCheckedIn(false);
+      setDailyCheckInCredits(20);
+      setRecentCreditHistory([]);
+      setAuthNotice({
+        type: "info",
+        text:
+          locale === "zh"
+            ? "本地预览模式已启用，当前工作台使用模拟账户。"
+            : "Local preview mode is enabled with a mock workspace account.",
+      });
+      return;
+    }
+
+    const response = await fetchApi(`/api/bootstrap?locale=${locale}`, { cache: "no-store", signal });
+    if (!response.ok) throw new Error(t.sessionLoadFailed);
+    const data = (await response.json().catch(() => null)) as BootstrapResponse | null;
+    if (!data || !("ok" in data) || data.ok !== true) throw new Error(t.sessionLoadFailed);
+
+    if (signal?.aborted) return;
+    applyImageModels(data.imageModels);
+    if (data.imageStatus?.status === "available" || data.imageStatus?.status === "unavailable" || data.imageStatus?.status === "unknown") {
+      setSystemStatus(data.imageStatus.status);
+    }
+    setUser(data.user);
+    if (data.user) setEmail(data.user.email);
+    setRecentCreditHistory(Array.isArray(data.recentCreditHistory) ? data.recentCreditHistory : []);
+    if (data.creditSummary) {
+      setHasCheckedIn(data.creditSummary.hasCheckedInToday);
+      setDailyCheckInCredits(data.creditSummary.dailyCheckInCredits);
+      setUsageLast7Days(data.creditSummary.usageLast7Days);
+    } else {
+      setHasCheckedIn(false);
+      setUsageLast7Days(Array(7).fill(0));
+    }
+  }, [applyImageModels, locale, t.sessionLoadFailed]);
+
   useEffect(() => {
+    if (!isLocaleReady) return undefined;
     const controller = new AbortController();
-
-    async function loadImageModels() {
-      const applyImageModels = (data: SuccessfulImageModelsResponse) => {
-        const normalizedItems = data.items
-          .filter((item) => item && typeof item.id === "string" && typeof item.label === "string")
-          .map((item) => {
-            const supports = {
-              t2i: Boolean(item.supports?.t2i),
-              i2i: Boolean(item.supports?.i2i),
-            };
-
-            return {
-              id: item.id,
-              label: item.label,
-              isDefault: Boolean(item.isDefault),
-              supports,
-              supportedSizes: Array.isArray(item.supportedSizes) ? item.supportedSizes.filter((size) => typeof size === "string") : undefined,
-              defaultSize: typeof item.defaultSize === "string" ? item.defaultSize : undefined,
-              costCredits: {
-                t2i: typeof item.costCredits?.t2i === "number" ? item.costCredits.t2i : supports.t2i ? DEFAULT_IMAGE_MODEL_COST.t2i : null,
-                i2i: typeof item.costCredits?.i2i === "number" ? item.costCredits.i2i : supports.i2i ? DEFAULT_IMAGE_MODEL_COST.i2i : null,
-              },
-            } satisfies ImageModelItem;
-          });
-
+    loadBootstrap(controller.signal)
+      .catch((error) => {
         if (controller.signal.aborted) return;
-        setAvailableImageModels(normalizedItems);
-        setSelectedImageModelByMode((current) => {
-          const next = { ...current };
-          (["t2i", "i2i"] as const).forEach((targetMode) => {
-            const supportedItems = normalizedItems.filter((item) => item.supports[targetMode]);
-            const selectedItem = supportedItems.find((item) => item.id === current[targetMode]);
-            if (selectedItem) return;
-            next[targetMode] =
-              supportedItems.find((item) => item.id === data.defaultModelId)?.id ??
-              supportedItems.find((item) => item.isDefault)?.id ??
-              supportedItems[0]?.id ??
-              current[targetMode];
-          });
-          return next;
-        });
-      };
-
-      try {
-        const response = await fetchApi("/api/models/image", { cache: "no-store", signal: controller.signal });
-        const data = (await response.json().catch(() => null)) as ImageModelsResponse | null;
-        if (!response.ok || !data || !("ok" in data) || data.ok !== true || !Array.isArray(data.items)) {
-          applyImageModels(getFallbackImageModelsResponse());
-          return;
-        }
-        applyImageModels(data);
-      } catch {
         applyImageModels(getFallbackImageModelsResponse());
-      }
-    }
-
-    void loadImageModels();
+        setAuthNotice({ type: "error", text: error instanceof Error ? error.message : t.sessionLoadFailed });
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoadingSession(false);
+      });
     return () => controller.abort();
-  }, []);
+  }, [applyImageModels, isLocaleReady, loadBootstrap, t.sessionLoadFailed]);
+
   useEffect(() => {
     if (authStatus === "signedOut" && showLoginPanel && pendingGenerateAfterLogin) {
       setAuthNotice({ type: "info", text: t.loginToContinue });
     }
   }, [authStatus, pendingGenerateAfterLogin, showLoginPanel, t.loginToContinue]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    async function loadSession() {
-      if (shouldUseLocalPreview()) {
-        const previewUser = createLocalPreviewUser();
-        setUser(previewUser);
-        setEmail(previewUser.email);
-        setAuthNotice({
-          type: "info",
-          text:
-            locale === "zh"
-              ? "本地预览模式已启用，当前工作台使用模拟账户。"
-              : "Local preview mode is enabled with a mock workspace account.",
-        });
-        if (!controller.signal.aborted) setIsLoadingSession(false);
-        return;
-      }
-
-      try {
-        const response = await fetchApi("/api/me", { cache: "no-store", signal: controller.signal });
-        if (!response.ok) throw new Error(t.sessionLoadFailed);
-        const data = (await response.json()) as MeResponse;
-        if (data.user) {
-          setUser(data.user);
-          setEmail(data.user.email);
-          return;
-        }
-
-        if (shouldUseLocalPreview()) {
-          const previewUser = createLocalPreviewUser();
-          setUser(previewUser);
-          setEmail(previewUser.email);
-          setAuthNotice({
-            type: "info",
-            text:
-              locale === "zh"
-                ? "本地预览模式已启用，当前工作台使用模拟账户。"
-                : "Local preview mode is enabled with a mock workspace account.",
-          });
-          return;
-        }
-
-        setUser(null);
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          if (shouldUseLocalPreview()) {
-            const previewUser = createLocalPreviewUser();
-            setUser(previewUser);
-            setEmail(previewUser.email);
-            setAuthNotice({
-              type: "info",
-              text: locale === "zh" ? "本地预览模式已启用，当前工作台使用模拟账户。" : "Local preview mode is enabled with a mock workspace account.",
-            });
-          } else {
-            setAuthNotice({ type: "error", text: error instanceof Error ? error.message : t.sessionLoadFailed });
-          }
-        }
-      } finally {
-        if (!controller.signal.aborted) setIsLoadingSession(false);
-      }
-    }
-    void loadSession();
-    return () => controller.abort();
-  }, [t.sessionLoadFailed]);
 
   useEffect(() => {
     if (!cooldownEndsAt) {
@@ -998,30 +967,6 @@ export default function Home() {
     return () => document.removeEventListener("mousedown", closeMenu);
   }, []);
 
-  const refreshSession = useCallback(async () => {
-    const response = await fetchApi("/api/me", { cache: "no-store" });
-    if (!response.ok) throw new Error(t.sessionRefreshFailed);
-    const data = (await response.json()) as MeResponse;
-    setUser(data.user);
-    if (data.user) setEmail(data.user.email);
-  }, [t.sessionRefreshFailed]);
-
-  const loadCreditSummary = useCallback(async () => {
-    if (!userId) return;
-    const response = await fetchApi("/api/credits/summary", { cache: "no-store" });
-    const data = (await response.json().catch(() => null)) as CreditSummaryResponse | null;
-    if (!response.ok || !data || !("ok" in data) || data.ok !== true) {
-      throw new Error(locale === "zh" ? "无法加载积分概览。" : "Unable to load credits summary.");
-    }
-    setUser((current) => {
-      if (!current || current.creditBalance === data.creditBalance) return current;
-      return { ...current, creditBalance: data.creditBalance };
-    });
-    setHasCheckedIn(data.hasCheckedInToday);
-    setDailyCheckInCredits(data.dailyCheckInCredits);
-    setUsageLast7Days(data.usageLast7Days);
-  }, [locale, userId]);
-
   const loadRecentCreditHistory = useCallback(async () => {
     if (!userId) return;
     const response = await fetchApi(`/api/credits/transactions?filter=all&limit=5&locale=${locale}`, {
@@ -1043,19 +988,6 @@ export default function Home() {
     const data = (await response.json().catch(() => null)) as CreditTransactionsResponse | null;
     if (!response.ok || !data || !("ok" in data) || data.ok !== true) {
       throw new Error(locale === "zh" ? "鏃犳硶鍔犺浇绉垎娴佹按銆?" : "Unable to load transaction history.");
-    }
-    setDashboardCreditHistory(data.items);
-  }, [historyFilter, locale, userId]);
-
-  const loadCreditHistory = useCallback(async () => {
-    if (!userId) return;
-    const response = await fetchApi(
-      `/api/credits/transactions?filter=${historyFilter}&limit=50&locale=${locale}`,
-      { cache: "no-store" },
-    );
-    const data = (await response.json().catch(() => null)) as CreditTransactionsResponse | null;
-    if (!response.ok || !data || !("ok" in data) || data.ok !== true) {
-      throw new Error(locale === "zh" ? "无法加载积分流水。" : "Unable to load transaction history.");
     }
     setDashboardCreditHistory(data.items);
   }, [historyFilter, locale, userId]);
@@ -1090,14 +1022,7 @@ export default function Home() {
       setShowGenerationHistory(false);
       return;
     }
-
-    void loadCreditSummary().catch(() => {});
-  }, [loadCreditSummary, userId]);
-
-  useEffect(() => {
-    if (!userId) return;
-    void loadRecentCreditHistory().catch(() => {});
-  }, [loadRecentCreditHistory, userId]);
+  }, [userId]);
 
   useEffect(() => {
     if (!showDashboard || !userId) return;
@@ -1294,8 +1219,9 @@ export default function Home() {
         setCooldownEndsAt(null);
         setShowLoginPanel(false);
         setAuthNotice({ type: "success", text: data?.isNewUser === true ? t.signedInNewNotice : t.signedInExistingNotice });
+        await loadBootstrap();
       } else {
-        await refreshSession();
+        await loadBootstrap();
         setShowLoginPanel(false);
       }
     } catch (error) {
@@ -1810,7 +1736,7 @@ export default function Home() {
                   <article key={item.id} className={`overflow-hidden rounded-2xl border shadow-sm ${isDark ? "border-white/5 bg-[#111]" : "border-gray-200 bg-white"}`}>
                     <div className={`relative flex aspect-[4/3] items-center justify-center border-b ${isDark ? "border-white/5 bg-black" : "border-gray-100 bg-gray-50"}`}>
                       {imageUrl ? (
-                        <Image src={imageUrl} alt={item.prompt} fill unoptimized className="object-contain" />
+                        <Image src={imageUrl} alt={item.prompt} fill unoptimized loading="lazy" sizes="(min-width: 1280px) 33vw, (min-width: 768px) 50vw, 100vw" className="object-contain" />
                       ) : (
                         <div className={`flex flex-col items-center gap-3 text-sm ${isDark ? "text-slate-500" : "text-gray-400"}`}>
                           <ImageIcon />

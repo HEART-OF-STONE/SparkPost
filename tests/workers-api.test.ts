@@ -117,7 +117,7 @@ function createFakeDb(state: FakeState) {
               return null;
             },
             async all<T>() {
-              if (sql.includes("COALESCE(remaining_amount") && sql.includes("FROM credit_transactions")) {
+              if (sql.includes("COALESCE(remaining_amount") && sql.includes("FROM credit_transactions") && sql.includes("ORDER BY expires_at")) {
                 const userId = String(values[0]);
                 const expiresAt = values.length > 1 ? String(values[1]) : null;
                 const results = (state.creditTransactions ?? [])
@@ -1007,6 +1007,114 @@ test("GET /api/credits/summary returns balance and check-in state", async () => 
   assert.equal(result.body.hasCheckedInToday, false);
   assert.equal(result.body.dailyCheckInCredits, 20);
   assert.equal(result.body.usageLast7Days.length, 7);
+});
+
+test("GET /api/bootstrap returns public startup data without a session", async () => {
+  const worker = await loadWorker();
+  const response = await worker.fetch(
+    new Request("https://sparkpost.test/api/bootstrap?locale=en"),
+    {
+      IMAGE_DEFAULT_MODEL_ID: "nano-banana-2",
+      RELAY_IMAGE_API_KEY: "relay-test-key",
+      RELAY_IMAGE_BASE_URL: "https://relay.example/v1",
+      RELAY_IMAGE_API_KEY_MICU: "micu-test-key",
+      RELAY_IMAGE_BASE_URL_MICU: "https://micu.example/v1",
+    },
+  );
+
+  const result = await readJsonResponse<{
+    ok: boolean;
+    user: null;
+    creditSummary: null;
+    recentCreditHistory: unknown[];
+    imageStatus: { status: string; modelId: string };
+    imageModels: { ok: boolean; items: unknown[] };
+  }>(response);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, true);
+  assert.equal(result.body.user, null);
+  assert.equal(result.body.creditSummary, null);
+  assert.deepEqual(result.body.recentCreditHistory, []);
+  assert.equal(result.body.imageStatus.modelId, "nano-banana-2");
+  assert.equal(result.body.imageModels.ok, true);
+  assert.equal(result.body.imageModels.items.length, 3);
+});
+
+test("GET /api/bootstrap returns authenticated startup data in one response", async () => {
+  const worker = await loadWorker();
+  const secret = "workers-smoke-secret";
+  const state: FakeState = {
+    user: {
+      id: "user-1",
+      email: "demo@example.com",
+      createdAt: new Date().toISOString(),
+      emailVerifiedAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+      creditBalance: 35,
+    },
+    creditBalance: 35,
+    generatedTask: null,
+    generatedAssetUrl: null,
+    hasCheckedInToday: true,
+    creditTransactions: [
+      {
+        id: "tx-1",
+        type: "daily_check_in",
+        amount: 20,
+        balanceAfter: 35,
+        remark: "Daily check-in",
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: "tx-2",
+        type: "text_to_image",
+        amount: -10,
+        balanceAfter: 15,
+        remark: "Prompt A",
+        createdAt: new Date().toISOString(),
+      },
+    ],
+  };
+
+  const session = createSessionToken(state.user.id, state.user.email, secret);
+  const response = await worker.fetch(
+    new Request("https://sparkpost.test/api/bootstrap?locale=en", {
+      headers: {
+        cookie: `sparkpost_session=${session}`,
+      },
+    }),
+    {
+      SPARKPOST_DB: createFakeDb(state),
+      SESSION_SECRET: secret,
+      DAILY_CHECK_IN_CREDITS: "20",
+      IMAGE_DEFAULT_MODEL_ID: "nano-banana-2",
+      RELAY_IMAGE_API_KEY: "relay-test-key",
+      RELAY_IMAGE_BASE_URL: "https://relay.example/v1",
+      RELAY_IMAGE_API_KEY_MICU: "micu-test-key",
+      RELAY_IMAGE_BASE_URL_MICU: "https://micu.example/v1",
+    },
+  );
+
+  const result = await readJsonResponse<{
+    ok: boolean;
+    user: { email: string; creditBalance: number };
+    creditSummary: { creditBalance: number; hasCheckedInToday: boolean; usageLast7Days: number[] };
+    recentCreditHistory: Array<{ id: string; type: string; amount: number }>;
+    imageStatus: { status: string; modelId: string };
+    imageModels: { ok: boolean; items: unknown[] };
+  }>(response);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, true);
+  assert.equal(result.body.user.email, "demo@example.com");
+  assert.equal(result.body.user.creditBalance, 35);
+  assert.equal(result.body.creditSummary.creditBalance, 35);
+  assert.equal(result.body.creditSummary.hasCheckedInToday, true);
+  assert.equal(result.body.creditSummary.usageLast7Days.length, 7);
+  assert.equal(result.body.recentCreditHistory.length, 2);
+  assert.equal(result.body.imageStatus.modelId, "nano-banana-2");
+  assert.equal(result.body.imageModels.items.length, 3);
 });
 
 test("POST /api/credits/check-in awards credits once per day", async () => {

@@ -2663,6 +2663,44 @@ const buildLogoutCookie = () => [
   "Max-Age=0",
 ].join("; ");
 
+const getImageStatusPayload = (env: Env) => {
+  const imageConfig = getImageConfig(env);
+  return {
+    status: imageConfig.status,
+    model: imageConfig.model,
+    modelId: imageConfig.modelId,
+    label: imageConfig.label,
+  };
+};
+
+const getImageModelsPayload = (env: Env) => {
+  const defaultModelId = getDefaultImageModelId(env);
+  return {
+    ok: true,
+    defaultModelId,
+    items: Object.values(IMAGE_MODEL_REGISTRY).map((item) => {
+      const itemConfig = getImageConfig(env, item.id);
+      return {
+        id: item.id,
+        label: item.label,
+        provider: item.provider,
+        model: item.remoteModel,
+        supports: item.supports,
+        isDefault: item.id === defaultModelId,
+        supportedSizes: item.supportedSizes,
+        defaultSize: item.defaultSize,
+        status: itemConfig.status,
+        code: itemConfig.statusCode ?? null,
+        message: itemConfig.statusMessage ?? null,
+        costCredits: {
+          t2i: item.supports.t2i ? itemConfig.textToImageCost : null,
+          i2i: item.supports.i2i ? itemConfig.imageToImageCost : null,
+        },
+      };
+    }),
+  };
+};
+
 const routes: Array<{ method: string; pathname: string; handler: RouteHandler }> = [
   {
     method: "GET",
@@ -2671,6 +2709,30 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
       const databaseState = env.SPARKPOST_DB ? "configured" : "missing";
       const assetState = env.SPARKPOST_R2 ? "configured" : "missing";
       return json({ ok: true, service: "sparkpost-workers-api", database: databaseState, objectStorage: assetState });
+    },
+  },
+  {
+    method: "GET",
+    pathname: "/api/bootstrap",
+    handler: async (request, env, url) => {
+      const authenticatedUser = await getAuthenticatedUser(request, env);
+      if (!authenticatedUser.ok) return authenticatedUser.response;
+
+      const locale = url.searchParams.get("locale") === "en" ? "en" : "zh";
+      const user = authenticatedUser.user;
+      const creditSummary = user ? await getCreditSummaryForUser(user.id, env) : null;
+      const recentCreditHistory = user
+        ? await getCreditTransactionsForUser(user.id, env, { filter: "all", limit: 5, locale })
+        : [];
+
+      return json({
+        ok: true,
+        user,
+        imageStatus: getImageStatusPayload(env),
+        imageModels: getImageModelsPayload(env),
+        creditSummary,
+        recentCreditHistory,
+      });
     },
   },
   {
@@ -2976,39 +3038,14 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
       method: "GET",
       pathname: "/api/generate/status",
       handler: async (_request, env) => {
-        const imageConfig = getImageConfig(env);
-      return json({ status: imageConfig.status, model: imageConfig.model, modelId: imageConfig.modelId, label: imageConfig.label });
+        return json(getImageStatusPayload(env));
       },
     },
     {
       method: "GET",
       pathname: "/api/models/image",
       handler: async (_request, env) => {
-        const defaultModelId = getDefaultImageModelId(env);
-        return json({
-          ok: true,
-          defaultModelId,
-          items: Object.values(IMAGE_MODEL_REGISTRY).map((item) => {
-            const itemConfig = getImageConfig(env, item.id);
-            return {
-              id: item.id,
-              label: item.label,
-              provider: item.provider,
-              model: item.remoteModel,
-              supports: item.supports,
-              isDefault: item.id === defaultModelId,
-              supportedSizes: item.supportedSizes,
-              defaultSize: item.defaultSize,
-              status: itemConfig.status,
-              code: itemConfig.statusCode ?? null,
-              message: itemConfig.statusMessage ?? null,
-              costCredits: {
-                t2i: item.supports.t2i ? itemConfig.textToImageCost : null,
-                i2i: item.supports.i2i ? itemConfig.imageToImageCost : null,
-              },
-            };
-          }),
-        });
+        return json(getImageModelsPayload(env));
       },
     },
   ];
