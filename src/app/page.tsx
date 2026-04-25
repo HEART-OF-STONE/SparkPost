@@ -1032,6 +1032,16 @@ export default function Home() {
     return editor.innerText.replace(/\u00A0/g, " ");
   }, [currentPrompt, getRenderedPromptEditor]);
 
+  const blurPromptEditor = useCallback(() => {
+    const editor = getRenderedPromptEditor();
+    if (!editor) return;
+
+    const nextValue = editor.innerText.replace(/\u00A0/g, " ");
+    setPrompts((current) => (current[mode] === nextValue ? current : { ...current, [mode]: nextValue }));
+    editor.blur();
+    window.getSelection()?.removeAllRanges();
+  }, [getRenderedPromptEditor, mode]);
+
   const generateImage = useCallback(async () => {
     setGenerationNotice(null);
     const promptForRequest = getLivePromptValue();
@@ -2037,7 +2047,11 @@ export default function Home() {
               </div>
             </aside>
 
-            <main className={`relative flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-8 transition-colors duration-300 ${isDark ? "bg-[#000] bg-[radial-gradient(#222_1px,transparent_1px)]" : "bg-gray-50 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)]"} [background-size:24px_24px]`}>
+            <main
+              className={`relative flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-8 transition-colors duration-300 ${isDark ? "bg-[#000] bg-[radial-gradient(#222_1px,transparent_1px)]" : "bg-gray-50 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)]"} [background-size:24px_24px]`}
+              onContextMenuCapture={blurPromptEditor}
+              onPointerDownCapture={blurPromptEditor}
+            >
               {generatedImageUrl && !previewLoadFailed && !isGeneratingImage ? (
                 <div className="relative w-full h-full max-h-full flex items-center justify-center animate-in fade-in duration-700">
                   <Image src={generatedImageUrl} alt="Generated result" fill unoptimized className="object-contain rounded-md shadow-2xl" onError={() => setPreviewLoadFailed(true)} />
