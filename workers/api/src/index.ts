@@ -357,7 +357,7 @@ const IMAGE_MODEL_REGISTRY: Record<string, ImageModelDefinition> = {
   },
   "gpt-image-2": {
     id: "gpt-image-2",
-    label: "GPT-Image 2",
+    label: "GPT-Image 2 (micu)",
     provider: "relay",
     remoteModel: "gpt-image-2",
     supports: { t2i: true, i2i: true },
@@ -365,6 +365,17 @@ const IMAGE_MODEL_REGISTRY: Record<string, ImageModelDefinition> = {
     defaultSize: DEFAULT_IMAGE_SIZE,
     defaultQuality: "high",
     relayConfigKey: "micu",
+  },
+  "gpt-image-2-duojie": {
+    id: "gpt-image-2-duojie",
+    label: "GPT-Image 2 (duojie)",
+    provider: "relay",
+    remoteModel: "gpt-image2",
+    supports: { t2i: true, i2i: true },
+    supportedSizes: GPT_IMAGE_SIZES,
+    defaultSize: DEFAULT_IMAGE_SIZE,
+    defaultQuality: "high",
+    relayConfigKey: "default",
   },
   "dall-e-3": {
     id: "dall-e-3",
@@ -381,6 +392,7 @@ const IMAGE_MODEL_ALIAS_MAP: Record<string, string> = {
   "gemini-3.1-flash-image-openai": "nano-banana-2",
   "gemini-3.1-image-openai": "nano-banana-2",
   "gpt-image-2": "gpt-image-2",
+  "gpt-image2": "gpt-image-2-duojie",
   "dall-e-3": "dall-e-3",
 };
 
@@ -435,8 +447,6 @@ const getRelayProviderConfig = (env: Env, registryModel?: ImageModelDefinition) 
   return {
     apiKey: env.RELAY_IMAGE_API_KEY?.trim() || env.IMAGE_API_KEY?.trim() || "",
     baseUrl: (
-      env.RELAY_IMAGE_BASE_URL_MICU?.trim() ||
-      env.IMAGE_RELAY_BASE_URL_MICU?.trim() ||
       env.RELAY_IMAGE_BASE_URL?.trim() ||
       env.IMAGE_BASE_URL?.trim() ||
       ""

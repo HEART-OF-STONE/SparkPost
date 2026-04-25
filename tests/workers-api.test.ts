@@ -483,6 +483,7 @@ test("GET /api/models/image returns registered image models", async () => {
   assert.equal(result.body.ok, true);
   assert.equal(result.body.defaultModelId, "gpt-image-2");
   assert.ok(result.body.items.some((item) => item.id === "gpt-image-2" && item.provider === "relay" && item.model === "gpt-image-2" && item.isDefault));
+  assert.ok(result.body.items.some((item) => item.id === "gpt-image-2-duojie" && item.provider === "relay" && item.model === "gpt-image2" && !item.isDefault));
   assert.deepEqual(result.body.items.find((item) => item.id === "gpt-image-2")?.supportedSizes, [
     "auto",
     "1024x1024",
@@ -703,6 +704,117 @@ test("POST /api/generate/image can target the GPT-Image relay model via modelId"
     assert.equal(result.body.task.requestedSize, "1536x1024");
     assert.equal(result.body.task.remainingCredits, 10);
     assert.equal(result.body.task.assets[0]?.width, 1536);
+    assert.equal(result.body.task.assets[0]?.height, 1024);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("POST /api/generate/image can target the duojie GPT-Image relay model via modelId", async () => {
+  const worker = await loadWorker();
+  const state: FakeState = {
+    user: {
+      id: "user-1",
+      email: "demo@example.com",
+      createdAt: new Date().toISOString(),
+      emailVerifiedAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+      creditBalance: 20,
+    },
+    creditBalance: 20,
+    generatedTask: null,
+    generatedAssetUrl: null,
+    hasCheckedInToday: false,
+    creditTransactions: [
+      {
+        id: "tx-signup",
+        type: "signup_bonus",
+        sourceType: "signup",
+        amount: 20,
+        balanceAfter: 20,
+        remainingAmount: 20,
+        remark: "Signup bonus",
+        createdAt: new Date().toISOString(),
+      },
+    ],
+  };
+  const fakeR2 = createFakeR2();
+  const secret = "workers-smoke-secret";
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url === "https://duojie.example.com/v1/images/generations") {
+      const request = input instanceof Request ? input : new Request(url, init);
+      const payload = await request.json() as { model?: string; prompt?: string; quality?: string; size?: string };
+      assert.equal(request.headers.get("authorization"), "Bearer duojie-test-key");
+      assert.equal(payload.model, "gpt-image2");
+      assert.equal(typeof payload.prompt, "string");
+      assert.equal(payload.size, "1024x1024");
+      assert.equal(payload.quality, "high");
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              b64_json: createPngBytes(1024, 1024).toString("base64"),
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }
+
+    throw new Error(`Unexpected fetch in smoke test: ${url}`);
+  };
+
+  try {
+    const session = createSessionToken(state.user.id, state.user.email, secret);
+    const response = await worker.fetch(
+      new Request("https://sparkpost.test/api/generate/image", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `sparkpost_session=${session}`,
+        },
+        body: JSON.stringify({
+          modelId: "gpt-image-2-duojie",
+          prompt: "a luminous crystal product on a black pedestal",
+          size: "1024x1024",
+        }),
+      }),
+      {
+        SPARKPOST_DB: createFakeDb(state),
+        SPARKPOST_R2: fakeR2.bucket,
+        SESSION_SECRET: secret,
+        RELAY_IMAGE_API_KEY: "duojie-test-key",
+        RELAY_IMAGE_BASE_URL: "https://duojie.example.com/v1",
+        RELAY_IMAGE_API_KEY_MICU: "micu-test-key",
+        RELAY_IMAGE_BASE_URL_MICU: "https://micu.example.com/v1",
+        TEXT_TO_IMAGE_COST: "10",
+      },
+    );
+
+    const result = await readJsonResponse<{
+      ok: boolean;
+      task: {
+        status: string;
+        model: string | null;
+        requestedSize: string | null;
+        remainingCredits: number;
+        assets: Array<{ width: number | null; height: number | null }>;
+      };
+    }>(response);
+
+    assert.equal(result.status, 200);
+    assert.equal(result.body.ok, true);
+    assert.equal(result.body.task.status, "succeeded");
+    assert.equal(result.body.task.model, "gpt-image2");
+    assert.equal(result.body.task.requestedSize, "1024x1024");
+    assert.equal(result.body.task.remainingCredits, 10);
+    assert.equal(result.body.task.assets[0]?.width, 1024);
     assert.equal(result.body.task.assets[0]?.height, 1024);
   } finally {
     globalThis.fetch = originalFetch;
@@ -1038,7 +1150,7 @@ test("GET /api/bootstrap returns public startup data without a session", async (
   assert.deepEqual(result.body.recentCreditHistory, []);
   assert.equal(result.body.imageStatus.modelId, "nano-banana-2");
   assert.equal(result.body.imageModels.ok, true);
-  assert.equal(result.body.imageModels.items.length, 3);
+  assert.equal(result.body.imageModels.items.length, 4);
 });
 
 test("GET /api/bootstrap returns authenticated startup data in one response", async () => {
@@ -1114,7 +1226,7 @@ test("GET /api/bootstrap returns authenticated startup data in one response", as
   assert.equal(result.body.creditSummary.usageLast7Days.length, 7);
   assert.equal(result.body.recentCreditHistory.length, 2);
   assert.equal(result.body.imageStatus.modelId, "nano-banana-2");
-  assert.equal(result.body.imageModels.items.length, 3);
+  assert.equal(result.body.imageModels.items.length, 4);
 });
 
 test("POST /api/credits/check-in awards credits once per day", async () => {
