@@ -669,6 +669,7 @@ export default function Home() {
   const resultStatus: ResultStatus = generationTask ? "success" : generationNotice?.type === "error" ? "error" : "empty";
   const cooldownActive = useMemo(() => cooldownEndsAt !== null && timeLeft > 0, [cooldownEndsAt, timeLeft]);
   const accountInitials = user?.email.slice(0, 2).toUpperCase() ?? "SP";
+  const userId = user?.id ?? null;
   const currentPrompt = prompts[mode];
   const canRender = !!currentPrompt.trim() && !isGeneratingImage;
   const referenceUploadInputId = user ? "workspace-reference-upload" : "landing-reference-upload";
@@ -1006,20 +1007,23 @@ export default function Home() {
   }, [t.sessionRefreshFailed]);
 
   const loadCreditSummary = useCallback(async () => {
-    if (!user) return;
+    if (!userId) return;
     const response = await fetchApi("/api/credits/summary", { cache: "no-store" });
     const data = (await response.json().catch(() => null)) as CreditSummaryResponse | null;
     if (!response.ok || !data || !("ok" in data) || data.ok !== true) {
       throw new Error(locale === "zh" ? "无法加载积分概览。" : "Unable to load credits summary.");
     }
-    setUser((current) => (current ? { ...current, creditBalance: data.creditBalance } : current));
+    setUser((current) => {
+      if (!current || current.creditBalance === data.creditBalance) return current;
+      return { ...current, creditBalance: data.creditBalance };
+    });
     setHasCheckedIn(data.hasCheckedInToday);
     setDailyCheckInCredits(data.dailyCheckInCredits);
     setUsageLast7Days(data.usageLast7Days);
-  }, [locale, user]);
+  }, [locale, userId]);
 
   const loadRecentCreditHistory = useCallback(async () => {
-    if (!user) return;
+    if (!userId) return;
     const response = await fetchApi(`/api/credits/transactions?filter=all&limit=5&locale=${locale}`, {
       cache: "no-store",
     });
@@ -1028,10 +1032,10 @@ export default function Home() {
       throw new Error(locale === "zh" ? "鏃犳硶鍔犺浇绉垎娴佹按銆?" : "Unable to load transaction history.");
     }
     setRecentCreditHistory(data.items);
-  }, [locale, user]);
+  }, [locale, userId]);
 
   const loadDashboardCreditHistory = useCallback(async () => {
-    if (!user) return;
+    if (!userId) return;
     const response = await fetchApi(
       `/api/credits/transactions?filter=${historyFilter}&limit=50&locale=${locale}`,
       { cache: "no-store" },
@@ -1041,10 +1045,10 @@ export default function Home() {
       throw new Error(locale === "zh" ? "鏃犳硶鍔犺浇绉垎娴佹按銆?" : "Unable to load transaction history.");
     }
     setDashboardCreditHistory(data.items);
-  }, [historyFilter, locale, user]);
+  }, [historyFilter, locale, userId]);
 
   const loadCreditHistory = useCallback(async () => {
-    if (!user) return;
+    if (!userId) return;
     const response = await fetchApi(
       `/api/credits/transactions?filter=${historyFilter}&limit=50&locale=${locale}`,
       { cache: "no-store" },
@@ -1054,7 +1058,7 @@ export default function Home() {
       throw new Error(locale === "zh" ? "无法加载积分流水。" : "Unable to load transaction history.");
     }
     setDashboardCreditHistory(data.items);
-  }, [historyFilter, locale, user]);
+  }, [historyFilter, locale, userId]);
 
   const generationHistoryLoadFailedText = billingCopy.generationHistoryLoadFailed;
 
@@ -1077,7 +1081,7 @@ export default function Home() {
   }, [generationHistoryLoadFailedText, user?.id]);
 
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setHasCheckedIn(false);
       setRecentCreditHistory([]);
       setDashboardCreditHistory([]);
@@ -1088,17 +1092,17 @@ export default function Home() {
     }
 
     void loadCreditSummary().catch(() => {});
-  }, [loadCreditSummary, user]);
+  }, [loadCreditSummary, userId]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     void loadRecentCreditHistory().catch(() => {});
-  }, [loadRecentCreditHistory, user]);
+  }, [loadRecentCreditHistory, userId]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!showDashboard || !userId) return;
     void loadDashboardCreditHistory().catch(() => {});
-  }, [loadDashboardCreditHistory, user]);
+  }, [loadDashboardCreditHistory, showDashboard, userId]);
 
   useEffect(() => {
     if (!showGenerationHistory || !user?.id) {
@@ -1192,7 +1196,10 @@ export default function Home() {
       setGenerationTask(data.task);
       setGeneratedImageUrl(primaryImageUrl(data.task));
       setGenerationNotice({ type: "success", text: formatTemplate(t.generateSuccess, { count: data.task.assets.length }) });
-      setUser((current) => current ? { ...current, creditBalance: data.task.remainingCredits } : current);
+      setUser((current) => {
+        if (!current || current.creditBalance === data.task.remainingCredits) return current;
+        return { ...current, creditBalance: data.task.remainingCredits };
+      });
       if (!primaryImageUrl(data.task)) setGenerationNotice({ type: "info", text: t.imagePreviewUnavailable });
     } catch (error) {
       setGenerationNotice({ type: "error", text: error instanceof Error ? error.message : t.generateFailed });
@@ -1352,12 +1359,16 @@ export default function Home() {
       if (!response.ok || !data || !("ok" in data) || data.ok !== true) {
         throw new Error(locale === "zh" ? "签到失败，请稍后重试。" : "Check-in failed. Please try again.");
       }
-      setUser((current) => (current ? { ...current, creditBalance: data.creditBalance } : current));
+      setUser((current) => {
+        if (!current || current.creditBalance === data.creditBalance) return current;
+        return { ...current, creditBalance: data.creditBalance };
+      });
       setHasCheckedIn(data.hasCheckedInToday);
       setDailyCheckInCredits(data.dailyCheckInCredits);
       setUsageLast7Days(data.usageLast7Days);
       setGenerationNotice({ type: "success", text: billingCopy.checkInSuccess });
-      await Promise.all([loadRecentCreditHistory(), loadDashboardCreditHistory()]);
+      await loadRecentCreditHistory();
+      if (showDashboard) await loadDashboardCreditHistory();
     } catch (error) {
       setGenerationNotice({
         type: "error",
