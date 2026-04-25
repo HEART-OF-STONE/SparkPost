@@ -165,6 +165,8 @@ type PromptAssistConfig = {
 type StoredAsset = {
   assetId: string;
   fileUrl: string;
+  width: number | null;
+  height: number | null;
 };
 
 type GenerationTaskRow = {
@@ -172,6 +174,7 @@ type GenerationTaskRow = {
   status: string;
   prompt: string;
   compiledPrompt: string | null;
+  requestedSize: string | null;
   createdAt: string;
   completedAt: string | null;
   model: string | null;
@@ -2158,6 +2161,111 @@ const createAssetResponseUrl = (request: Request, key: string) => {
   return `${origin}/api/assets/${key}`;
 };
 
+const readUint32BigEndian = (bytes: Uint8Array, offset: number) =>
+  ((bytes[offset] ?? 0) << 24) |
+  ((bytes[offset + 1] ?? 0) << 16) |
+  ((bytes[offset + 2] ?? 0) << 8) |
+  (bytes[offset + 3] ?? 0);
+
+const readUint16BigEndian = (bytes: Uint8Array, offset: number) =>
+  ((bytes[offset] ?? 0) << 8) | (bytes[offset + 1] ?? 0);
+
+const readUint16LittleEndian = (bytes: Uint8Array, offset: number) =>
+  (bytes[offset] ?? 0) | ((bytes[offset + 1] ?? 0) << 8);
+
+const parsePngDimensions = (bytes: Uint8Array) => {
+  const hasPngSignature =
+    bytes.length >= 24 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a;
+  if (!hasPngSignature) return null;
+
+  const width = readUint32BigEndian(bytes, 16);
+  const height = readUint32BigEndian(bytes, 20);
+  return width > 0 && height > 0 ? { width, height } : null;
+};
+
+const parseJpegDimensions = (bytes: Uint8Array) => {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+
+  let offset = 2;
+  while (offset + 9 < bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+
+    const marker = bytes[offset + 1];
+    offset += 2;
+    if (marker === 0xd9 || marker === 0xda) break;
+    if (offset + 2 > bytes.length) break;
+
+    const segmentLength = readUint16BigEndian(bytes, offset);
+    if (segmentLength < 2 || offset + segmentLength > bytes.length) break;
+
+    const isStartOfFrame =
+      (marker >= 0xc0 && marker <= 0xc3) ||
+      (marker >= 0xc5 && marker <= 0xc7) ||
+      (marker >= 0xc9 && marker <= 0xcb) ||
+      (marker >= 0xcd && marker <= 0xcf);
+    if (isStartOfFrame && segmentLength >= 7) {
+      const height = readUint16BigEndian(bytes, offset + 3);
+      const width = readUint16BigEndian(bytes, offset + 5);
+      return width > 0 && height > 0 ? { width, height } : null;
+    }
+
+    offset += segmentLength;
+  }
+
+  return null;
+};
+
+const parseWebpDimensions = (bytes: Uint8Array) => {
+  const textDecoder = new TextDecoder("ascii");
+  if (bytes.length < 30 || textDecoder.decode(bytes.slice(0, 4)) !== "RIFF" || textDecoder.decode(bytes.slice(8, 12)) !== "WEBP") {
+    return null;
+  }
+
+  const chunkType = textDecoder.decode(bytes.slice(12, 16));
+  if (chunkType === "VP8X" && bytes.length >= 30) {
+    const width = 1 + (bytes[24] ?? 0) + ((bytes[25] ?? 0) << 8) + ((bytes[26] ?? 0) << 16);
+    const height = 1 + (bytes[27] ?? 0) + ((bytes[28] ?? 0) << 8) + ((bytes[29] ?? 0) << 16);
+    return width > 0 && height > 0 ? { width, height } : null;
+  }
+
+  if (chunkType === "VP8 " && bytes.length >= 30) {
+    const width = readUint16LittleEndian(bytes, 26) & 0x3fff;
+    const height = readUint16LittleEndian(bytes, 28) & 0x3fff;
+    return width > 0 && height > 0 ? { width, height } : null;
+  }
+
+  if (chunkType === "VP8L" && bytes.length >= 25) {
+    const b0 = bytes[21] ?? 0;
+    const b1 = bytes[22] ?? 0;
+    const b2 = bytes[23] ?? 0;
+    const b3 = bytes[24] ?? 0;
+    const width = 1 + (((b1 & 0x3f) << 8) | b0);
+    const height = 1 + (((b3 & 0x0f) << 10) | (b2 << 2) | ((b1 & 0xc0) >> 6));
+    return width > 0 && height > 0 ? { width, height } : null;
+  }
+
+  return null;
+};
+
+const getImageDimensions = (bytes: Uint8Array, mimeType: string) => {
+  const normalizedMimeType = mimeType.toLowerCase();
+  if (normalizedMimeType.includes("png")) return parsePngDimensions(bytes);
+  if (normalizedMimeType.includes("jpeg") || normalizedMimeType.includes("jpg")) return parseJpegDimensions(bytes);
+  if (normalizedMimeType.includes("webp")) return parseWebpDimensions(bytes);
+  return parsePngDimensions(bytes) ?? parseJpegDimensions(bytes) ?? parseWebpDimensions(bytes);
+};
+
 const persistGeneratedAsset = async (
   request: Request,
   env: Env,
@@ -2172,6 +2280,7 @@ const persistGeneratedAsset = async (
   const assetId = crypto.randomUUID();
   const fileExtension = getFileExtensionFromMimeType(providerResult.mimeType);
   const key = `${GENERATED_ASSET_PREFIX}/${userId}/${taskId}/${assetId}.${fileExtension}`;
+  const dimensions = getImageDimensions(providerResult.bytes, providerResult.mimeType);
 
   await env.SPARKPOST_R2.put(key, providerResult.bytes, {
     httpMetadata: {
@@ -2182,6 +2291,8 @@ const persistGeneratedAsset = async (
   return {
     assetId,
     fileUrl: createAssetResponseUrl(request, key),
+    width: dimensions?.width ?? null,
+    height: dimensions?.height ?? null,
   };
 };
 
@@ -2225,6 +2336,7 @@ const generateTextToImageForUser = async (
   }
 
   const imageConfig = getImageConfig(env, modelId);
+  const requestedSize = size ?? imageConfig.defaultSize;
   const now = new Date();
   const compiledPrompt = prompt;
   await reconcileExpiredCreditsForUser(userId, env, now);
@@ -2243,20 +2355,21 @@ const generateTextToImageForUser = async (
   const taskId = crypto.randomUUID();
   await env.SPARKPOST_DB.prepare(
     `INSERT INTO generation_tasks (
-       id, user_id, task_type, status, prompt, compiled_prompt, model, cost_credits, created_at
-     ) VALUES (?, ?, 'text_to_image', 'running', ?, ?, ?, ?, ?)`,
+       id, user_id, task_type, status, prompt, compiled_prompt, requested_size, model, cost_credits, created_at
+     ) VALUES (?, ?, 'text_to_image', 'running', ?, ?, ?, ?, ?, ?)`,
   ).bind(
     taskId,
     userId,
     prompt,
     compiledPrompt,
+    requestedSize,
     imageConfig.model,
     imageConfig.textToImageCost,
     now.toISOString(),
   ).run();
 
   try {
-    const providerResult = await generateProviderImage(compiledPrompt, env, { mode: "t2i", modelId, size });
+    const providerResult = await generateProviderImage(compiledPrompt, env, { mode: "t2i", modelId, size: requestedSize });
     const storedAsset = await persistGeneratedAsset(request, env, userId, taskId, providerResult);
     const completedAt = new Date();
     const remainingCredits = await spendCreditsForUser(userId, env, {
@@ -2270,15 +2383,15 @@ const generateTextToImageForUser = async (
     await env.SPARKPOST_DB.prepare(
       `INSERT INTO generated_assets (
          id, task_id, asset_type, file_url, width, height, created_at
-       ) VALUES (?, ?, 'image', ?, NULL, NULL, ?)`,
-    ).bind(storedAsset.assetId, taskId, storedAsset.fileUrl, completedAt.toISOString()).run();
+       ) VALUES (?, ?, 'image', ?, ?, ?, ?)`,
+    ).bind(storedAsset.assetId, taskId, storedAsset.fileUrl, storedAsset.width, storedAsset.height, completedAt.toISOString()).run();
 
     await env.SPARKPOST_DB.prepare(
       `UPDATE generation_tasks SET status = 'succeeded', model = ?, completed_at = ? WHERE id = ?`,
     ).bind(providerResult.model, completedAt.toISOString(), taskId).run();
 
       const task = await env.SPARKPOST_DB.prepare(
-       `SELECT id, status, prompt, compiled_prompt AS compiledPrompt, created_at AS createdAt, completed_at AS completedAt, model, cost_credits AS costCredits
+       `SELECT id, status, prompt, compiled_prompt AS compiledPrompt, requested_size AS requestedSize, created_at AS createdAt, completed_at AS completedAt, model, cost_credits AS costCredits
         FROM generation_tasks WHERE id = ? LIMIT 1`,
       ).bind(taskId).first<GenerationTaskRow>();
 
@@ -2286,6 +2399,7 @@ const generateTextToImageForUser = async (
       id: task?.id ?? taskId,
       status: task?.status ?? "succeeded",
       prompt: task?.prompt ?? prompt,
+      requestedSize: task?.requestedSize ?? requestedSize,
       createdAt: task?.createdAt ?? now.toISOString(),
       completedAt: task?.completedAt ?? completedAt.toISOString(),
       model: task?.model ?? providerResult.model,
@@ -2295,8 +2409,8 @@ const generateTextToImageForUser = async (
         {
           id: storedAsset.assetId,
           fileUrl: storedAsset.fileUrl,
-          width: null,
-          height: null,
+          width: storedAsset.width,
+          height: storedAsset.height,
         },
       ],
     };
@@ -2322,6 +2436,7 @@ const generateImageToImageForUser = async (
   }
 
   const imageConfig = getImageConfig(env, modelId);
+  const requestedSize = size ?? imageConfig.defaultSize;
   const now = new Date();
   const compiledPrompt = compileImageToImagePrompt(prompt, referenceImages.length);
   await reconcileExpiredCreditsForUser(userId, env, now);
@@ -2340,13 +2455,14 @@ const generateImageToImageForUser = async (
   const taskId = crypto.randomUUID();
   await env.SPARKPOST_DB.prepare(
     `INSERT INTO generation_tasks (
-       id, user_id, task_type, status, prompt, compiled_prompt, model, cost_credits, input_image_url, created_at
-     ) VALUES (?, ?, 'image_to_image', 'running', ?, ?, ?, ?, ?, ?)`,
+       id, user_id, task_type, status, prompt, compiled_prompt, requested_size, model, cost_credits, input_image_url, created_at
+     ) VALUES (?, ?, 'image_to_image', 'running', ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       taskId,
       userId,
       prompt,
       compiledPrompt,
+      requestedSize,
       imageConfig.model,
       imageConfig.imageToImageCost,
       `inline:${getMimeTypeFromDataUrl(referenceImages[0])}`,
@@ -2357,7 +2473,7 @@ const generateImageToImageForUser = async (
     const providerResult = await generateProviderImage(compiledPrompt, env, {
       mode: "i2i",
       modelId,
-      size,
+      size: requestedSize,
       referenceImages,
     });
     const storedAsset = await persistGeneratedAsset(request, env, userId, taskId, providerResult);
@@ -2373,15 +2489,15 @@ const generateImageToImageForUser = async (
     await env.SPARKPOST_DB.prepare(
       `INSERT INTO generated_assets (
          id, task_id, asset_type, file_url, width, height, created_at
-       ) VALUES (?, ?, 'image', ?, NULL, NULL, ?)`,
-    ).bind(storedAsset.assetId, taskId, storedAsset.fileUrl, completedAt.toISOString()).run();
+       ) VALUES (?, ?, 'image', ?, ?, ?, ?)`,
+    ).bind(storedAsset.assetId, taskId, storedAsset.fileUrl, storedAsset.width, storedAsset.height, completedAt.toISOString()).run();
 
     await env.SPARKPOST_DB.prepare(
       `UPDATE generation_tasks SET status = 'succeeded', model = ?, completed_at = ? WHERE id = ?`,
     ).bind(providerResult.model, completedAt.toISOString(), taskId).run();
 
       const task = await env.SPARKPOST_DB.prepare(
-       `SELECT id, status, prompt, compiled_prompt AS compiledPrompt, created_at AS createdAt, completed_at AS completedAt, model, cost_credits AS costCredits
+       `SELECT id, status, prompt, compiled_prompt AS compiledPrompt, requested_size AS requestedSize, created_at AS createdAt, completed_at AS completedAt, model, cost_credits AS costCredits
         FROM generation_tasks WHERE id = ? LIMIT 1`,
       ).bind(taskId).first<GenerationTaskRow>();
 
@@ -2389,6 +2505,7 @@ const generateImageToImageForUser = async (
       id: task?.id ?? taskId,
       status: task?.status ?? "succeeded",
       prompt: task?.prompt ?? prompt,
+      requestedSize: task?.requestedSize ?? requestedSize,
       createdAt: task?.createdAt ?? now.toISOString(),
       completedAt: task?.completedAt ?? completedAt.toISOString(),
       model: task?.model ?? providerResult.model,
@@ -2398,8 +2515,8 @@ const generateImageToImageForUser = async (
         {
           id: storedAsset.assetId,
           fileUrl: storedAsset.fileUrl,
-          width: null,
-          height: null,
+          width: storedAsset.width,
+          height: storedAsset.height,
         },
       ],
     };

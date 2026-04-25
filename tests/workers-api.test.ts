@@ -13,6 +13,7 @@ type GeneratedTask = {
   id: string;
   status: string;
   prompt: string;
+  requestedSize?: string | null;
   createdAt: string;
   completedAt: string | null;
   model: string | null;
@@ -60,6 +61,14 @@ function createSessionToken(userId: string, email: string, secret: string) {
   const encodedPayload = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
   const signature = createHmac("sha256", secret).update(encodedPayload).digest("base64url");
   return `${encodedPayload}.${signature}`;
+}
+
+function createPngBytes(width: number, height: number) {
+  const bytes = Buffer.alloc(24);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+  bytes.writeUInt32BE(width, 16);
+  bytes.writeUInt32BE(height, 20);
+  return bytes;
 }
 
 function createFakeDb(state: FakeState) {
@@ -150,18 +159,21 @@ function createFakeDb(state: FakeState) {
 
                 if (sql.includes("INSERT INTO generation_tasks")) {
                   const includesCompiledPrompt = sql.includes("compiled_prompt");
+                  const includesRequestedSize = sql.includes("requested_size");
                   const promptIndex = 2;
-                  const modelIndex = includesCompiledPrompt ? 4 : 3;
-                  const costIndex = includesCompiledPrompt ? 5 : 4;
+                  const requestedSizeIndex = includesCompiledPrompt && includesRequestedSize ? 4 : null;
+                  const modelIndex = includesCompiledPrompt ? (includesRequestedSize ? 5 : 4) : 3;
+                  const costIndex = includesCompiledPrompt ? (includesRequestedSize ? 6 : 5) : 4;
                   const createdAtIndex = includesCompiledPrompt
                     ? sql.includes("input_image_url")
-                      ? 7
-                      : 6
+                      ? (includesRequestedSize ? 8 : 7)
+                      : (includesRequestedSize ? 7 : 6)
                     : 5;
                   state.generatedTask = {
                     id: String(values[0]),
                     status: "running",
                     prompt: String(values[promptIndex]),
+                    requestedSize: requestedSizeIndex === null ? null : String(values[requestedSizeIndex]),
                     model: String(values[modelIndex]),
                     costCredits: Number(values[costIndex]),
                     createdAt: String(values[createdAtIndex]),
@@ -547,7 +559,7 @@ test("POST /api/generate/image can target the GPT-Image relay model via modelId"
         JSON.stringify({
           data: [
             {
-              b64_json: Buffer.from("relay-gpt-image-binary", "utf8").toString("base64"),
+              b64_json: createPngBytes(1536, 1024).toString("base64"),
             },
           ],
         }),
@@ -591,7 +603,9 @@ test("POST /api/generate/image can target the GPT-Image relay model via modelId"
       task: {
         status: string;
         model: string | null;
+        requestedSize: string | null;
         remainingCredits: number;
+        assets: Array<{ width: number | null; height: number | null }>;
       };
     }>(response);
 
@@ -599,7 +613,10 @@ test("POST /api/generate/image can target the GPT-Image relay model via modelId"
     assert.equal(result.body.ok, true);
     assert.equal(result.body.task.status, "succeeded");
     assert.equal(result.body.task.model, "gpt-image-2");
+    assert.equal(result.body.task.requestedSize, "1536x1024");
     assert.equal(result.body.task.remainingCredits, 10);
+    assert.equal(result.body.task.assets[0]?.width, 1536);
+    assert.equal(result.body.task.assets[0]?.height, 1024);
   } finally {
     globalThis.fetch = originalFetch;
   }
