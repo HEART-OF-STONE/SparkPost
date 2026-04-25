@@ -551,10 +551,11 @@ test("POST /api/generate/image can target the GPT-Image relay model via modelId"
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     if (url === "https://relay.example.com/v1/images/generations") {
       const request = input instanceof Request ? input : new Request(url, init);
-      const payload = await request.json() as { model?: string; prompt?: string; size?: string };
+      const payload = await request.json() as { model?: string; prompt?: string; quality?: string; size?: string };
       assert.equal(payload.model, "gpt-image-2");
       assert.equal(typeof payload.prompt, "string");
       assert.equal(payload.size, "1536x1024");
+      assert.equal(payload.quality, "high");
       return new Response(
         JSON.stringify({
           data: [

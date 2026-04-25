@@ -125,6 +125,7 @@ type ImageSize =
   | "2160x3840"
   | "1792x1024"
   | "1024x1792";
+type ImageQuality = "auto" | "low" | "medium" | "high";
 
 type ImageModelDefinition = {
   id: string;
@@ -134,6 +135,7 @@ type ImageModelDefinition = {
   supports: Record<ImageMode, boolean>;
   supportedSizes: ImageSize[];
   defaultSize: ImageSize;
+  defaultQuality?: ImageQuality;
   relayConfigKey?: "default" | "micu";
 };
 
@@ -149,6 +151,7 @@ type ResolvedImageConfig = {
   supports: Record<ImageMode, boolean>;
   supportedSizes: ImageSize[];
   defaultSize: ImageSize;
+  defaultQuality?: ImageQuality;
   status: "available" | "unavailable";
   statusCode?: string;
   statusMessage?: string;
@@ -330,6 +333,7 @@ const IMAGE_MODEL_REGISTRY: Record<string, ImageModelDefinition> = {
     supports: { t2i: true, i2i: true },
     supportedSizes: GPT_IMAGE_SIZES,
     defaultSize: DEFAULT_IMAGE_SIZE,
+    defaultQuality: "high",
     relayConfigKey: "micu",
   },
   "dall-e-3": {
@@ -472,6 +476,7 @@ const getImageConfig = (env: Env, requestedModelId?: string): ResolvedImageConfi
     supports: registryModel?.supports ?? { t2i: true, i2i: true },
     supportedSizes: registryModel?.supportedSizes ?? GPT_IMAGE_SIZES,
     defaultSize: registryModel?.defaultSize ?? DEFAULT_IMAGE_SIZE,
+    defaultQuality: registryModel?.defaultQuality,
     status:
       (
         (effectiveBackend === "official" && providerConfig.apiKey.length > 0) ||
@@ -2022,7 +2027,12 @@ const callOfficialImageProvider = async (
       "Content-Type": "application/json",
       Authorization: `Bearer ${imageConfig.apiKey}`,
     },
-    body: JSON.stringify({ model: imageConfig.model, prompt, size }),
+    body: JSON.stringify({
+      model: imageConfig.model,
+      prompt,
+      size,
+      ...(imageConfig.defaultQuality ? { quality: imageConfig.defaultQuality } : {}),
+    }),
   });
 
   const body = (await response.json().catch(() => null)) as
