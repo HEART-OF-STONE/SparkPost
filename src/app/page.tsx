@@ -729,7 +729,11 @@ export default function Home() {
             insufficientCredits: `积分不足，本次渲染需要 ${currentCost} 积分。`,
             checkInSuccess: `签到成功，获得 ${dailyCheckInCredits} 积分。`,
             noHistory: "暂无相关记录",
-            generationHistory: "生成历史",
+            createTab: "创作",
+            historyTab: "历史",
+            galleryTab: "画廊",
+            galleryComingSoon: "画廊即将开放",
+            generationHistory: "历史",
             generationHistoryTitle: "我的生成历史",
             generationHistorySubtitle: "查看你最近生成的图片、提示词和参数。",
             generationHistoryLoadFailed: "无法加载生成历史。",
@@ -763,7 +767,11 @@ export default function Home() {
             insufficientCredits: `Insufficient credits. This render requires ${currentCost} credits.`,
             checkInSuccess: `Check-in successful. +${dailyCheckInCredits} credits.`,
             noHistory: "No transactions yet.",
-            generationHistory: "Generation History",
+            createTab: "Create",
+            historyTab: "History",
+            galleryTab: "Gallery",
+            galleryComingSoon: "Gallery is coming soon.",
+            generationHistory: "History",
             generationHistoryTitle: "My Generation History",
             generationHistorySubtitle: "Review your recent images, prompts, and render parameters.",
             generationHistoryLoadFailed: "Unable to load generation history.",
@@ -1751,6 +1759,11 @@ export default function Home() {
   const historyItems = dashboardCreditHistory;
   const drawerHistoryItems = recentCreditHistory;
   const usageMax = Math.max(...usageLast7Days, 1);
+  const navTabs = [
+    { id: "create", label: billingCopy.createTab, active: !showGenerationHistory, disabled: false },
+    { id: "history", label: billingCopy.historyTab, active: showGenerationHistory, disabled: false },
+    { id: "gallery", label: billingCopy.galleryTab, active: false, disabled: true },
+  ] as const;
 
   return (
     <div className={isDark ? "dark" : ""}>
@@ -1780,6 +1793,25 @@ export default function Home() {
             </div>
             <span className={`text-[15px] font-bold tracking-wide transition-colors ${isDark ? "text-cyan-300 group-hover:text-cyan-200" : "text-gray-900 group-hover:text-cyan-600"}`}>{t.brand}</span>
             <div className={`mx-2 h-4 w-px ${isDark ? "bg-white/20" : "bg-gray-300"}`} />
+            {user ? (
+              <nav className={`hidden items-center rounded-full border p-0.5 md:flex ${isDark ? "border-white/10 bg-[#0A0A0A]" : "border-gray-200 bg-white"}`} aria-label="Workspace">
+                {navTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    disabled={tab.disabled}
+                    title={tab.disabled ? billingCopy.galleryComingSoon : undefined}
+                    onClick={() => {
+                      if (tab.id === "create") setShowGenerationHistory(false);
+                      if (tab.id === "history") setShowGenerationHistory(true);
+                    }}
+                    className={`rounded-full px-3 py-1 text-[11px] font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-45 ${tab.active ? (isDark ? "bg-white/10 text-white shadow-sm" : "bg-gray-100 text-gray-900 shadow-sm") : (isDark ? "text-[#888] hover:text-[#CCC]" : "text-gray-500 hover:text-gray-900")}`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </nav>
+            ) : null}
             <button type="button" onClick={(event) => { event.stopPropagation(); setIsDark((current) => !current); }} className={`rounded-full p-1.5 transition-colors ${isDark ? "text-gray-400 hover:bg-white/10" : "text-gray-500 hover:bg-gray-200"}`}>
               {isDark ? <SunIcon /> : <MoonIcon />}
             </button>
@@ -1828,17 +1860,6 @@ export default function Home() {
                           >
                             <CreditCardIcon />
                             {billingCopy.billingCenter}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowAccountMenu(false);
-                              setShowGenerationHistory(true);
-                            }}
-                            className={`mb-1 flex w-full items-center gap-2 text-left rounded-lg px-3 py-2 text-xs transition-colors ${isDark ? "text-[#CCC] hover:bg-white/10 hover:text-white" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}`}
-                          >
-                            <ImageIcon />
-                            {billingCopy.generationHistory}
                           </button>
                         <button type="button" onClick={() => void handleLogout()} className={`w-full text-left rounded-lg px-3 py-2 text-xs transition-colors ${isDark ? "text-[#CCC] hover:bg-white/10 hover:text-white" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}`}>
                           {t.signOut}
