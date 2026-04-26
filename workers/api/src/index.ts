@@ -189,6 +189,7 @@ type GenerationTaskRow = {
   model: string | null;
   costCredits: number;
   errorMessage?: string | null;
+  isFavorite?: number | boolean | null;
   remainingCredits?: number;
 };
 
@@ -207,6 +208,7 @@ type GenerationTaskDetailRow = {
   model: string | null;
   costCredits: number;
   errorMessage: string | null;
+  isFavorite: number | boolean | null;
 };
 
 type GenerationHistoryAssetItem = {
@@ -226,6 +228,7 @@ type GenerationHistoryItem = {
   model: string | null;
   costCredits: number;
   errorMessage: string | null;
+  isFavorite: boolean;
   createdAt: string;
   completedAt: string | null;
   assets: GenerationHistoryAssetItem[];
@@ -351,6 +354,7 @@ const PROTECTED_ROUTE_PREFIXES = [
   "/api/credits/",
   "/api/generate/image",
   "/api/generate/tasks/",
+  "/api/generations/",
   "/api/prompt/",
 ];
 const GPT_IMAGE_SIZES: ImageSize[] = [
@@ -1177,6 +1181,32 @@ const getCreditTransactionsForUser = async (
   return (result.results ?? []).map((row) => mapCreditTransactionItem(row, options.locale));
 };
 
+let generationFavoriteColumnReady: Promise<void> | null = null;
+
+const ensureGenerationFavoriteColumn = async (env: Env) => {
+  if (!env.SPARKPOST_DB) {
+    throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
+  }
+
+  generationFavoriteColumnReady ??= env.SPARKPOST_DB.prepare(
+    `ALTER TABLE generation_tasks ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0`,
+  ).bind().run().then(
+    () => undefined,
+    (error) => {
+      const message = error instanceof Error ? error.message.toLowerCase() : "";
+      if (message.includes("duplicate column") || message.includes("already exists")) return undefined;
+      throw error;
+    },
+  );
+
+  try {
+    await generationFavoriteColumnReady;
+  } catch (error) {
+    generationFavoriteColumnReady = null;
+    throw error;
+  }
+};
+
 const getGenerationHistoryForUser = async (
   userId: string,
   env: Env,
@@ -1185,6 +1215,7 @@ const getGenerationHistoryForUser = async (
   if (!env.SPARKPOST_DB) {
     throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
   }
+  await ensureGenerationFavoriteColumn(env);
 
   const result = await env.SPARKPOST_DB.prepare(
     `SELECT
@@ -1196,6 +1227,7 @@ const getGenerationHistoryForUser = async (
        gt.model,
        gt.cost_credits AS costCredits,
        gt.error_message AS errorMessage,
+       COALESCE(gt.is_favorite, 0) AS isFavorite,
        gt.created_at AS createdAt,
        gt.completed_at AS completedAt,
        ga.id AS assetId,
@@ -1229,6 +1261,7 @@ const getGenerationHistoryForUser = async (
         model: row.model,
         costCredits: row.costCredits,
         errorMessage: row.errorMessage,
+        isFavorite: Boolean(row.isFavorite),
         createdAt: row.createdAt,
         completedAt: row.completedAt,
         assets: [],
@@ -2155,6 +2188,23 @@ const fetchRemoteImageBytes = async (url: string) => {
   return { bytes, mimeType };
 };
 
+const validateFavoriteGenerationInput = (input: unknown) => {
+  if (!isRecord(input)) {
+    return { ok: false as const, error: "Request body must be an object." };
+  }
+
+  const taskId = typeof input.taskId === "string" ? input.taskId.trim() : "";
+  if (!taskId) {
+    return { ok: false as const, error: "Task ID is required." };
+  }
+
+  return {
+    ok: true as const,
+    taskId,
+    isFavorite: input.isFavorite === true,
+  };
+};
+
 const sanitizeProviderMessage = (value: string) =>
   value
     .replace(/sk-[A-Za-z0-9_-]{6,}/g, "sk-***")
@@ -2761,6 +2811,7 @@ const mapGenerationTaskResponse = (
   model: task.model ?? null,
   costCredits: task.costCredits,
   errorMessage: "errorMessage" in task ? task.errorMessage ?? null : null,
+  isFavorite: Boolean("isFavorite" in task ? task.isFavorite : false),
   remainingCredits,
   assets,
 });
@@ -2780,6 +2831,7 @@ const getGenerationTaskDetail = async (env: Env, taskId: string) => {
   if (!env.SPARKPOST_DB) {
     throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
   }
+  await ensureGenerationFavoriteColumn(env);
 
   return env.SPARKPOST_DB.prepare(
     `SELECT
@@ -2796,7 +2848,8 @@ const getGenerationTaskDetail = async (env: Env, taskId: string) => {
        completed_at AS completedAt,
        model,
        cost_credits AS costCredits,
-       error_message AS errorMessage
+       error_message AS errorMessage,
+       COALESCE(is_favorite, 0) AS isFavorite
      FROM generation_tasks
      WHERE id = ?
      LIMIT 1`,
@@ -2901,6 +2954,7 @@ const createQueuedImageGenerationTask = async (
       model: imageConfig.model,
       costCredits,
       errorMessage: null,
+      isFavorite: false,
     },
     [],
     creditAccount.balance,
@@ -3043,6 +3097,29 @@ const getGenerationTaskStatusResponse = async (request: Request, env: Env, url: 
   return json({ ok: true, task: mapGenerationTaskResponse(task, assets, remainingCredits) });
 };
 
+const updateGenerationFavoriteResponse = async (request: Request, env: Env) => {
+  const authenticatedUser = await getAuthenticatedUser(request, env);
+  if (!authenticatedUser.ok) return authenticatedUser.response;
+  if (!authenticatedUser.user) return json(withErrorCode("AUTH_REQUIRED", "Authentication required."), { status: 401 });
+  if (!env.SPARKPOST_DB) return json({ error: "Generation history is temporarily unavailable." }, { status: 503 });
+
+  const bodyResult = await parseJsonBody(request);
+  if (!bodyResult.ok) return json({ error: bodyResult.error }, { status: 400 });
+  const input = validateFavoriteGenerationInput(bodyResult.body);
+  if (!input.ok) return json({ error: input.error }, { status: 400 });
+
+  const task = await getGenerationTaskDetail(env, input.taskId);
+  if (!task || task.userId !== authenticatedUser.user.id) {
+    return json({ error: "Task not found." }, { status: 404 });
+  }
+
+  await env.SPARKPOST_DB.prepare(
+    `UPDATE generation_tasks SET is_favorite = ? WHERE id = ? AND user_id = ?`,
+  ).bind(input.isFavorite ? 1 : 0, input.taskId, authenticatedUser.user.id).run();
+
+  return json({ ok: true, taskId: input.taskId, isFavorite: input.isFavorite });
+};
+
 const routes: Array<{ method: string; pathname: string; handler: RouteHandler }> = [
   {
     method: "GET",
@@ -3135,6 +3212,11 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
 
       return json({ ok: true, items });
     },
+  },
+  {
+    method: "POST",
+    pathname: "/api/generations/favorite",
+    handler: async (request, env) => updateGenerationFavoriteResponse(request, env),
   },
   {
     method: "POST",

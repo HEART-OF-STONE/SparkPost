@@ -23,6 +23,7 @@ type GeneratedTask = {
   model: string | null;
   costCredits: number;
   errorMessage?: string | null;
+  isFavorite?: boolean | number | null;
 };
 
 type FakeCreditTransaction = {
@@ -71,6 +72,7 @@ type FakeState = {
     model: string | null;
     costCredits: number;
     errorMessage?: string | null;
+    isFavorite?: boolean;
     createdAt: string;
     completedAt: string | null;
     assets: Array<{
@@ -141,6 +143,7 @@ function createFakeDb(state: FakeState) {
                   model: state.generatedTask.model,
                   costCredits: state.generatedTask.costCredits,
                   errorMessage: state.generatedTask.errorMessage ?? null,
+                  isFavorite: state.generatedTask.isFavorite ? 1 : 0,
                 } as T;
               }
 
@@ -199,6 +202,7 @@ function createFakeDb(state: FakeState) {
                   model: string | null;
                   costCredits: number;
                   errorMessage: string | null;
+                  isFavorite: boolean;
                   createdAt: string;
                   completedAt: string | null;
                   assetId: string | null;
@@ -222,6 +226,7 @@ function createFakeDb(state: FakeState) {
                           model: item.model,
                           costCredits: item.costCredits,
                           errorMessage: item.errorMessage ?? null,
+                          isFavorite: Boolean(item.isFavorite),
                           createdAt: item.createdAt,
                           completedAt: item.completedAt,
                           assetId: asset.id,
@@ -241,6 +246,7 @@ function createFakeDb(state: FakeState) {
                           model: item.model,
                           costCredits: item.costCredits,
                           errorMessage: item.errorMessage ?? null,
+                          isFavorite: Boolean(item.isFavorite),
                           createdAt: item.createdAt,
                           completedAt: item.completedAt,
                           assetId: null,
@@ -272,6 +278,10 @@ function createFakeDb(state: FakeState) {
               return { results: [] as T[] };
             },
               async run(): Promise<D1RunResult> {
+                if (sql.includes("ALTER TABLE generation_tasks ADD COLUMN is_favorite")) {
+                  return { meta: { changes: 0 } };
+                }
+
                 if (sql.includes("UPDATE credit_transactions SET remaining_amount = ? WHERE id = ?")) {
                   const nextRemainingAmount =
                     values[0] == null ? null : Number(values[0]);
@@ -310,6 +320,7 @@ function createFakeDb(state: FakeState) {
                     createdAt: String(values[createdAtIndex]),
                     completedAt: null,
                     errorMessage: null,
+                    isFavorite: false,
                   };
                   return { meta: { changes: 1 } };
                 }
@@ -387,6 +398,16 @@ function createFakeDb(state: FakeState) {
 
               if (sql.includes("UPDATE generation_tasks SET status = 'running'")) {
                 if (state.generatedTask) state.generatedTask.status = "running";
+                return { meta: { changes: 1 } };
+              }
+
+              if (sql.includes("UPDATE generation_tasks SET is_favorite = ?")) {
+                if (state.generatedTask && state.generatedTask.id === String(values[1])) {
+                  state.generatedTask.isFavorite = Number(values[0]) === 1;
+                }
+                state.generationHistory = (state.generationHistory ?? []).map((item) =>
+                  item.id === String(values[1]) ? { ...item, isFavorite: Number(values[0]) === 1 } : item,
+                );
                 return { meta: { changes: 1 } };
               }
 
@@ -910,6 +931,66 @@ test("GET /api/generations/history returns private generation records", async ()
   assert.equal(result.body.items[0]?.requestedSize, "1536x1024");
   assert.equal(result.body.items[0]?.model, "gpt-image-2");
   assert.equal(result.body.items[0]?.assets[0]?.width, 1536);
+});
+
+test("POST /api/generations/favorite updates owned generation favorite state", async () => {
+  const worker = await loadWorker();
+  const createdAt = new Date().toISOString();
+  const state: FakeState = {
+    user: {
+      id: "user-1",
+      email: "demo@example.com",
+      createdAt,
+      emailVerifiedAt: createdAt,
+      lastLoginAt: createdAt,
+      creditBalance: 20,
+    },
+    creditBalance: 20,
+    generatedTask: {
+      id: "task-fav",
+      userId: "user-1",
+      taskType: "text_to_image",
+      status: "succeeded",
+      prompt: "a saved neon studio",
+      compiledPrompt: "a saved neon studio",
+      inputImageUrl: null,
+      inputReferenceKeys: null,
+      requestedSize: "1024x1024",
+      model: "gpt-image-2",
+      costCredits: 10,
+      createdAt,
+      completedAt: createdAt,
+      errorMessage: null,
+      isFavorite: false,
+    },
+    generatedAssetUrl: null,
+    hasCheckedInToday: false,
+    creditTransactions: [],
+  };
+  const secret = "workers-smoke-secret";
+  const session = createSessionToken(state.user.id, state.user.email, secret);
+
+  const response = await worker.fetch(
+    new Request("https://sparkpost.test/api/generations/favorite", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `sparkpost_session=${session}`,
+      },
+      body: JSON.stringify({ taskId: "task-fav", isFavorite: true }),
+    }),
+    {
+      SPARKPOST_DB: createFakeDb(state),
+      SESSION_SECRET: secret,
+    },
+  );
+
+  const result = await readJsonResponse<{ ok: boolean; taskId: string; isFavorite: boolean }>(response);
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, true);
+  assert.equal(result.body.taskId, "task-fav");
+  assert.equal(result.body.isFavorite, true);
+  assert.equal(state.generatedTask?.isFavorite, true);
 });
 
 test("POST /api/generate/image supports image-to-image requests", async () => {

@@ -31,6 +31,7 @@ type ImageTaskResult = {
   model: string | null;
   costCredits: number;
   errorMessage?: string | null;
+  isFavorite?: boolean;
   remainingCredits: number;
   assets: Array<{
     id: string;
@@ -55,6 +56,7 @@ type GenerationHistoryItem = {
   model: string | null;
   costCredits: number;
   errorMessage: string | null;
+  isFavorite?: boolean;
   createdAt: string;
   completedAt: string | null;
   assets: GenerationHistoryAsset[];
@@ -62,10 +64,12 @@ type GenerationHistoryItem = {
 type GenerateImageResponse = { ok: true; task: ImageTaskResult } | { code?: string; error: string };
 type GenerationTaskStatusResponse = { ok: true; task: ImageTaskResult } | { code?: string; error: string };
 type GenerationHistoryResponse = { ok: true; items: GenerationHistoryItem[] } | { error: string };
+type FavoriteGenerationResponse = { ok: true; taskId: string; isFavorite: boolean } | { error: string };
 type PromptAssistResponse = { ok: true; prompt: string; provider: string; model: string } | { error: string };
 type ImageModelItem = {
   id: string;
   label: string;
+  model?: string;
   supports: Record<Mode, boolean>;
   isDefault: boolean;
   supportedSizes?: string[];
@@ -564,6 +568,10 @@ const CheckCircleIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fi
 const ArrowLeftIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>;
 const FilterIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>;
 const ChevronDownIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>;
+const DownloadIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>;
+const HeartIcon = ({ filled = false }: { filled?: boolean }) => <svg width="14" height="14" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78Z" /></svg>;
+const CopyIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>;
+const RotateIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" /></svg>;
 
 function NoticeBanner({ notice }: { notice: Notice }) {
   return <div className={`rounded-xl border px-3 py-2.5 text-sm leading-6 ${noticeClasses(notice.type)}`}>{notice.text}</div>;
@@ -1002,6 +1010,47 @@ export default function Home() {
   }, [historyFilter, locale, userId]);
 
   const generationHistoryLoadFailedText = billingCopy.generationHistoryLoadFailed;
+  const generationActionCopy = useMemo(
+    () =>
+      locale === "zh"
+        ? {
+            reuse: "复用",
+            download: "下载",
+            favorite: "收藏",
+            favorited: "已收藏",
+            regenerate: "重新生成",
+            copyPrompt: "复制提示词",
+            failedReason: "失败原因",
+            created: "创建",
+            completed: "完成",
+            statusQueued: "排队中",
+            statusRunning: "生成中",
+            statusSucceeded: "已完成",
+            statusFailed: "失败",
+            reuseNotice: "已复用提示词和参数，可继续编辑或立即生成。",
+            favoriteSaved: "收藏状态已更新。",
+            actionFailed: "操作失败，请稍后重试。",
+          }
+        : {
+            reuse: "Reuse",
+            download: "Download",
+            favorite: "Save",
+            favorited: "Saved",
+            regenerate: "Regenerate",
+            copyPrompt: "Copy prompt",
+            failedReason: "Failure reason",
+            created: "Created",
+            completed: "Completed",
+            statusQueued: "Queued",
+            statusRunning: "Running",
+            statusSucceeded: "Completed",
+            statusFailed: "Failed",
+            reuseNotice: "Prompt and parameters reused. You can edit or generate again.",
+            favoriteSaved: "Favorite updated.",
+            actionFailed: "Action failed. Please try again later.",
+          },
+    [locale],
+  );
 
   const loadGenerationHistory = useCallback(async () => {
     if (!user?.id) return;
@@ -1020,6 +1069,96 @@ export default function Home() {
       setIsGenerationHistoryLoading(false);
     }
   }, [generationHistoryLoadFailedText, user?.id]);
+
+  const getGenerationStatusLabel = useCallback(
+    (status: string) => {
+      if (status === "queued") return generationActionCopy.statusQueued;
+      if (status === "running") return generationActionCopy.statusRunning;
+      if (status === "succeeded") return generationActionCopy.statusSucceeded;
+      if (status === "failed") return generationActionCopy.statusFailed;
+      return status;
+    },
+    [generationActionCopy],
+  );
+
+  const resolveHistoryModelId = useCallback(
+    (model: string | null | undefined) => {
+      const normalizedModel = model?.trim().toLowerCase();
+      if (!normalizedModel) return DEFAULT_IMAGE_MODEL_ID;
+      const matched = availableImageModels.find((item) => item.id === normalizedModel || item.model?.toLowerCase() === normalizedModel);
+      return matched?.id ?? normalizedModel;
+    },
+    [availableImageModels],
+  );
+
+  const reuseGeneration = useCallback(
+    (item: Pick<GenerationHistoryItem, "taskType" | "prompt" | "model" | "requestedSize">) => {
+      const nextMode: Mode = item.taskType === "image_to_image" ? "i2i" : "t2i";
+      const nextModelId = resolveHistoryModelId(item.model);
+      setMode(nextMode);
+      setSelectedImageModelByMode((current) => ({ ...current, [nextMode]: nextModelId }));
+      if (item.requestedSize) {
+        setSelectedImageSizeByMode((current) => ({ ...current, [nextMode]: item.requestedSize ?? DEFAULT_IMAGE_SIZE }));
+      }
+      applyPromptValue(item.prompt, nextMode);
+      setShowGenerationHistory(false);
+      setGenerationNotice({ type: "success", text: generationActionCopy.reuseNotice });
+    },
+    [applyPromptValue, generationActionCopy.reuseNotice, resolveHistoryModelId],
+  );
+
+  const downloadGeneratedAsset = useCallback(
+    async (url: string | null, taskId: string) => {
+      if (!url) return;
+      try {
+        const response = await fetch(url, { credentials: "include" });
+        if (!response.ok) throw new Error("Unable to download image.");
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const extension = blob.type.includes("jpeg") ? "jpg" : blob.type.includes("webp") ? "webp" : "png";
+        const anchor = document.createElement("a");
+        anchor.href = objectUrl;
+        anchor.download = `sparkpost-${taskId.slice(0, 8)}.${extension}`;
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(objectUrl);
+      } catch {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    },
+    [],
+  );
+
+  const toggleGenerationFavorite = useCallback(
+    async (taskId: string, isFavorite: boolean) => {
+      const applyFavorite = (nextFavorite: boolean) => {
+        setGenerationHistoryItems((items) =>
+          items.map((item) => (item.id === taskId ? { ...item, isFavorite: nextFavorite } : item)),
+        );
+        setGenerationTask((task) => (task?.id === taskId ? { ...task, isFavorite: nextFavorite } : task));
+      };
+
+      applyFavorite(isFavorite);
+      try {
+        const response = await fetchApi("/api/generations/favorite", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ taskId, isFavorite }),
+        });
+        const data = (await response.json().catch(() => null)) as FavoriteGenerationResponse | null;
+        if (!response.ok || !data || !("ok" in data) || data.ok !== true) {
+          throw new Error(data && "error" in data ? data.error : generationActionCopy.actionFailed);
+        }
+        applyFavorite(data.isFavorite);
+        setGenerationNotice({ type: "success", text: generationActionCopy.favoriteSaved });
+      } catch (error) {
+        applyFavorite(!isFavorite);
+        setGenerationNotice({ type: "error", text: error instanceof Error ? error.message : generationActionCopy.actionFailed });
+      }
+    },
+    [generationActionCopy.actionFailed, generationActionCopy.favoriteSaved],
+  );
 
   useEffect(() => {
     if (!userId) {
@@ -1807,8 +1946,45 @@ export default function Home() {
     }
   }
 
+  function renderGenerationActions(
+    task: Pick<ImageTaskResult, "id" | "prompt" | "model" | "requestedSize" | "isFavorite"> & { taskType?: string },
+    imageUrl: string | null,
+    variant: "overlay" | "card" = "card",
+  ) {
+    const buttonClass =
+      variant === "overlay"
+        ? `inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold backdrop-blur transition ${isDark ? "border-white/10 bg-black/50 text-slate-100 hover:bg-white/10" : "border-gray-200 bg-white/85 text-gray-700 hover:bg-white"}`
+        : `inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${isDark ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`;
+
+    return (
+      <div className={`flex flex-wrap gap-2 ${variant === "overlay" ? "absolute right-4 top-4 z-10 justify-end" : ""}`}>
+        <button type="button" className={buttonClass} onClick={() => reuseGeneration({ taskType: task.taskType ?? (mode === "i2i" ? "image_to_image" : "text_to_image"), prompt: task.prompt, model: task.model, requestedSize: task.requestedSize ?? null })}>
+          <CopyIcon />
+          {generationActionCopy.reuse}
+        </button>
+        {variant === "overlay" ? (
+          <button type="button" className={buttonClass} onClick={() => void generateImage()} disabled={isGeneratingImage}>
+            <RotateIcon />
+            {generationActionCopy.regenerate}
+          </button>
+        ) : null}
+        {imageUrl ? (
+          <button type="button" className={buttonClass} onClick={() => void downloadGeneratedAsset(imageUrl, task.id)}>
+            <DownloadIcon />
+            {generationActionCopy.download}
+          </button>
+        ) : null}
+        <button type="button" className={`${buttonClass} ${task.isFavorite ? (isDark ? "text-rose-300" : "text-rose-600") : ""}`} onClick={() => void toggleGenerationFavorite(task.id, !task.isFavorite)}>
+          <HeartIcon filled={Boolean(task.isFavorite)} />
+          {task.isFavorite ? generationActionCopy.favorited : generationActionCopy.favorite}
+        </button>
+      </div>
+    );
+  }
+
   const renderSurface = generatedImageUrl && !previewLoadFailed ? (
     <div className={`relative h-full min-h-[320px] w-full overflow-hidden rounded-[1.5rem] border ${isDark ? "border-white/10 bg-black/50 shadow-[0_20px_80px_rgba(0,0,0,0.35)]" : "border-gray-200 bg-white shadow-[0_20px_80px_rgba(148,163,184,0.22)]"}`}>
+      {generationTask ? renderGenerationActions(generationTask, generatedImageUrl, "overlay") : null}
       <Image src={generatedImageUrl} alt="Generated preview" fill unoptimized className="object-contain" onError={() => setPreviewLoadFailed(true)} />
     </div>
   ) : isGeneratingImage ? (
@@ -1852,27 +2028,43 @@ export default function Home() {
               {generationHistoryItems.map((item) => {
                 const imageUrl = primaryHistoryImageUrl(item);
                 const dimensions = item.assets[0]?.width && item.assets[0]?.height ? `${item.assets[0].width}x${item.assets[0].height}` : item.requestedSize ?? "-";
+                const statusTone =
+                  item.status === "succeeded"
+                    ? "bg-emerald-500/10 text-emerald-400"
+                    : item.status === "failed"
+                      ? "bg-rose-500/10 text-rose-400"
+                      : "bg-cyan-500/10 text-cyan-400";
 
                 return (
                   <article key={item.id} className={`overflow-hidden rounded-2xl border shadow-sm ${isDark ? "border-white/5 bg-[#111]" : "border-gray-200 bg-white"}`}>
                     <div className={`relative flex aspect-[4/3] items-center justify-center border-b ${isDark ? "border-white/5 bg-black" : "border-gray-100 bg-gray-50"}`}>
+                      <div className="absolute left-3 top-3 z-10 flex gap-2">
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${statusTone}`}>{getGenerationStatusLabel(item.status)}</span>
+                        {item.isFavorite ? <span className="rounded-full bg-rose-500/15 px-2 py-1 text-[10px] font-semibold text-rose-300">{generationActionCopy.favorited}</span> : null}
+                      </div>
                       {imageUrl ? (
                         <Image src={imageUrl} alt={item.prompt} fill unoptimized loading="lazy" sizes="(min-width: 1280px) 33vw, (min-width: 768px) 50vw, 100vw" className="object-contain" />
                       ) : (
                         <div className={`flex flex-col items-center gap-3 text-sm ${isDark ? "text-slate-500" : "text-gray-400"}`}>
                           <ImageIcon />
-                          {item.status}
+                          {getGenerationStatusLabel(item.status)}
                         </div>
                       )}
                     </div>
                     <div className="space-y-4 p-4">
                       <div>
                         <div className="mb-2 flex flex-wrap items-center gap-2">
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${item.status === "succeeded" ? "bg-emerald-500/10 text-emerald-400" : item.status === "failed" ? "bg-rose-500/10 text-rose-400" : "bg-cyan-500/10 text-cyan-400"}`}>{item.status}</span>
                           <span className={`rounded-full px-2 py-0.5 text-[10px] ${isDark ? "bg-white/5 text-slate-300" : "bg-gray-100 text-gray-600"}`}>{getDisplayImageModel(item.model)}</span>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] ${isDark ? "bg-white/5 text-slate-300" : "bg-gray-100 text-gray-600"}`}>{item.taskType === "image_to_image" ? t.i2iMode : t.t2iMode}</span>
                         </div>
                         <p className={`line-clamp-3 text-sm leading-6 ${isDark ? "text-slate-200" : "text-gray-800"}`}>{item.prompt}</p>
                       </div>
+                      {item.status === "failed" && item.errorMessage ? (
+                        <div className={`rounded-xl border px-3 py-2 text-xs leading-5 ${isDark ? "border-rose-500/20 bg-rose-500/10 text-rose-100" : "border-rose-200 bg-rose-50 text-rose-700"}`}>
+                          <span className="font-semibold">{generationActionCopy.failedReason}: </span>
+                          {item.errorMessage}
+                        </div>
+                      ) : null}
                       <div className={`grid grid-cols-2 gap-3 text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                         <div>
                           <div className="uppercase tracking-wide opacity-60">{billingCopy.dimensions}</div>
@@ -1889,6 +2081,7 @@ export default function Home() {
                           <a href={imageUrl} target="_blank" rel="noreferrer" className={`font-semibold transition-colors ${isDark ? "text-cyan-300 hover:text-cyan-200" : "text-cyan-600 hover:text-cyan-500"}`}>{billingCopy.openResult}</a>
                         ) : null}
                       </div>
+                      {renderGenerationActions(item, imageUrl, "card")}
                     </div>
                   </article>
                 );
@@ -2291,9 +2484,11 @@ export default function Home() {
                     <div className={`text-xs font-semibold uppercase tracking-wider mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>{t.propertiesTitle}</div>
                     <div className={`space-y-3 text-xs p-4 rounded-xl border ${isDark ? "bg-[#0A0A0A] border-white/5" : "bg-gray-50 border-gray-200"}`}>
                       <div className="flex justify-between items-center"><span className={isDark ? "text-[#666]" : "text-gray-500"}>{t.taskId}</span><span className={isDark ? "text-[#CCC] font-mono" : "text-gray-700 font-mono"}>{generationTask.id.substring(0, 8)}...</span></div>
+                      <div className="flex justify-between items-center"><span className={isDark ? "text-[#666]" : "text-gray-500"}>{t.status}</span><span className={isDark ? "text-[#CCC]" : "text-gray-700"}>{getGenerationStatusLabel(generationTask.status)}</span></div>
                       <div className="flex justify-between items-center"><span className={isDark ? "text-[#666]" : "text-gray-500"}>{t.model}</span><span className={`px-2 py-0.5 rounded ${isDark ? "text-[#CCC] bg-white/5" : "text-gray-700 bg-black/5"}`}>{getDisplayImageModel(generationTask?.model)}</span></div>
                       <div className="flex justify-between items-center"><span className={isDark ? "text-[#666]" : "text-gray-500"}>{t.cost}</span><span className={`flex items-center gap-1 ${isDark ? "text-[#CCC]" : "text-gray-700"}`}><span className={isDark ? "text-cyan-400" : "text-cyan-600"}><SparklesIcon /></span>{generationTask.costCredits} {t.credits}</span></div>
                       <div className="flex justify-between items-center"><span className={isDark ? "text-[#666]" : "text-gray-500"}>{t.completedAt}</span><span className={isDark ? "text-[#CCC]" : "text-gray-700"}>{formatDate(generationTask.completedAt, locale)}</span></div>
+                      {generationTask.status === "failed" && generationTask.errorMessage ? <div className={`rounded-lg px-3 py-2 leading-5 ${isDark ? "bg-rose-500/10 text-rose-100" : "bg-rose-50 text-rose-700"}`}>{generationTask.errorMessage}</div> : null}
                     </div>
                   </div>
                 ) : null}
@@ -2314,6 +2509,7 @@ export default function Home() {
             >
               {generatedImageUrl && !previewLoadFailed && !isGeneratingImage ? (
                 <div className="relative w-full h-full max-h-full flex items-center justify-center animate-in fade-in duration-700">
+                  {generationTask ? renderGenerationActions(generationTask, generatedImageUrl, "overlay") : null}
                   <Image src={generatedImageUrl} alt="Generated result" fill unoptimized className="object-contain rounded-md shadow-2xl" onError={() => setPreviewLoadFailed(true)} />
                 </div>
               ) : (
