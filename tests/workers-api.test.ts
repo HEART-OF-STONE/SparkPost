@@ -484,7 +484,6 @@ test("GET /api/models/image returns registered image models", async () => {
   assert.equal(result.body.defaultModelId, "gpt-image-2");
   assert.ok(result.body.items.some((item) => item.id === "gpt-image-2" && item.provider === "relay" && item.model === "gpt-image2" && item.isDefault));
   assert.deepEqual(result.body.items.find((item) => item.id === "gpt-image-2")?.supportedSizes, [
-    "auto",
     "1024x1024",
     "1536x1024",
     "1024x1536",
@@ -493,7 +492,7 @@ test("GET /api/models/image returns registered image models", async () => {
     "3840x2160",
     "2160x3840",
   ]);
-  assert.equal(result.body.items.find((item) => item.id === "gpt-image-2")?.defaultSize, "auto");
+  assert.equal(result.body.items.find((item) => item.id === "gpt-image-2")?.defaultSize, "1024x1024");
   assert.deepEqual(result.body.items.find((item) => item.id === "gpt-image-2")?.costCredits, {
     t2i: 10,
     i2i: 15,

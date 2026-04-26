@@ -470,8 +470,8 @@ const FALLBACK_IMAGE_MODELS: ImageModelItem[] = [
     label: "GPT-Image 2",
     isDefault: false,
     supports: { t2i: true, i2i: true },
-    supportedSizes: ["auto", "1024x1024", "1536x1024", "1024x1536", "2048x2048", "2048x1152", "3840x2160", "2160x3840"],
-    defaultSize: DEFAULT_IMAGE_SIZE,
+    supportedSizes: ["1024x1024", "1536x1024", "1024x1536", "2048x2048", "2048x1152", "3840x2160", "2160x3840"],
+    defaultSize: "1024x1024",
     costCredits: { t2i: 10, i2i: 15 },
   },
 ];
