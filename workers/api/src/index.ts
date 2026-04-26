@@ -2155,6 +2155,25 @@ const fetchRemoteImageBytes = async (url: string) => {
   return { bytes, mimeType };
 };
 
+const sanitizeProviderMessage = (value: string) =>
+  value
+    .replace(/sk-[A-Za-z0-9_-]{6,}/g, "sk-***")
+    .replace(/Bearer\s+[A-Za-z0-9._-]{12,}/gi, "Bearer ***")
+    .slice(0, 500);
+
+const getProviderErrorMessage = (status: number, body: unknown) => {
+  let upstreamMessage = "";
+  if (isRecord(body)) {
+    const error = body.error;
+    if (isRecord(error) && typeof error.message === "string") upstreamMessage = error.message;
+    else if (typeof body.message === "string") upstreamMessage = body.message;
+    else if (typeof body.error === "string") upstreamMessage = body.error;
+  }
+
+  const detail = upstreamMessage ? ` ${sanitizeProviderMessage(upstreamMessage)}` : "";
+  return `Image generation provider request failed. Upstream status ${status}.${detail}`;
+};
+
 const callOfficialImageProvider = async (
   prompt: string,
   imageConfig: ResolvedImageConfig,
@@ -2184,7 +2203,7 @@ const callOfficialImageProvider = async (
 
   if (!response.ok) {
     console.error("Image provider request failed.", { status: response.status, body });
-    throw new ImageGenerationProviderError("Image generation provider request failed.");
+    throw new ImageGenerationProviderError(getProviderErrorMessage(response.status, body));
   }
 
   const imageData = body?.data?.[0];
@@ -2259,7 +2278,7 @@ const callOfficialImageEditProvider = async (
 
   if (!response.ok) {
     console.error("Image edit provider request failed.", { status: response.status, body });
-    throw new ImageGenerationProviderError("Image generation provider request failed.");
+    throw new ImageGenerationProviderError(getProviderErrorMessage(response.status, body));
   }
 
   const imageData = body?.data?.[0];
