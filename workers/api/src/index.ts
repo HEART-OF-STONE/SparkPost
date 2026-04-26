@@ -2993,9 +2993,13 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
         if (error instanceof ImageGenerationAuthError) {
           return json(withErrorCode("IMAGE_PROVIDER_AUTH_FAILED", error.message), { status: 403 });
         }
-        if (error instanceof ImageGenerationConfigError || error instanceof ImageGenerationProviderError) {
+        if (error instanceof ImageGenerationConfigError) {
           console.error("Image generation failed.", error);
-          return json(withErrorCode("IMAGE_PROVIDER_UNAVAILABLE", "Image generation service is temporarily unavailable."), { status: 503 });
+          return json(withErrorCode("IMAGE_PROVIDER_CONFIG_ERROR", error.message), { status: 503 });
+        }
+        if (error instanceof ImageGenerationProviderError) {
+          console.error("Image generation failed.", error);
+          return json(withErrorCode("IMAGE_PROVIDER_REQUEST_FAILED", error.message), { status: 503 });
         }
         throw error;
       }
