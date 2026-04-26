@@ -333,6 +333,7 @@ const GPT_IMAGE_SIZES: ImageSize[] = [
   "2160x3840",
 ];
 const GPT_RELAY_IMAGE_SIZES: ImageSize[] = [
+  "auto",
   "1024x1024",
   "1536x1024",
   "1024x1536",
@@ -343,7 +344,6 @@ const GPT_RELAY_IMAGE_SIZES: ImageSize[] = [
 ];
 const DALLE_IMAGE_SIZES: ImageSize[] = ["1024x1024", "1792x1024", "1024x1792"];
 const DEFAULT_IMAGE_SIZE: ImageSize = "auto";
-const DEFAULT_GPT_RELAY_IMAGE_SIZE: ImageSize = "1024x1024";
 const DAILY_CHECK_IN_EXPIRY_DAYS = 7;
 const SESSION_COOKIE_NAME = "sparkpost_session";
 const SESSION_COOKIE_PATH = "/";
@@ -372,7 +372,7 @@ const IMAGE_MODEL_REGISTRY: Record<string, ImageModelDefinition> = {
     remoteModel: "gpt-image-2",
     supports: { t2i: true, i2i: true },
     supportedSizes: GPT_RELAY_IMAGE_SIZES,
-    defaultSize: DEFAULT_GPT_RELAY_IMAGE_SIZE,
+    defaultSize: DEFAULT_IMAGE_SIZE,
     defaultQuality: "high",
     relayConfigKey: "default",
   },
