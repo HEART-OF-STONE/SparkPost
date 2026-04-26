@@ -25,10 +25,12 @@ type ImageTaskResult = {
   id: string;
   status: string;
   prompt: string;
+  requestedSize?: string | null;
   createdAt: string;
   completedAt: string | null;
   model: string | null;
   costCredits: number;
+  errorMessage?: string | null;
   remainingCredits: number;
   assets: Array<{
     id: string;
@@ -58,6 +60,7 @@ type GenerationHistoryItem = {
   assets: GenerationHistoryAsset[];
 };
 type GenerateImageResponse = { ok: true; task: ImageTaskResult } | { code?: string; error: string };
+type GenerationTaskStatusResponse = { ok: true; task: ImageTaskResult } | { code?: string; error: string };
 type GenerationHistoryResponse = { ok: true; items: GenerationHistoryItem[] } | { error: string };
 type PromptAssistResponse = { ok: true; prompt: string; provider: string; model: string } | { error: string };
 type ImageModelItem = {
@@ -442,6 +445,9 @@ const DEFAULT_IMAGE_MODEL_COST: Record<Mode, number> = {
   i2i: 15,
 };
 const DEFAULT_IMAGE_SIZE = "auto";
+const GENERATION_POLL_INTERVAL_MS = 5000;
+const GENERATION_POLL_HIDDEN_INTERVAL_MS = 15000;
+const GENERATION_POLL_TIMEOUT_MS = 12 * 60 * 1000;
 const ENABLE_IMAGE_SIZE_SELECTOR = process.env.NEXT_PUBLIC_ENABLE_IMAGE_SIZE_SELECTOR !== "false";
 const MODEL_DISPLAY_NAMES: Record<string, string> = {
   "nano-banana-2": "Nano Banana 2",
@@ -625,6 +631,8 @@ export default function Home() {
   const [authNotice, setAuthNotice] = useState<Notice | null>(null);
   const [generationNotice, setGenerationNotice] = useState<Notice | null>(null);
   const [generationTask, setGenerationTask] = useState<ImageTaskResult | null>(null);
+  const [pendingGenerationTaskId, setPendingGenerationTaskId] = useState<string | null>(null);
+  const [pendingGenerationStartedAt, setPendingGenerationStartedAt] = useState<number | null>(null);
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [previewLoadFailed, setPreviewLoadFailed] = useState(false);
   const [systemStatus, setSystemStatus] = useState<SystemStatus>("unknown");
@@ -678,7 +686,7 @@ export default function Home() {
   const t = copy[locale];
   const authStatus: AuthStatus = isLoadingSession ? "checking" : user ? "signedIn" : "signedOut";
   const interactionStatus: InteractionStatus = isLoadingSession ? "checking" : isGeneratingImage ? "generating" : authStatus === "signedOut" && showLoginPanel ? "authRequired" : "ready";
-  const resultStatus: ResultStatus = generationTask ? "success" : generationNotice?.type === "error" ? "error" : "empty";
+  const resultStatus: ResultStatus = generationTask?.status === "succeeded" ? "success" : generationNotice?.type === "error" ? "error" : "empty";
   const cooldownActive = useMemo(() => cooldownEndsAt !== null && timeLeft > 0, [cooldownEndsAt, timeLeft]);
   const accountInitials = user?.email.slice(0, 2).toUpperCase() ?? "SP";
   const userId = user?.id ?? null;
@@ -1021,6 +1029,9 @@ export default function Home() {
       setUsageLast7Days(Array(7).fill(0));
       setGenerationHistoryItems([]);
       setShowGenerationHistory(false);
+      setPendingGenerationTaskId(null);
+      setPendingGenerationStartedAt(null);
+      setIsGeneratingImage(false);
       return;
     }
   }, [userId]);
@@ -1074,6 +1085,8 @@ export default function Home() {
 
   const generateImage = useCallback(async () => {
     setGenerationNotice(null);
+    setPendingGenerationTaskId(null);
+    setPendingGenerationStartedAt(null);
     const promptForRequest = getLivePromptValue();
     setPrompts((current) => (current[mode] === promptForRequest ? current : { ...current, [mode]: promptForRequest }));
     if (!promptForRequest.trim()) {
@@ -1093,12 +1106,15 @@ export default function Home() {
     setIsGeneratingImage(true);
     setGeneratedImageUrl(null);
     setGenerationTask(null);
+    setPendingGenerationTaskId(null);
+    setPendingGenerationStartedAt(null);
     setPreviewLoadFailed(false);
-      try {
-        const response = await fetchApi("/api/generate/image", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
+    let keepPolling = false;
+    try {
+      const response = await fetchApi("/api/generate/image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           mode,
           modelId: selectedImageModelId,
@@ -1106,7 +1122,7 @@ export default function Home() {
           prompt: promptForRequest,
           referenceImages: mode === "i2i" ? uploadedImages : [],
         }),
-        });
+      });
       const data = (await response.json().catch(() => null)) as GenerateImageResponse | null;
       if (!response.ok) {
         const errorText = data && "error" in data ? formatApiError(data, t.generateFailed) : t.generateFailed;
@@ -1120,6 +1136,16 @@ export default function Home() {
       }
       setSystemStatus("available");
       setGenerationTask(data.task);
+      if (data.task.status === "queued" || data.task.status === "running") {
+        keepPolling = true;
+        setPendingGenerationTaskId(data.task.id);
+        setPendingGenerationStartedAt(Date.now());
+        setGenerationNotice({
+          type: "info",
+          text: locale === "zh" ? "任务已提交，正在后台生成。完成后会自动显示结果。" : "Task submitted. The image is generating in the background.",
+        });
+        return;
+      }
       setGeneratedImageUrl(primaryImageUrl(data.task));
       setGenerationNotice({ type: "success", text: formatTemplate(t.generateSuccess, { count: data.task.assets.length }) });
       setUser((current) => {
@@ -1130,9 +1156,103 @@ export default function Home() {
     } catch (error) {
       setGenerationNotice({ type: "error", text: error instanceof Error ? error.message : t.generateFailed });
     } finally {
-      setIsGeneratingImage(false);
+      if (!keepPolling) setIsGeneratingImage(false);
     }
-  }, [billingCopy.insufficientCredits, currentCost, getLivePromptValue, mode, selectedImageModelId, selectedImageSize, t.enterPrompt, t.generateFailed, t.generateSuccess, t.imagePreviewUnavailable, t.unexpectedPayload, t.uploadHint, uploadedImages, user]);
+  }, [billingCopy.insufficientCredits, currentCost, getLivePromptValue, locale, mode, selectedImageModelId, selectedImageSize, t.enterPrompt, t.generateFailed, t.generateSuccess, t.imagePreviewUnavailable, t.unexpectedPayload, t.uploadHint, uploadedImages, user]);
+
+  useEffect(() => {
+    if (!pendingGenerationTaskId || !pendingGenerationStartedAt || !userId) return undefined;
+
+    let timeoutId: number | null = null;
+    let stopped = false;
+    const controller = new AbortController();
+
+    const stopPolling = () => {
+      stopped = true;
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+
+    const scheduleNextPoll = () => {
+      if (stopped) return;
+      const elapsed = Date.now() - pendingGenerationStartedAt;
+      if (elapsed >= GENERATION_POLL_TIMEOUT_MS) {
+        setPendingGenerationTaskId(null);
+        setPendingGenerationStartedAt(null);
+        setIsGeneratingImage(false);
+        setGenerationNotice({
+          type: "info",
+          text:
+            locale === "zh"
+              ? "任务仍在后台处理中，可稍后到历史查看结果。"
+              : "The task is still processing in the background. Check History later for the result.",
+        });
+        return;
+      }
+      const interval = document.visibilityState === "hidden" ? GENERATION_POLL_HIDDEN_INTERVAL_MS : GENERATION_POLL_INTERVAL_MS;
+      timeoutId = window.setTimeout(pollTask, interval);
+    };
+
+    const pollTask = async () => {
+      try {
+        const response = await fetchApi(`/api/generate/tasks/${encodeURIComponent(pendingGenerationTaskId)}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const data = (await response.json().catch(() => null)) as GenerationTaskStatusResponse | null;
+        if (!response.ok || !data || !("ok" in data) || data.ok !== true) {
+          throw new Error(data && "error" in data ? formatApiError(data, t.generateFailed) : t.generateFailed);
+        }
+
+        setGenerationTask(data.task);
+        if (data.task.status === "succeeded") {
+          const imageUrl = primaryImageUrl(data.task);
+          setGeneratedImageUrl(imageUrl);
+          setPreviewLoadFailed(false);
+          setPendingGenerationTaskId(null);
+          setPendingGenerationStartedAt(null);
+          setIsGeneratingImage(false);
+          setGenerationNotice({ type: "success", text: formatTemplate(t.generateSuccess, { count: data.task.assets.length }) });
+          setUser((current) => {
+            if (!current || current.creditBalance === data.task.remainingCredits) return current;
+            return { ...current, creditBalance: data.task.remainingCredits };
+          });
+          void loadRecentCreditHistory().catch(() => {});
+          if (!imageUrl) setGenerationNotice({ type: "info", text: t.imagePreviewUnavailable });
+          stopPolling();
+          return;
+        }
+
+        if (data.task.status === "failed") {
+          setPendingGenerationTaskId(null);
+          setPendingGenerationStartedAt(null);
+          setIsGeneratingImage(false);
+          setGenerationNotice({ type: "error", text: data.task.errorMessage || t.generateFailed });
+          stopPolling();
+          return;
+        }
+
+        scheduleNextPoll();
+      } catch (error) {
+        if (controller.signal.aborted || stopped) return;
+        setGenerationNotice({ type: "info", text: error instanceof Error ? error.message : t.generateFailed });
+        scheduleNextPoll();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      scheduleNextPoll();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    scheduleNextPoll();
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      stopPolling();
+    };
+  }, [loadRecentCreditHistory, locale, pendingGenerationStartedAt, pendingGenerationTaskId, t.generateFailed, t.generateSuccess, t.imagePreviewUnavailable, userId]);
 
   useEffect(() => {
     if (user && pendingGenerateAfterLogin && !isGeneratingImage) {

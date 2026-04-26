@@ -21,5 +21,21 @@
       "binding": "SPARKPOST_R2",
       "bucket_name": "sparkpost"
     }
-  ]
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "IMAGE_GENERATION_QUEUE",
+        "queue": "sparkpost-image-generation"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "sparkpost-image-generation",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 0
+      }
+    ]
+  }
 }

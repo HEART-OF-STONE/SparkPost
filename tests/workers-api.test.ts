@@ -10,13 +10,19 @@ type D1RunResult = { meta?: { changes?: number } };
 
 type GeneratedTask = {
   id: string;
+  userId?: string;
+  taskType?: "text_to_image" | "image_to_image";
   status: string;
   prompt: string;
+  compiledPrompt?: string | null;
+  inputImageUrl?: string | null;
+  inputReferenceKeys?: string | null;
   requestedSize?: string | null;
   createdAt: string;
   completedAt: string | null;
   model: string | null;
   costCredits: number;
+  errorMessage?: string | null;
 };
 
 type FakeCreditTransaction = {
@@ -46,6 +52,14 @@ type FakeState = {
   creditBalance: number;
   generatedTask: GeneratedTask | null;
   generatedAssetUrl: string | null;
+  generatedAssets?: Array<{
+    id: string;
+    taskId: string;
+    fileUrl: string;
+    width: number | null;
+    height: number | null;
+    createdAt: string;
+  }>;
   hasCheckedInToday?: boolean;
   creditTransactions?: FakeCreditTransaction[];
   generationHistory?: Array<{
@@ -110,8 +124,24 @@ function createFakeDb(state: FakeState) {
                 return state.hasCheckedInToday ? ({ id: "checkin-1" } as T) : null;
               }
 
-              if (sql.includes("FROM generation_tasks WHERE id = ? LIMIT 1")) {
-                return state.generatedTask as T;
+              if (sql.includes("FROM generation_tasks") && sql.includes("WHERE id = ?") && sql.includes("LIMIT 1")) {
+                if (!state.generatedTask || String(values[0]) !== state.generatedTask.id) return null;
+                return {
+                  id: state.generatedTask.id,
+                  userId: state.generatedTask.userId ?? state.user.id,
+                  taskType: state.generatedTask.taskType ?? "text_to_image",
+                  status: state.generatedTask.status,
+                  prompt: state.generatedTask.prompt,
+                  compiledPrompt: state.generatedTask.compiledPrompt ?? state.generatedTask.prompt,
+                  inputImageUrl: state.generatedTask.inputImageUrl ?? null,
+                  inputReferenceKeys: state.generatedTask.inputReferenceKeys ?? null,
+                  requestedSize: state.generatedTask.requestedSize ?? null,
+                  createdAt: state.generatedTask.createdAt,
+                  completedAt: state.generatedTask.completedAt,
+                  model: state.generatedTask.model,
+                  costCredits: state.generatedTask.costCredits,
+                  errorMessage: state.generatedTask.errorMessage ?? null,
+                } as T;
               }
 
               return null;
@@ -225,6 +255,20 @@ function createFakeDb(state: FakeState) {
                 return { results: rows as T[] };
               }
 
+              if (sql.includes("FROM generated_assets") && sql.includes("WHERE task_id = ?")) {
+                const taskId = String(values[0]);
+                return {
+                  results: (state.generatedAssets ?? [])
+                    .filter((asset) => asset.taskId === taskId)
+                    .map((asset) => ({
+                      id: asset.id,
+                      fileUrl: asset.fileUrl,
+                      width: asset.width,
+                      height: asset.height,
+                    })) as T[],
+                };
+              }
+
               return { results: [] as T[] };
             },
               async run(): Promise<D1RunResult> {
@@ -244,26 +288,28 @@ function createFakeDb(state: FakeState) {
                 }
 
                 if (sql.includes("INSERT INTO generation_tasks")) {
-                  const includesCompiledPrompt = sql.includes("compiled_prompt");
-                  const includesRequestedSize = sql.includes("requested_size");
-                  const promptIndex = 2;
-                  const requestedSizeIndex = includesCompiledPrompt && includesRequestedSize ? 4 : null;
-                  const modelIndex = includesCompiledPrompt ? (includesRequestedSize ? 5 : 4) : 3;
-                  const costIndex = includesCompiledPrompt ? (includesRequestedSize ? 6 : 5) : 4;
-                  const createdAtIndex = includesCompiledPrompt
-                    ? sql.includes("input_image_url")
-                      ? (includesRequestedSize ? 8 : 7)
-                      : (includesRequestedSize ? 7 : 6)
-                    : 5;
+                  const isQueuedInsert = sql.includes("input_reference_keys");
+                  const promptIndex = isQueuedInsert ? 3 : 2;
+                  const compiledPromptIndex = isQueuedInsert ? 4 : null;
+                  const requestedSizeIndex = isQueuedInsert ? 5 : sql.includes("requested_size") ? 4 : null;
+                  const modelIndex = isQueuedInsert ? 6 : sql.includes("requested_size") ? 5 : 4;
+                  const costIndex = isQueuedInsert ? 7 : sql.includes("requested_size") ? 6 : 5;
+                  const createdAtIndex = isQueuedInsert ? 10 : sql.includes("input_image_url") ? 8 : 7;
                   state.generatedTask = {
                     id: String(values[0]),
-                    status: "running",
+                    userId: String(values[1]),
+                    taskType: isQueuedInsert ? (String(values[2]) as "text_to_image" | "image_to_image") : "text_to_image",
+                    status: isQueuedInsert ? "queued" : "running",
                     prompt: String(values[promptIndex]),
+                    compiledPrompt: compiledPromptIndex === null ? null : String(values[compiledPromptIndex]),
+                    inputImageUrl: isQueuedInsert ? (values[8] as string | null) ?? null : null,
+                    inputReferenceKeys: isQueuedInsert ? (values[9] as string | null) ?? null : null,
                     requestedSize: requestedSizeIndex === null ? null : String(values[requestedSizeIndex]),
                     model: String(values[modelIndex]),
                     costCredits: Number(values[costIndex]),
                     createdAt: String(values[createdAtIndex]),
                     completedAt: null,
+                    errorMessage: null,
                   };
                   return { meta: { changes: 1 } };
                 }
@@ -301,6 +347,17 @@ function createFakeDb(state: FakeState) {
 
               if (sql.includes("INSERT INTO generated_assets")) {
                 state.generatedAssetUrl = String(values[2]);
+                state.generatedAssets = [
+                  ...(state.generatedAssets ?? []),
+                  {
+                    id: String(values[0]),
+                    taskId: String(values[1]),
+                    fileUrl: String(values[2]),
+                    width: values[3] == null ? null : Number(values[3]),
+                    height: values[4] == null ? null : Number(values[4]),
+                    createdAt: String(values[5]),
+                  },
+                ];
                 return { meta: { changes: 1 } };
               }
 
@@ -322,8 +379,14 @@ function createFakeDb(state: FakeState) {
               if (sql.includes("UPDATE generation_tasks SET status = 'failed'")) {
                 if (state.generatedTask) {
                   state.generatedTask.status = "failed";
+                  state.generatedTask.errorMessage = String(values[0]);
                   state.generatedTask.completedAt = String(values[1]);
                 }
+                return { meta: { changes: 1 } };
+              }
+
+              if (sql.includes("UPDATE generation_tasks SET status = 'running'")) {
+                if (state.generatedTask) state.generatedTask.status = "running";
                 return { meta: { changes: 1 } };
               }
 
@@ -422,6 +485,31 @@ function createFakeR2() {
       },
     },
   };
+}
+
+function createFakeQueue() {
+  const messages: Array<{ taskId: string; userId: string }> = [];
+  return {
+    messages,
+    queue: {
+      async send(message: { taskId: string; userId: string }) {
+        messages.push(message);
+      },
+    },
+  };
+}
+
+async function drainImageQueue(worker: Awaited<ReturnType<typeof loadWorker>>, messages: Array<{ taskId: string; userId: string }>, env: Record<string, unknown>) {
+  await worker.queue(
+    {
+      messages: messages.map((body) => ({
+        body,
+        ack() {},
+        retry() {},
+      })),
+    },
+    env,
+  );
 }
 
 async function loadWorker() {
@@ -533,6 +621,7 @@ test("POST /api/generate/image stores asset in R2 and returns Worker asset URL",
     ],
   };
   const fakeR2 = createFakeR2();
+  const fakeQueue = createFakeQueue();
   const secret = "workers-smoke-secret";
   const originalFetch = globalThis.fetch;
 
@@ -559,6 +648,17 @@ test("POST /api/generate/image stores asset in R2 and returns Worker asset URL",
 
   try {
     const session = createSessionToken(state.user.id, state.user.email, secret);
+    const env = {
+      SPARKPOST_DB: createFakeDb(state),
+      SPARKPOST_R2: fakeR2.bucket,
+      IMAGE_GENERATION_QUEUE: fakeQueue.queue,
+      SESSION_SECRET: secret,
+      IMAGE_BACKEND: "official",
+      IMAGE_MODEL: "dall-e-3",
+      IMAGE_API_KEY: "test-key",
+      IMAGE_BASE_URL: "https://api.openai.com/v1",
+      TEXT_TO_IMAGE_COST: "10",
+    };
     const response = await worker.fetch(
       new Request("https://sparkpost.test/api/generate/image", {
         method: "POST",
@@ -568,21 +668,13 @@ test("POST /api/generate/image stores asset in R2 and returns Worker asset URL",
         },
         body: JSON.stringify({ prompt: "a glass greenhouse on mars" }),
       }),
-      {
-        SPARKPOST_DB: createFakeDb(state),
-        SPARKPOST_R2: fakeR2.bucket,
-        SESSION_SECRET: secret,
-        IMAGE_BACKEND: "official",
-        IMAGE_MODEL: "dall-e-3",
-        IMAGE_API_KEY: "test-key",
-        IMAGE_BASE_URL: "https://api.openai.com/v1",
-        TEXT_TO_IMAGE_COST: "10",
-      },
+      env,
     );
 
     const result = await readJsonResponse<{
       ok: boolean;
       task: {
+        id: string;
         status: string;
         remainingCredits: number;
         assets: Array<{ fileUrl: string }>;
@@ -591,11 +683,26 @@ test("POST /api/generate/image stores asset in R2 and returns Worker asset URL",
 
     assert.equal(result.status, 200);
     assert.equal(result.body.ok, true);
-    assert.equal(result.body.task.status, "succeeded");
-    assert.equal(result.body.task.remainingCredits, 10);
-    assert.match(result.body.task.assets[0]?.fileUrl ?? "", /^https:\/\/sparkpost\.test\/api\/assets\/generated\//);
+    assert.equal(result.body.task.status, "queued");
+    assert.equal(fakeQueue.messages.length, 1);
+
+    await drainImageQueue(worker, fakeQueue.messages, env);
+
+    const taskResponse = await worker.fetch(
+      new Request(`https://sparkpost.test/api/generate/tasks/${result.body.task.id}`, {
+        headers: { cookie: `sparkpost_session=${session}` },
+      }),
+      env,
+    );
+    const taskResult = await readJsonResponse<typeof result.body>(taskResponse);
+
+    assert.equal(taskResult.status, 200);
+    assert.equal(taskResult.body.ok, true);
+    assert.equal(taskResult.body.task.status, "succeeded");
+    assert.equal(taskResult.body.task.remainingCredits, 10);
+    assert.match(taskResult.body.task.assets[0]?.fileUrl ?? "", /^\/api\/assets\/generated\//);
     assert.equal(fakeR2.store.size, 1);
-    assert.equal(state.generatedAssetUrl, result.body.task.assets[0]?.fileUrl ?? null);
+    assert.equal(state.generatedAssetUrl, taskResult.body.task.assets[0]?.fileUrl ?? null);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -630,6 +737,7 @@ test("POST /api/generate/image can target the default duojie GPT-Image relay mod
     ],
   };
   const fakeR2 = createFakeR2();
+  const fakeQueue = createFakeQueue();
   const secret = "workers-smoke-secret";
   const originalFetch = globalThis.fetch;
 
@@ -663,6 +771,15 @@ test("POST /api/generate/image can target the default duojie GPT-Image relay mod
 
   try {
     const session = createSessionToken(state.user.id, state.user.email, secret);
+    const env = {
+      SPARKPOST_DB: createFakeDb(state),
+      SPARKPOST_R2: fakeR2.bucket,
+      IMAGE_GENERATION_QUEUE: fakeQueue.queue,
+      SESSION_SECRET: secret,
+      RELAY_IMAGE_API_KEY: "duojie-test-key",
+      RELAY_IMAGE_BASE_URL: "https://duojie.example.com/v1",
+      TEXT_TO_IMAGE_COST: "10",
+    };
     const response = await worker.fetch(
       new Request("https://sparkpost.test/api/generate/image", {
         method: "POST",
@@ -676,19 +793,13 @@ test("POST /api/generate/image can target the default duojie GPT-Image relay mod
           size: "1536x1024",
         }),
       }),
-      {
-        SPARKPOST_DB: createFakeDb(state),
-        SPARKPOST_R2: fakeR2.bucket,
-        SESSION_SECRET: secret,
-        RELAY_IMAGE_API_KEY: "duojie-test-key",
-        RELAY_IMAGE_BASE_URL: "https://duojie.example.com/v1",
-        TEXT_TO_IMAGE_COST: "10",
-      },
+      env,
     );
 
     const result = await readJsonResponse<{
       ok: boolean;
       task: {
+        id: string;
         status: string;
         model: string | null;
         requestedSize: string | null;
@@ -699,12 +810,26 @@ test("POST /api/generate/image can target the default duojie GPT-Image relay mod
 
     assert.equal(result.status, 200);
     assert.equal(result.body.ok, true);
-    assert.equal(result.body.task.status, "succeeded");
-    assert.equal(result.body.task.model, "gpt-image-2");
-    assert.equal(result.body.task.requestedSize, "1536x1024");
-    assert.equal(result.body.task.remainingCredits, 10);
-    assert.equal(result.body.task.assets[0]?.width, 1536);
-    assert.equal(result.body.task.assets[0]?.height, 1024);
+    assert.equal(result.body.task.status, "queued");
+    assert.equal(fakeQueue.messages.length, 1);
+
+    await drainImageQueue(worker, fakeQueue.messages, env);
+    const taskResponse = await worker.fetch(
+      new Request(`https://sparkpost.test/api/generate/tasks/${result.body.task.id}`, {
+        headers: { cookie: `sparkpost_session=${session}` },
+      }),
+      env,
+    );
+    const taskResult = await readJsonResponse<typeof result.body>(taskResponse);
+
+    assert.equal(taskResult.status, 200);
+    assert.equal(taskResult.body.ok, true);
+    assert.equal(taskResult.body.task.status, "succeeded");
+    assert.equal(taskResult.body.task.model, "gpt-image-2");
+    assert.equal(taskResult.body.task.requestedSize, "1536x1024");
+    assert.equal(taskResult.body.task.remainingCredits, 10);
+    assert.equal(taskResult.body.task.assets[0]?.width, 1536);
+    assert.equal(taskResult.body.task.assets[0]?.height, 1024);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -816,6 +941,7 @@ test("POST /api/generate/image supports image-to-image requests", async () => {
     ],
   };
   const fakeR2 = createFakeR2();
+  const fakeQueue = createFakeQueue();
   const secret = "workers-smoke-secret";
   const originalFetch = globalThis.fetch;
   const referenceImage = "data:image/png;base64," + Buffer.from("source-image", "utf8").toString("base64");
@@ -867,6 +993,15 @@ test("POST /api/generate/image supports image-to-image requests", async () => {
 
   try {
     const session = createSessionToken(state.user.id, state.user.email, secret);
+    const env = {
+      SPARKPOST_DB: createFakeDb(state),
+      SPARKPOST_R2: fakeR2.bucket,
+      IMAGE_GENERATION_QUEUE: fakeQueue.queue,
+      SESSION_SECRET: secret,
+      IMAGE_DEFAULT_MODEL_ID: "nano-banana-2",
+      RELAY_IMAGE_API_KEY: "relay-test-key",
+      RELAY_IMAGE_BASE_URL: "https://api.openai.com/v1",
+    };
     const response = await worker.fetch(
       new Request("https://sparkpost.test/api/generate/image", {
         method: "POST",
@@ -881,25 +1016,32 @@ test("POST /api/generate/image supports image-to-image requests", async () => {
           referenceImages: [referenceImage, styleReferenceImage],
         }),
       }),
-      {
-        SPARKPOST_DB: createFakeDb(state),
-        SPARKPOST_R2: fakeR2.bucket,
-        SESSION_SECRET: secret,
-        IMAGE_DEFAULT_MODEL_ID: "nano-banana-2",
-        RELAY_IMAGE_API_KEY: "relay-test-key",
-        RELAY_IMAGE_BASE_URL: "https://api.openai.com/v1",
-      },
+      env,
     );
 
     const result = await readJsonResponse<{ ok: boolean; task: GeneratedTask & { remainingCredits: number; assets: Array<{ fileUrl: string }> } }>(response);
 
     assert.equal(result.status, 200);
     assert.equal(result.body.ok, true);
-    assert.equal(result.body.task.status, "succeeded");
-    assert.equal(result.body.task.costCredits, 10);
-    assert.equal(result.body.task.remainingCredits, 10);
-    assert.equal(fakeR2.store.size, 1);
-    assert.match(result.body.task.assets[0].fileUrl, /\/api\/assets\/generated\//);
+    assert.equal(result.body.task.status, "queued");
+    assert.equal(fakeQueue.messages.length, 1);
+
+    await drainImageQueue(worker, fakeQueue.messages, env);
+    const taskResponse = await worker.fetch(
+      new Request(`https://sparkpost.test/api/generate/tasks/${result.body.task.id}`, {
+        headers: { cookie: `sparkpost_session=${session}` },
+      }),
+      env,
+    );
+    const taskResult = await readJsonResponse<typeof result.body>(taskResponse);
+
+    assert.equal(taskResult.status, 200);
+    assert.equal(taskResult.body.ok, true);
+    assert.equal(taskResult.body.task.status, "succeeded");
+    assert.equal(taskResult.body.task.costCredits, 10);
+    assert.equal(taskResult.body.task.remainingCredits, 10);
+    assert.equal(fakeR2.store.size, 3);
+    assert.match(taskResult.body.task.assets[0].fileUrl, /\/api\/assets\/generated\//);
   } finally {
     globalThis.fetch = originalFetch;
   }

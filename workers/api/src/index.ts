@@ -23,6 +23,9 @@ export interface Env {
       writeHttpMetadata?: (headers: Headers) => void;
     } | null>;
   };
+  IMAGE_GENERATION_QUEUE?: {
+    send: (message: ImageGenerationQueueMessage) => Promise<void>;
+  };
   SESSION_SECRET?: string;
   EMAIL_PROVIDER?: string;
   EMAIL_FROM?: string;
@@ -67,7 +70,10 @@ export interface Env {
 }
 
 type JsonRecord = Record<string, unknown>;
-type RouteHandler = (request: Request, env: Env, url: URL) => Promise<Response> | Response;
+type WorkerExecutionContext = {
+  waitUntil?: (promise: Promise<unknown>) => void;
+};
+type RouteHandler = (request: Request, env: Env, url: URL, ctx?: WorkerExecutionContext) => Promise<Response> | Response;
 
 type SessionPayload = {
   userId: string;
@@ -182,6 +188,25 @@ type GenerationTaskRow = {
   completedAt: string | null;
   model: string | null;
   costCredits: number;
+  errorMessage?: string | null;
+  remainingCredits?: number;
+};
+
+type GenerationTaskDetailRow = {
+  id: string;
+  userId: string;
+  taskType: "text_to_image" | "image_to_image";
+  status: string;
+  prompt: string;
+  compiledPrompt: string | null;
+  inputImageUrl: string | null;
+  inputReferenceKeys: string | null;
+  requestedSize: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  model: string | null;
+  costCredits: number;
+  errorMessage: string | null;
 };
 
 type GenerationHistoryAssetItem = {
@@ -260,6 +285,11 @@ type CreditPackageDefinition = {
   priceUsd: string;
 };
 
+type ImageGenerationQueueMessage = {
+  taskId: string;
+  userId: string;
+};
+
 const withErrorCode = (code: string, error: string) => ({ code, error });
 
 type CreditSummaryResponse = {
@@ -320,6 +350,7 @@ const PROTECTED_ROUTE_PREFIXES = [
   "/api/auth/",
   "/api/credits/",
   "/api/generate/image",
+  "/api/generate/tasks/",
   "/api/prompt/",
 ];
 const GPT_IMAGE_SIZES: ImageSize[] = [
@@ -2283,6 +2314,8 @@ const createAssetResponseUrl = (request: Request, key: string) => {
   return `${origin}/api/assets/${key}`;
 };
 
+const createRelativeAssetResponseUrl = (key: string) => `/api/assets/${key}`;
+
 const readUint32BigEndian = (bytes: Uint8Array, offset: number) =>
   ((bytes[offset] ?? 0) << 24) |
   ((bytes[offset + 1] ?? 0) << 16) |
@@ -2394,6 +2427,7 @@ const persistGeneratedAsset = async (
   userId: string,
   taskId: string,
   providerResult: ProviderResult,
+  options?: { useRelativeUrl?: boolean },
 ): Promise<StoredAsset> => {
   if (!env.SPARKPOST_R2) {
     throw new ImageGenerationConfigError("R2 binding SPARKPOST_R2 is not configured.");
@@ -2412,10 +2446,54 @@ const persistGeneratedAsset = async (
 
   return {
     assetId,
-    fileUrl: createAssetResponseUrl(request, key),
+    fileUrl: options?.useRelativeUrl ? createRelativeAssetResponseUrl(key) : createAssetResponseUrl(request, key),
     width: dimensions?.width ?? null,
     height: dimensions?.height ?? null,
   };
+};
+
+const persistReferenceImages = async (
+  env: Env,
+  userId: string,
+  taskId: string,
+  referenceImages: string[],
+) => {
+  if (!env.SPARKPOST_R2) {
+    throw new ImageGenerationConfigError("R2 binding SPARKPOST_R2 is not configured.");
+  }
+
+  const keys: string[] = [];
+  for (const [index, imageUrl] of referenceImages.entries()) {
+    const mimeType = getMimeTypeFromDataUrl(imageUrl);
+    const extension = getFileExtensionFromMimeType(mimeType);
+    const bytes = decodeBase64Image(getBase64PayloadFromDataUrl(imageUrl));
+    const key = `${GENERATED_ASSET_PREFIX}/${userId}/${taskId}/references/reference-${index + 1}.${extension}`;
+    await env.SPARKPOST_R2.put(key, bytes, {
+      httpMetadata: {
+        contentType: mimeType,
+      },
+    });
+    keys.push(key);
+  }
+  return keys;
+};
+
+const loadReferenceImages = async (env: Env, referenceKeys: string[]) => {
+  if (!env.SPARKPOST_R2) {
+    throw new ImageGenerationConfigError("R2 binding SPARKPOST_R2 is not configured.");
+  }
+
+  const referenceImages: string[] = [];
+  for (const key of referenceKeys) {
+    const object = await env.SPARKPOST_R2.get(key);
+    if (!object?.body) {
+      throw new ImageGenerationProviderError("A reference image for this task is no longer available.");
+    }
+    const bytes = new Uint8Array(await new Response(object.body).arrayBuffer());
+    const mimeType = object.httpMetadata?.contentType || "image/png";
+    referenceImages.push(`data:${mimeType};base64,${Buffer.from(bytes).toString("base64")}`);
+  }
+  return referenceImages;
 };
 
 const getGeneratedAssetResponse = async (_request: Request, env: Env, url: URL) => {
@@ -2650,6 +2728,221 @@ const generateImageToImageForUser = async (
   }
 };
 
+const mapGenerationTaskResponse = (
+  task: GenerationTaskDetailRow | GenerationTaskRow,
+  assets: Array<{ id: string; fileUrl: string; width: number | null; height: number | null }>,
+  remainingCredits: number,
+) => ({
+  id: task.id,
+  status: task.status,
+  prompt: task.prompt,
+  requestedSize: task.requestedSize ?? null,
+  createdAt: task.createdAt,
+  completedAt: task.completedAt ?? null,
+  model: task.model ?? null,
+  costCredits: task.costCredits,
+  errorMessage: "errorMessage" in task ? task.errorMessage ?? null : null,
+  remainingCredits,
+  assets,
+});
+
+const getTaskAssets = async (env: Env, taskId: string) => {
+  if (!env.SPARKPOST_DB) return [];
+  const result = await env.SPARKPOST_DB.prepare(
+    `SELECT id, file_url AS fileUrl, width, height
+     FROM generated_assets
+     WHERE task_id = ?
+     ORDER BY created_at ASC`,
+  ).bind(taskId).all<{ id: string; fileUrl: string; width: number | null; height: number | null }>();
+  return result.results ?? [];
+};
+
+const getGenerationTaskDetail = async (env: Env, taskId: string) => {
+  if (!env.SPARKPOST_DB) {
+    throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
+  }
+
+  return env.SPARKPOST_DB.prepare(
+    `SELECT
+       id,
+       user_id AS userId,
+       task_type AS taskType,
+       status,
+       prompt,
+       compiled_prompt AS compiledPrompt,
+       input_image_url AS inputImageUrl,
+       input_reference_keys AS inputReferenceKeys,
+       requested_size AS requestedSize,
+       created_at AS createdAt,
+       completed_at AS completedAt,
+       model,
+       cost_credits AS costCredits,
+       error_message AS errorMessage
+     FROM generation_tasks
+     WHERE id = ?
+     LIMIT 1`,
+  ).bind(taskId).first<GenerationTaskDetailRow>();
+};
+
+const getCreditBalanceForUser = async (userId: string, env: Env) => {
+  if (!env.SPARKPOST_DB) return 0;
+  const account = await env.SPARKPOST_DB.prepare(
+    `SELECT balance FROM credit_accounts WHERE user_id = ? LIMIT 1`,
+  ).bind(userId).first<{ balance: number }>();
+  return account?.balance ?? 0;
+};
+
+const getReferenceKeysFromTask = (task: GenerationTaskDetailRow) => {
+  if (!task.inputReferenceKeys) return [];
+  try {
+    const parsed = JSON.parse(task.inputReferenceKeys);
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
+  } catch {
+    return [];
+  }
+};
+
+const resolveModelIdFromTask = (task: GenerationTaskDetailRow) => {
+  const normalizedModel = task.model?.trim().toLowerCase();
+  if (!normalizedModel) return undefined;
+  return IMAGE_MODEL_ALIAS_MAP[normalizedModel] ?? (IMAGE_MODEL_REGISTRY[normalizedModel] ? normalizedModel : undefined);
+};
+
+const createQueuedImageGenerationTask = async (
+  userId: string,
+  input: Extract<ReturnType<typeof validateGenerateImageInput>, { ok: true }>,
+  env: Env,
+) => {
+  if (!env.SPARKPOST_DB) {
+    throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
+  }
+  if (!env.IMAGE_GENERATION_QUEUE) {
+    throw new ImageGenerationConfigError("Queue binding IMAGE_GENERATION_QUEUE is not configured.");
+  }
+
+  const imageConfig = getImageConfig(env, input.modelId);
+  const requestedSize = input.size ?? imageConfig.defaultSize;
+  const now = new Date();
+  const taskId = crypto.randomUUID();
+  const isImageToImage = input.mode === "i2i";
+  const costCredits = isImageToImage ? imageConfig.imageToImageCost : imageConfig.textToImageCost;
+  const compiledPrompt = isImageToImage
+    ? compileImageToImagePrompt(input.prompt, input.referenceImages.length)
+    : input.prompt;
+
+  await reconcileExpiredCreditsForUser(userId, env, now);
+  const creditAccount = await env.SPARKPOST_DB.prepare(
+    `SELECT balance FROM credit_accounts WHERE user_id = ? LIMIT 1`,
+  ).bind(userId).first<{ balance: number }>();
+
+  if (!creditAccount) {
+    throw new ImageGenerationAuthError("Authenticated user has no credit account.");
+  }
+  if (creditAccount.balance < costCredits) {
+    throw new ImageGenerationCreditsError("Not enough credits to generate an image.");
+  }
+
+  const referenceKeys = isImageToImage
+    ? await persistReferenceImages(env, userId, taskId, input.referenceImages)
+    : [];
+
+  await env.SPARKPOST_DB.prepare(
+    `INSERT INTO generation_tasks (
+       id, user_id, task_type, status, prompt, compiled_prompt, requested_size, model, cost_credits, input_image_url, input_reference_keys, created_at
+     ) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    taskId,
+    userId,
+    isImageToImage ? "image_to_image" : "text_to_image",
+    input.prompt,
+    compiledPrompt,
+    requestedSize,
+    imageConfig.model,
+    costCredits,
+    isImageToImage && input.referenceImages[0] ? `inline:${getMimeTypeFromDataUrl(input.referenceImages[0])}` : null,
+    referenceKeys.length > 0 ? JSON.stringify(referenceKeys) : null,
+    now.toISOString(),
+  ).run();
+
+  await env.IMAGE_GENERATION_QUEUE.send({ taskId, userId });
+
+  return mapGenerationTaskResponse(
+    {
+      id: taskId,
+      userId,
+      taskType: isImageToImage ? "image_to_image" : "text_to_image",
+      status: "queued",
+      prompt: input.prompt,
+      compiledPrompt,
+      inputImageUrl: null,
+      inputReferenceKeys: referenceKeys.length > 0 ? JSON.stringify(referenceKeys) : null,
+      requestedSize,
+      createdAt: now.toISOString(),
+      completedAt: null,
+      model: imageConfig.model,
+      costCredits,
+      errorMessage: null,
+    },
+    [],
+    creditAccount.balance,
+  );
+};
+
+const processQueuedImageGenerationTask = async (taskId: string, userId: string, env: Env) => {
+  if (!env.SPARKPOST_DB) {
+    throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
+  }
+
+  const task = await getGenerationTaskDetail(env, taskId);
+  if (!task || task.userId !== userId) return;
+  if (task.status === "succeeded" || task.status === "failed") return;
+
+  await env.SPARKPOST_DB.prepare(
+    `UPDATE generation_tasks SET status = 'running' WHERE id = ? AND status IN ('queued', 'running')`,
+  ).bind(taskId).run();
+
+  try {
+    const mode: ImageMode = task.taskType === "image_to_image" ? "i2i" : "t2i";
+    const modelId = resolveModelIdFromTask(task);
+    const requestedSize = task.requestedSize ? (task.requestedSize as ImageSize) : undefined;
+    const referenceImages = mode === "i2i" ? await loadReferenceImages(env, getReferenceKeysFromTask(task)) : [];
+    const providerResult = await generateProviderImage(task.compiledPrompt ?? task.prompt, env, {
+      mode,
+      modelId,
+      size: requestedSize,
+      referenceImages,
+    });
+    const storedAsset = await persistGeneratedAsset(new Request("https://sparkpost.local"), env, userId, taskId, providerResult, {
+      useRelativeUrl: true,
+    });
+    const completedAt = new Date();
+    const remainingCredits = await spendCreditsForUser(userId, env, {
+      amount: task.costCredits,
+      type: task.taskType,
+      relatedTaskId: taskId,
+      remark: task.prompt.slice(0, 120),
+      now: completedAt,
+    });
+
+    await env.SPARKPOST_DB.prepare(
+      `INSERT INTO generated_assets (
+         id, task_id, asset_type, file_url, width, height, created_at
+       ) VALUES (?, ?, 'image', ?, ?, ?, ?)`,
+    ).bind(storedAsset.assetId, taskId, storedAsset.fileUrl, storedAsset.width, storedAsset.height, completedAt.toISOString()).run();
+
+    await env.SPARKPOST_DB.prepare(
+      `UPDATE generation_tasks SET status = 'succeeded', model = ?, completed_at = ? WHERE id = ?`,
+    ).bind(providerResult.model, completedAt.toISOString(), taskId).run();
+
+    return remainingCredits;
+  } catch (error) {
+    await env.SPARKPOST_DB.prepare(
+      `UPDATE generation_tasks SET status = 'failed', error_message = ?, completed_at = ? WHERE id = ?`,
+    ).bind(error instanceof Error ? error.message : "Image generation failed.", new Date().toISOString(), taskId).run();
+    throw error;
+  }
+};
+
 const buildSessionCookie = async (userId: string, email: string, env: Env) => {
   const authConfig = getAuthConfig(env);
   const token = await createSessionToken(userId, email, env);
@@ -2708,6 +3001,27 @@ const getImageModelsPayload = (env: Env) => {
       };
     }),
   };
+};
+
+const getGenerationTaskStatusResponse = async (request: Request, env: Env, url: URL) => {
+  const authenticatedUser = await getAuthenticatedUser(request, env);
+  if (!authenticatedUser.ok) return authenticatedUser.response;
+  if (!authenticatedUser.user) return json(withErrorCode("AUTH_REQUIRED", "Authentication required."), { status: 401 });
+
+  const taskId = decodeURIComponent(url.pathname.slice("/api/generate/tasks/".length));
+  if (!taskId) return json({ error: "Task ID is required." }, { status: 400 });
+
+  const task = await getGenerationTaskDetail(env, taskId);
+  if (!task || task.userId !== authenticatedUser.user.id) {
+    return json({ error: "Task not found." }, { status: 404 });
+  }
+
+  const [assets, remainingCredits] = await Promise.all([
+    getTaskAssets(env, taskId),
+    getCreditBalanceForUser(authenticatedUser.user.id, env),
+  ]);
+
+  return json({ ok: true, task: mapGenerationTaskResponse(task, assets, remainingCredits) });
 };
 
 const routes: Array<{ method: string; pathname: string; handler: RouteHandler }> = [
@@ -2973,18 +3287,7 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
       if (!authenticatedUser.user) return json(withErrorCode("AUTH_REQUIRED", "Authentication required."), { status: 401 });
 
       try {
-        const task =
-          input.mode === "i2i"
-              ? await generateImageToImageForUser(
-                  request,
-                  authenticatedUser.user.id,
-                  input.prompt,
-                  input.referenceImages,
-                  env,
-                  input.modelId,
-                  input.size,
-                )
-              : await generateTextToImageForUser(request, authenticatedUser.user.id, input.prompt, env, input.modelId, input.size);
+        const task = await createQueuedImageGenerationTask(authenticatedUser.user.id, input, env);
         return json({ ok: true, task });
       } catch (error) {
         if (error instanceof ImageGenerationCreditsError) {
@@ -3064,7 +3367,7 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
   ];
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx?: WorkerExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") {
@@ -3084,14 +3387,29 @@ export default {
         return withCors(request, await getGeneratedAssetResponse(request, env, url), env);
       }
 
+      if (request.method === "GET" && url.pathname.startsWith("/api/generate/tasks/")) {
+        return withCors(request, await getGenerationTaskStatusResponse(request, env, url), env);
+      }
+
       const match = routes.find((route) => route.method === request.method && route.pathname === url.pathname);
       if (match) {
-        return withCors(request, await match.handler(request, env, url), env);
+        return withCors(request, await match.handler(request, env, url, ctx), env);
       }
       return withCors(request, json({ ok: false, error: "Route not found." }, { status: 404 }), env);
     } catch (error) {
       console.error("Workers API route failed.", error);
       return withCors(request, json({ error: "Unexpected server error." }, { status: 500 }), env);
+    }
+  },
+  async queue(batch: { messages: Array<{ body: ImageGenerationQueueMessage; ack: () => void; retry: () => void }> }, env: Env): Promise<void> {
+    for (const message of batch.messages) {
+      try {
+        await processQueuedImageGenerationTask(message.body.taskId, message.body.userId, env);
+        message.ack();
+      } catch (error) {
+        console.error("Image generation queue task failed.", error);
+        message.ack();
+      }
     }
   },
 };
