@@ -369,7 +369,7 @@ const IMAGE_MODEL_REGISTRY: Record<string, ImageModelDefinition> = {
     id: "gpt-image-2",
     label: "GPT-Image 2",
     provider: "relay",
-    remoteModel: "gpt-image2",
+    remoteModel: "gpt-image-2",
     supports: { t2i: true, i2i: true },
     supportedSizes: GPT_RELAY_IMAGE_SIZES,
     defaultSize: DEFAULT_GPT_RELAY_IMAGE_SIZE,

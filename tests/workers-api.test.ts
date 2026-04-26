@@ -482,7 +482,7 @@ test("GET /api/models/image returns registered image models", async () => {
   assert.equal(result.status, 200);
   assert.equal(result.body.ok, true);
   assert.equal(result.body.defaultModelId, "gpt-image-2");
-  assert.ok(result.body.items.some((item) => item.id === "gpt-image-2" && item.provider === "relay" && item.model === "gpt-image2" && item.isDefault));
+  assert.ok(result.body.items.some((item) => item.id === "gpt-image-2" && item.provider === "relay" && item.model === "gpt-image-2" && item.isDefault));
   assert.deepEqual(result.body.items.find((item) => item.id === "gpt-image-2")?.supportedSizes, [
     "1024x1024",
     "1536x1024",
@@ -638,7 +638,7 @@ test("POST /api/generate/image can target the default duojie GPT-Image relay mod
       const request = input instanceof Request ? input : new Request(url, init);
       const payload = await request.json() as { model?: string; prompt?: string; quality?: string; size?: string };
       assert.equal(request.headers.get("authorization"), "Bearer duojie-test-key");
-      assert.equal(payload.model, "gpt-image2");
+      assert.equal(payload.model, "gpt-image-2");
       assert.equal(typeof payload.prompt, "string");
       assert.equal(payload.size, "1536x1024");
       assert.equal(payload.quality, "high");
@@ -699,7 +699,7 @@ test("POST /api/generate/image can target the default duojie GPT-Image relay mod
     assert.equal(result.status, 200);
     assert.equal(result.body.ok, true);
     assert.equal(result.body.task.status, "succeeded");
-    assert.equal(result.body.task.model, "gpt-image2");
+    assert.equal(result.body.task.model, "gpt-image-2");
     assert.equal(result.body.task.requestedSize, "1536x1024");
     assert.equal(result.body.task.remainingCredits, 10);
     assert.equal(result.body.task.assets[0]?.width, 1536);
