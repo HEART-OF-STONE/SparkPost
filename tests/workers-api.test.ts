@@ -192,7 +192,8 @@ function createFakeDb(state: FakeState) {
 
               if (sql.includes("FROM generation_tasks") && sql.includes("LEFT JOIN generated_assets")) {
                 const userId = String(values[0]);
-                const limit = Number(values[1]);
+                const limit = Number(values[values.length - 2]);
+                const offset = Number(values[values.length - 1]);
                 const rows: Array<{
                   id: string;
                   taskType: string;
@@ -212,9 +213,21 @@ function createFakeDb(state: FakeState) {
                   assetCreatedAt: string | null;
                 }> = [];
 
-                for (const item of (state.generationHistory ?? [])
-                  .filter(() => userId === state.user.id)
-                  .slice(0, Number.isFinite(limit) ? limit : 24)) {
+                let items = (state.generationHistory ?? []).filter(() => userId === state.user.id);
+                if (sql.includes("status = ?")) {
+                  const status = String(values[1]);
+                  items = items.filter((item) => item.status === status);
+                } else if (sql.includes("is_favorite = 1")) {
+                  items = items.filter((item) => item.isFavorite);
+                } else if (sql.includes("task_type = ?")) {
+                  const taskType = String(values[1]);
+                  items = items.filter((item) => item.taskType === taskType);
+                }
+
+                for (const item of items.slice(
+                  Number.isFinite(offset) ? offset : 0,
+                  (Number.isFinite(offset) ? offset : 0) + (Number.isFinite(limit) ? limit : 24),
+                )) {
                   if (item.assets.length > 0) {
                     for (const asset of item.assets) {
                       rows.push({
@@ -895,13 +908,27 @@ test("GET /api/generations/history returns private generation records", async ()
           },
         ],
       },
+      {
+        id: "task-2",
+        taskType: "image_to_image",
+        status: "failed",
+        prompt: "failed reference render",
+        requestedSize: "1024x1024",
+        model: "nano-banana-2",
+        costCredits: 15,
+        errorMessage: "Provider unavailable.",
+        isFavorite: true,
+        createdAt,
+        completedAt: createdAt,
+        assets: [],
+      },
     ],
   };
   const secret = "workers-smoke-secret";
   const session = createSessionToken(state.user.id, state.user.email, secret);
 
   const response = await worker.fetch(
-    new Request("https://sparkpost.test/api/generations/history?limit=10", {
+    new Request("https://sparkpost.test/api/generations/history?limit=1", {
       headers: {
         cookie: `sparkpost_session=${session}`,
       },
@@ -921,6 +948,8 @@ test("GET /api/generations/history returns private generation records", async ()
       model: string | null;
       assets: Array<{ fileUrl: string; width: number | null; height: number | null }>;
     }>;
+    hasMore: boolean;
+    nextOffset: number;
   }>(response);
 
   assert.equal(result.status, 200);
@@ -931,6 +960,25 @@ test("GET /api/generations/history returns private generation records", async ()
   assert.equal(result.body.items[0]?.requestedSize, "1536x1024");
   assert.equal(result.body.items[0]?.model, "gpt-image-2");
   assert.equal(result.body.items[0]?.assets[0]?.width, 1536);
+  assert.equal(result.body.hasMore, true);
+  assert.equal(result.body.nextOffset, 1);
+
+  const favoritesResponse = await worker.fetch(
+    new Request("https://sparkpost.test/api/generations/history?limit=10&filter=favorites", {
+      headers: {
+        cookie: `sparkpost_session=${session}`,
+      },
+    }),
+    {
+      SPARKPOST_DB: createFakeDb(state),
+      SESSION_SECRET: secret,
+    },
+  );
+
+  const favoritesResult = await readJsonResponse<{ ok: boolean; items: Array<{ id: string }> }>(favoritesResponse);
+  assert.equal(favoritesResult.status, 200);
+  assert.equal(favoritesResult.body.ok, true);
+  assert.deepEqual(favoritesResult.body.items.map((item) => item.id), ["task-2"]);
 });
 
 test("POST /api/generations/favorite updates owned generation favorite state", async () => {

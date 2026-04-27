@@ -242,6 +242,8 @@ type GenerationHistoryRow = Omit<GenerationHistoryItem, "assets"> & {
   assetCreatedAt: string | null;
 };
 
+type GenerationHistoryFilter = "all" | "succeeded" | "failed" | "favorites" | "t2i" | "i2i";
+
 type CreditTransactionRow = {
   id: string;
   type: string;
@@ -1210,12 +1212,27 @@ const ensureGenerationFavoriteColumn = async (env: Env) => {
 const getGenerationHistoryForUser = async (
   userId: string,
   env: Env,
-  options: { limit: number },
-): Promise<GenerationHistoryItem[]> => {
+  options: { limit: number; offset: number; filter: GenerationHistoryFilter },
+): Promise<{ items: GenerationHistoryItem[]; hasMore: boolean; nextOffset: number }> => {
   if (!env.SPARKPOST_DB) {
     throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
   }
   await ensureGenerationFavoriteColumn(env);
+
+  const clauses = ["user_id = ?"];
+  const values: Array<string | number> = [userId];
+  if (options.filter === "succeeded" || options.filter === "failed") {
+    clauses.push("status = ?");
+    values.push(options.filter);
+  } else if (options.filter === "favorites") {
+    clauses.push("is_favorite = 1");
+  } else if (options.filter === "t2i" || options.filter === "i2i") {
+    clauses.push("task_type = ?");
+    values.push(options.filter === "t2i" ? "text_to_image" : "image_to_image");
+  }
+
+  const queryLimit = options.limit + 1;
+  values.push(queryLimit, options.offset);
 
   const result = await env.SPARKPOST_DB.prepare(
     `SELECT
@@ -1238,13 +1255,14 @@ const getGenerationHistoryForUser = async (
      FROM (
        SELECT *
        FROM generation_tasks
-       WHERE user_id = ?
+       WHERE ${clauses.join(" AND ")}
        ORDER BY created_at DESC
        LIMIT ?
+       OFFSET ?
      ) gt
      LEFT JOIN generated_assets ga ON ga.task_id = gt.id
      ORDER BY gt.created_at DESC, ga.created_at ASC`,
-  ).bind(userId, options.limit).all<GenerationHistoryRow>();
+  ).bind(...values).all<GenerationHistoryRow>();
 
   const itemsById = new Map<string, GenerationHistoryItem>();
 
@@ -1280,7 +1298,14 @@ const getGenerationHistoryForUser = async (
     }
   }
 
-  return [...itemsById.values()];
+  const items = [...itemsById.values()];
+  const pageItems = items.slice(0, options.limit);
+
+  return {
+    items: pageItems,
+    hasMore: items.length > options.limit,
+    nextOffset: options.offset + pageItems.length,
+  };
 };
 
 const performDailyCheckInForUser = async (userId: string, env: Env) => {
@@ -3206,11 +3231,23 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
       if (!authenticatedUser.user) return json({ error: "Authentication required." }, { status: 401 });
 
       const limit = Number.parseInt(url.searchParams.get("limit") ?? "24", 10);
-      const items = await getGenerationHistoryForUser(authenticatedUser.user.id, env, {
+      const offset = Number.parseInt(url.searchParams.get("offset") ?? "0", 10);
+      const filter = url.searchParams.get("filter");
+      const normalizedFilter: GenerationHistoryFilter =
+        filter === "succeeded" ||
+        filter === "failed" ||
+        filter === "favorites" ||
+        filter === "t2i" ||
+        filter === "i2i"
+          ? filter
+          : "all";
+      const page = await getGenerationHistoryForUser(authenticatedUser.user.id, env, {
         limit: Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 100) : 24,
+        offset: Number.isFinite(offset) ? Math.max(offset, 0) : 0,
+        filter: normalizedFilter,
       });
 
-      return json({ ok: true, items });
+      return json({ ok: true, ...page });
     },
   },
   {

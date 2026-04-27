@@ -12,6 +12,7 @@ type SystemStatus = "unknown" | "available" | "unavailable";
 type InteractionStatus = "checking" | "ready" | "authRequired" | "generating";
 type ResultStatus = "empty" | "success" | "error";
 type Mode = "t2i" | "i2i";
+type GenerationHistoryFilter = "all" | "succeeded" | "failed" | "favorites" | "t2i" | "i2i";
 type AuthUser = {
   id: string;
   email: string;
@@ -63,7 +64,9 @@ type GenerationHistoryItem = {
 };
 type GenerateImageResponse = { ok: true; task: ImageTaskResult } | { code?: string; error: string };
 type GenerationTaskStatusResponse = { ok: true; task: ImageTaskResult } | { code?: string; error: string };
-type GenerationHistoryResponse = { ok: true; items: GenerationHistoryItem[] } | { error: string };
+type GenerationHistoryResponse =
+  | { ok: true; items: GenerationHistoryItem[]; hasMore?: boolean; nextOffset?: number }
+  | { error: string };
 type FavoriteGenerationResponse = { ok: true; taskId: string; isFavorite: boolean } | { error: string };
 type PromptAssistResponse = { ok: true; prompt: string; provider: string; model: string } | { error: string };
 type ImageModelItem = {
@@ -449,6 +452,7 @@ const DEFAULT_IMAGE_MODEL_COST: Record<Mode, number> = {
   i2i: 15,
 };
 const DEFAULT_IMAGE_SIZE = "auto";
+const GENERATION_HISTORY_PAGE_SIZE = 12;
 const GENERATION_POLL_INTERVAL_MS = 5000;
 const GENERATION_POLL_HIDDEN_INTERVAL_MS = 15000;
 const GENERATION_POLL_TIMEOUT_MS = 12 * 60 * 1000;
@@ -632,7 +636,11 @@ export default function Home() {
   const [dailyCheckInCredits, setDailyCheckInCredits] = useState(20);
   const [generationHistoryItems, setGenerationHistoryItems] = useState<GenerationHistoryItem[]>([]);
   const [isGenerationHistoryLoading, setIsGenerationHistoryLoading] = useState(false);
+  const [isGenerationHistoryLoadingMore, setIsGenerationHistoryLoadingMore] = useState(false);
   const [generationHistoryNotice, setGenerationHistoryNotice] = useState<string | null>(null);
+  const [generationHistoryFilter, setGenerationHistoryFilter] = useState<GenerationHistoryFilter>("all");
+  const [generationHistoryNextOffset, setGenerationHistoryNextOffset] = useState(0);
+  const [generationHistoryHasMore, setGenerationHistoryHasMore] = useState(false);
   const [pendingGenerateAfterLogin, setPendingGenerateAfterLogin] = useState(false);
   const [cooldownEndsAt, setCooldownEndsAt] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -1052,23 +1060,76 @@ export default function Home() {
     [locale],
   );
 
-  const loadGenerationHistory = useCallback(async () => {
+  const generationHistoryFilterOptions = useMemo(
+    () =>
+      locale === "zh"
+        ? [
+            { id: "all" as const, label: "全部" },
+            { id: "succeeded" as const, label: "已完成" },
+            { id: "failed" as const, label: "失败" },
+            { id: "favorites" as const, label: "收藏" },
+            { id: "t2i" as const, label: "文生图" },
+            { id: "i2i" as const, label: "图生图" },
+          ]
+        : [
+            { id: "all" as const, label: "All" },
+            { id: "succeeded" as const, label: "Completed" },
+            { id: "failed" as const, label: "Failed" },
+            { id: "favorites" as const, label: "Saved" },
+            { id: "t2i" as const, label: "Text to Image" },
+            { id: "i2i" as const, label: "Image to Image" },
+          ],
+    [locale],
+  );
+
+  const loadGenerationHistory = useCallback(async (options?: { append?: boolean; filter?: GenerationHistoryFilter }) => {
     if (!user?.id) return;
-    setIsGenerationHistoryLoading(true);
+    const append = Boolean(options?.append);
+    const activeFilter = options?.filter ?? generationHistoryFilter;
+    const offset = append ? generationHistoryNextOffset : 0;
+    if (append && (!generationHistoryHasMore || isGenerationHistoryLoadingMore)) return;
+
+    if (append) {
+      setIsGenerationHistoryLoadingMore(true);
+    } else {
+      setIsGenerationHistoryLoading(true);
+    }
     setGenerationHistoryNotice(null);
     try {
-      const response = await fetchApi("/api/generations/history?limit=24", { cache: "no-store" });
+      const params = new URLSearchParams({
+        limit: String(GENERATION_HISTORY_PAGE_SIZE),
+        offset: String(offset),
+        filter: activeFilter,
+      });
+      const response = await fetchApi(`/api/generations/history?${params.toString()}`, { cache: "no-store" });
       const data = (await response.json().catch(() => null)) as GenerationHistoryResponse | null;
       if (!response.ok || !data || !("ok" in data) || data.ok !== true) {
         throw new Error(generationHistoryLoadFailedText);
       }
-      setGenerationHistoryItems(data.items);
+      setGenerationHistoryItems((current) => {
+        if (!append) return data.items;
+        const seen = new Set(current.map((item) => item.id));
+        return [...current, ...data.items.filter((item) => !seen.has(item.id))];
+      });
+      setGenerationHistoryNextOffset(data.nextOffset ?? offset + data.items.length);
+      setGenerationHistoryHasMore(Boolean(data.hasMore));
     } catch (error) {
       setGenerationHistoryNotice(error instanceof Error ? error.message : generationHistoryLoadFailedText);
     } finally {
-      setIsGenerationHistoryLoading(false);
+      if (append) {
+        setIsGenerationHistoryLoadingMore(false);
+      } else {
+        setIsGenerationHistoryLoading(false);
+      }
     }
-  }, [generationHistoryLoadFailedText, user?.id]);
+  }, [
+    generationHistoryFilter,
+    generationHistoryHasMore,
+    generationHistoryLoadFailedText,
+    generationHistoryNextOffset,
+    isGenerationHistoryLoadingMore,
+    user?.id,
+  ]);
 
   const getGenerationStatusLabel = useCallback(
     (status: string) => {
@@ -1134,7 +1195,9 @@ export default function Home() {
     async (taskId: string, isFavorite: boolean) => {
       const applyFavorite = (nextFavorite: boolean) => {
         setGenerationHistoryItems((items) =>
-          items.map((item) => (item.id === taskId ? { ...item, isFavorite: nextFavorite } : item)),
+          items
+            .map((item) => (item.id === taskId ? { ...item, isFavorite: nextFavorite } : item))
+            .filter((item) => generationHistoryFilter !== "favorites" || item.isFavorite),
         );
         setGenerationTask((task) => (task?.id === taskId ? { ...task, isFavorite: nextFavorite } : task));
       };
@@ -1157,7 +1220,7 @@ export default function Home() {
         setGenerationNotice({ type: "error", text: error instanceof Error ? error.message : generationActionCopy.actionFailed });
       }
     },
-    [generationActionCopy.actionFailed, generationActionCopy.favoriteSaved],
+    [generationActionCopy.actionFailed, generationActionCopy.favoriteSaved, generationHistoryFilter],
   );
 
   useEffect(() => {
@@ -1167,6 +1230,8 @@ export default function Home() {
       setDashboardCreditHistory([]);
       setUsageLast7Days(Array(7).fill(0));
       setGenerationHistoryItems([]);
+      setGenerationHistoryNextOffset(0);
+      setGenerationHistoryHasMore(false);
       setShowGenerationHistory(false);
       setPendingGenerationTaskId(null);
       setPendingGenerationStartedAt(null);
@@ -1186,11 +1251,11 @@ export default function Home() {
       return;
     }
 
-    const autoLoadKey = `${user.id}:${locale}`;
+    const autoLoadKey = `${user.id}:${locale}:${generationHistoryFilter}`;
     if (generationHistoryAutoLoadKeyRef.current === autoLoadKey) return;
     generationHistoryAutoLoadKeyRef.current = autoLoadKey;
-    void loadGenerationHistory();
-  }, [loadGenerationHistory, locale, showGenerationHistory, user?.id]);
+    void loadGenerationHistory({ filter: generationHistoryFilter });
+  }, [generationHistoryFilter, loadGenerationHistory, locale, showGenerationHistory, user?.id]);
 
   const getLivePromptValue = useCallback(() => {
     const editor = getRenderedPromptEditor();
@@ -1512,6 +1577,8 @@ export default function Home() {
       setRecentCreditHistory([]);
       setDashboardCreditHistory([]);
       setGenerationHistoryItems([]);
+      setGenerationHistoryNextOffset(0);
+      setGenerationHistoryHasMore(false);
       setUsageLast7Days(Array(7).fill(0));
       setAuthNotice({ type: "info", text: t.signedOutNotice });
     } catch (error) {
@@ -2004,6 +2071,8 @@ export default function Home() {
   );
 
   function renderGenerationHistoryView() {
+    const loadMoreLabel = locale === "zh" ? "加载更多" : "Load more";
+    const loadingMoreLabel = locale === "zh" ? "加载中" : "Loading";
     return (
       <section className={`min-h-[calc(100vh-4rem)] w-full px-6 py-8 ${isDark ? "bg-[#000]" : "bg-gray-50"}`}>
         <div className="mx-auto max-w-6xl">
@@ -2012,9 +2081,28 @@ export default function Home() {
               <h2 className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{billingCopy.generationHistoryTitle}</h2>
               <p className={`mt-2 text-sm ${isDark ? "text-slate-500" : "text-gray-500"}`}>{billingCopy.generationHistorySubtitle}</p>
             </div>
-            <button type="button" onClick={() => void loadGenerationHistory()} disabled={isGenerationHistoryLoading} className={`rounded-xl border px-4 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>
+            <button type="button" onClick={() => void loadGenerationHistory({ filter: generationHistoryFilter })} disabled={isGenerationHistoryLoading} className={`rounded-xl border px-4 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>
               {isGenerationHistoryLoading ? t.checking : t.refresh}
             </button>
+          </div>
+
+          <div className="mb-5 flex flex-wrap gap-2">
+            {generationHistoryFilterOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => {
+                  if (option.id === generationHistoryFilter) return;
+                  setGenerationHistoryFilter(option.id);
+                  setGenerationHistoryItems([]);
+                  setGenerationHistoryNextOffset(0);
+                  setGenerationHistoryHasMore(false);
+                }}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${option.id === generationHistoryFilter ? (isDark ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-200" : "border-cyan-200 bg-cyan-50 text-cyan-700") : (isDark ? "border-white/10 bg-white/[0.03] text-slate-400 hover:bg-white/[0.07]" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50")}`}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
 
           {generationHistoryNotice ? (
@@ -2090,6 +2178,18 @@ export default function Home() {
           ) : (
             <div className={`rounded-2xl border p-12 text-center text-sm ${isDark ? "border-white/5 bg-[#111] text-slate-400" : "border-gray-200 bg-white text-gray-500"}`}>{billingCopy.noGenerationHistory}</div>
           )}
+          {generationHistoryItems.length > 0 && generationHistoryHasMore ? (
+            <div className="mt-6 flex justify-center">
+              <button
+                type="button"
+                onClick={() => void loadGenerationHistory({ append: true, filter: generationHistoryFilter })}
+                disabled={isGenerationHistoryLoadingMore}
+                className={`rounded-xl border px-5 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? "border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08]" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}
+              >
+                {isGenerationHistoryLoadingMore ? loadingMoreLabel : loadMoreLabel}
+              </button>
+            </div>
+          ) : null}
         </div>
       </section>
     );
