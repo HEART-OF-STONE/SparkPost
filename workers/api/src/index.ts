@@ -244,6 +244,63 @@ type GenerationHistoryRow = Omit<GenerationHistoryItem, "assets"> & {
 
 type GenerationHistoryFilter = "all" | "succeeded" | "failed" | "favorites" | "t2i" | "i2i";
 
+type GallerySort = "latest" | "popular";
+
+type GalleryItemRow = {
+  id: string;
+  taskId: string;
+  userId: string;
+  title: string | null;
+  description: string | null;
+  visibility: string;
+  likeCount: number;
+  remixCount: number;
+  createdAt: string;
+  updatedAt: string;
+  taskType: string;
+  prompt: string;
+  requestedSize: string | null;
+  model: string | null;
+  completedAt: string | null;
+  authorName: string | null;
+  authorEmail: string;
+  assetId: string | null;
+  fileUrl: string | null;
+  width: number | null;
+  height: number | null;
+  likedByMe: number | boolean | null;
+};
+
+type GalleryItem = {
+  id: string;
+  taskId: string;
+  title: string | null;
+  description: string | null;
+  visibility: string;
+  likeCount: number;
+  remixCount: number;
+  createdAt: string;
+  updatedAt: string;
+  task: {
+    taskType: string;
+    prompt: string;
+    requestedSize: string | null;
+    model: string | null;
+    completedAt: string | null;
+  };
+  author: {
+    id: string;
+    displayName: string;
+  };
+  asset: {
+    id: string;
+    fileUrl: string;
+    width: number | null;
+    height: number | null;
+  } | null;
+  likedByMe: boolean;
+};
+
 type CreditTransactionRow = {
   id: string;
   type: string;
@@ -357,6 +414,7 @@ const PROTECTED_ROUTE_PREFIXES = [
   "/api/generate/image",
   "/api/generate/tasks/",
   "/api/generations/",
+  "/api/gallery/",
   "/api/prompt/",
 ];
 const GPT_IMAGE_SIZES: ImageSize[] = [
@@ -793,6 +851,14 @@ const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const isValidEmail = (email: string) => email.length <= 320 && EMAIL_REGEX.test(email);
 const normalizePrompt = (prompt: string) => prompt.trim();
 const REFERENCE_TOKEN_REGEX = /@R(\d+)\b/gi;
+const clampText = (value: string, maxLength: number) => value.trim().slice(0, maxLength);
+const getPublicAuthorName = (name: string | null, email: string) => {
+  const cleanedName = name?.trim();
+  if (cleanedName) return cleanedName.slice(0, 40);
+  const [localPart] = email.split("@");
+  const safeLocalPart = localPart || "Creator";
+  return safeLocalPart.length <= 3 ? `${safeLocalPart}***` : `${safeLocalPart.slice(0, 3)}***`;
+};
 
 const getCreditDateKey = (date: Date, timeZone = DEFAULT_CREDIT_TIMEZONE) => {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -1184,6 +1250,7 @@ const getCreditTransactionsForUser = async (
 };
 
 let generationFavoriteColumnReady: Promise<void> | null = null;
+let galleryTablesReady: Promise<void> | null = null;
 
 const ensureGenerationFavoriteColumn = async (env: Env) => {
   if (!env.SPARKPOST_DB) {
@@ -1205,6 +1272,60 @@ const ensureGenerationFavoriteColumn = async (env: Env) => {
     await generationFavoriteColumnReady;
   } catch (error) {
     generationFavoriteColumnReady = null;
+    throw error;
+  }
+};
+
+const ensureGalleryTables = async (env: Env) => {
+  if (!env.SPARKPOST_DB) {
+    throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
+  }
+
+  galleryTablesReady ??= (async () => {
+    await env.SPARKPOST_DB!.prepare(
+      `CREATE TABLE IF NOT EXISTS gallery_items (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL UNIQUE,
+        user_id TEXT NOT NULL,
+        title TEXT,
+        description TEXT,
+        visibility TEXT NOT NULL DEFAULT 'public',
+        like_count INTEGER NOT NULL DEFAULT 0,
+        remix_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (task_id) REFERENCES generation_tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )`,
+    ).bind().run();
+    await env.SPARKPOST_DB!.prepare(
+      `CREATE INDEX IF NOT EXISTS idx_gallery_items_visibility_created_at
+       ON gallery_items (visibility, created_at)`,
+    ).bind().run();
+    await env.SPARKPOST_DB!.prepare(
+      `CREATE INDEX IF NOT EXISTS idx_gallery_items_visibility_like_count
+       ON gallery_items (visibility, like_count)`,
+    ).bind().run();
+    await env.SPARKPOST_DB!.prepare(
+      `CREATE TABLE IF NOT EXISTS gallery_likes (
+        gallery_item_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (gallery_item_id, user_id),
+        FOREIGN KEY (gallery_item_id) REFERENCES gallery_items(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )`,
+    ).bind().run();
+    await env.SPARKPOST_DB!.prepare(
+      `CREATE INDEX IF NOT EXISTS idx_gallery_likes_user_id
+       ON gallery_likes (user_id)`,
+    ).bind().run();
+  })();
+
+  try {
+    await galleryTablesReady;
+  } catch (error) {
+    galleryTablesReady = null;
     throw error;
   }
 };
@@ -2230,6 +2351,49 @@ const validateFavoriteGenerationInput = (input: unknown) => {
   };
 };
 
+const validatePublishGalleryInput = (input: unknown) => {
+  if (!isRecord(input)) {
+    return { ok: false as const, error: "Request body must be an object." };
+  }
+
+  const taskId = typeof input.taskId === "string" ? input.taskId.trim() : "";
+  if (!taskId) return { ok: false as const, error: "Task ID is required." };
+
+  const title = typeof input.title === "string" ? clampText(input.title, 80) : "";
+  const description = typeof input.description === "string" ? clampText(input.description, 500) : "";
+  const visibility = input.visibility === "private" ? "private" : "public";
+
+  return {
+    ok: true as const,
+    taskId,
+    title: title || null,
+    description: description || null,
+    visibility,
+  };
+};
+
+const validateGalleryTaskInput = (input: unknown) => {
+  if (!isRecord(input)) {
+    return { ok: false as const, error: "Request body must be an object." };
+  }
+
+  const taskId = typeof input.taskId === "string" ? input.taskId.trim() : "";
+  if (!taskId) return { ok: false as const, error: "Task ID is required." };
+  return { ok: true as const, taskId };
+};
+
+const validateGalleryLikeInput = (input: unknown) => {
+  if (!isRecord(input)) {
+    return { ok: false as const, error: "Request body must be an object." };
+  }
+
+  const galleryItemId = typeof input.galleryItemId === "string" ? input.galleryItemId.trim() : "";
+  if (!galleryItemId) return { ok: false as const, error: "Gallery item ID is required." };
+  if (typeof input.liked !== "boolean") return { ok: false as const, error: "liked must be a boolean." };
+
+  return { ok: true as const, galleryItemId, liked: input.liked };
+};
+
 const sanitizeProviderMessage = (value: string) =>
   value
     .replace(/sk-[A-Za-z0-9_-]{6,}/g, "sk-***")
@@ -3101,6 +3265,145 @@ const getImageModelsPayload = (env: Env) => {
   };
 };
 
+const mapGalleryItem = (row: GalleryItemRow): GalleryItem => ({
+  id: row.id,
+  taskId: row.taskId,
+  title: row.title,
+  description: row.description,
+  visibility: row.visibility,
+  likeCount: row.likeCount,
+  remixCount: row.remixCount,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  task: {
+    taskType: row.taskType,
+    prompt: row.prompt,
+    requestedSize: row.requestedSize,
+    model: row.model,
+    completedAt: row.completedAt,
+  },
+  author: {
+    id: row.userId,
+    displayName: getPublicAuthorName(row.authorName, row.authorEmail),
+  },
+  asset:
+    row.assetId && row.fileUrl
+      ? {
+          id: row.assetId,
+          fileUrl: row.fileUrl,
+          width: row.width,
+          height: row.height,
+        }
+      : null,
+  likedByMe: Boolean(row.likedByMe),
+});
+
+const getGalleryItemByTaskId = async (env: Env, taskId: string, viewerId: string | null) => {
+  if (!env.SPARKPOST_DB) return null;
+  await ensureGalleryTables(env);
+  const row = await env.SPARKPOST_DB.prepare(
+    `SELECT
+       gi.id,
+       gi.task_id AS taskId,
+       gi.user_id AS userId,
+       gi.title,
+       gi.description,
+       gi.visibility,
+       gi.like_count AS likeCount,
+       gi.remix_count AS remixCount,
+       gi.created_at AS createdAt,
+       gi.updated_at AS updatedAt,
+       gt.task_type AS taskType,
+       gt.prompt,
+       gt.requested_size AS requestedSize,
+       gt.model,
+       gt.completed_at AS completedAt,
+       users.name AS authorName,
+       users.email AS authorEmail,
+       ga.id AS assetId,
+       ga.file_url AS fileUrl,
+       ga.width,
+       ga.height,
+       CASE WHEN gl.user_id IS NULL THEN 0 ELSE 1 END AS likedByMe
+     FROM gallery_items gi
+     INNER JOIN generation_tasks gt ON gt.id = gi.task_id
+     INNER JOIN users ON users.id = gi.user_id
+     LEFT JOIN generated_assets ga ON ga.id = (
+       SELECT id FROM generated_assets WHERE task_id = gi.task_id ORDER BY created_at ASC LIMIT 1
+     )
+     LEFT JOIN gallery_likes gl ON gl.gallery_item_id = gi.id AND gl.user_id = ?
+     WHERE gi.task_id = ?
+     LIMIT 1`,
+  ).bind(viewerId ?? "", taskId).first<GalleryItemRow>();
+
+  return row ? mapGalleryItem(row) : null;
+};
+
+const getGalleryItems = async (
+  env: Env,
+  options: { limit: number; offset: number; sort: GallerySort; scope: "public" | "mine"; viewerId: string | null },
+) => {
+  if (!env.SPARKPOST_DB) {
+    throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
+  }
+  await ensureGalleryTables(env);
+
+  const clauses = options.scope === "mine" ? ["gi.user_id = ?"] : ["gi.visibility = 'public'"];
+  const values: Array<string | number> = [];
+  if (options.scope === "mine") values.push(options.viewerId ?? "");
+
+  const orderBy =
+    options.sort === "popular"
+      ? "gi.like_count DESC, gi.created_at DESC"
+      : "gi.created_at DESC";
+  values.push(options.viewerId ?? "", options.limit + 1, options.offset);
+
+  const result = await env.SPARKPOST_DB.prepare(
+    `SELECT
+       gi.id,
+       gi.task_id AS taskId,
+       gi.user_id AS userId,
+       gi.title,
+       gi.description,
+       gi.visibility,
+       gi.like_count AS likeCount,
+       gi.remix_count AS remixCount,
+       gi.created_at AS createdAt,
+       gi.updated_at AS updatedAt,
+       gt.task_type AS taskType,
+       gt.prompt,
+       gt.requested_size AS requestedSize,
+       gt.model,
+       gt.completed_at AS completedAt,
+       users.name AS authorName,
+       users.email AS authorEmail,
+       ga.id AS assetId,
+       ga.file_url AS fileUrl,
+       ga.width,
+       ga.height,
+       CASE WHEN gl.user_id IS NULL THEN 0 ELSE 1 END AS likedByMe
+     FROM gallery_items gi
+     INNER JOIN generation_tasks gt ON gt.id = gi.task_id
+     INNER JOIN users ON users.id = gi.user_id
+     LEFT JOIN generated_assets ga ON ga.id = (
+       SELECT id FROM generated_assets WHERE task_id = gi.task_id ORDER BY created_at ASC LIMIT 1
+     )
+     LEFT JOIN gallery_likes gl ON gl.gallery_item_id = gi.id AND gl.user_id = ?
+     WHERE ${clauses.join(" AND ")}
+     ORDER BY ${orderBy}
+     LIMIT ?
+     OFFSET ?`,
+  ).bind(...values).all<GalleryItemRow>();
+
+  const rows = result.results ?? [];
+  const items = rows.slice(0, options.limit).map(mapGalleryItem);
+  return {
+    items,
+    hasMore: rows.length > options.limit,
+    nextOffset: options.offset + items.length,
+  };
+};
+
 const getGenerationTaskStatusResponse = async (request: Request, env: Env, url: URL) => {
   const authenticatedUser = await getAuthenticatedUser(request, env);
   if (!authenticatedUser.ok) return authenticatedUser.response;
@@ -3143,6 +3446,144 @@ const updateGenerationFavoriteResponse = async (request: Request, env: Env) => {
   ).bind(input.isFavorite ? 1 : 0, input.taskId, authenticatedUser.user.id).run();
 
   return json({ ok: true, taskId: input.taskId, isFavorite: input.isFavorite });
+};
+
+const getGalleryResponse = async (request: Request, env: Env, url: URL, scope: "public" | "mine") => {
+  if (!env.SPARKPOST_DB) return json({ error: "Gallery is temporarily unavailable." }, { status: 503 });
+
+  const authenticatedUser = await getAuthenticatedUser(request, env);
+  if (!authenticatedUser.ok) return authenticatedUser.response;
+  if (scope === "mine" && !authenticatedUser.user) {
+    return json(withErrorCode("AUTH_REQUIRED", "Authentication required."), { status: 401 });
+  }
+
+  const limit = Number.parseInt(url.searchParams.get("limit") ?? "24", 10);
+  const offset = Number.parseInt(url.searchParams.get("offset") ?? "0", 10);
+  const sort = url.searchParams.get("sort") === "popular" ? "popular" : "latest";
+  const page = await getGalleryItems(env, {
+    limit: Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 60) : 24,
+    offset: Number.isFinite(offset) ? Math.max(offset, 0) : 0,
+    sort,
+    scope,
+    viewerId: authenticatedUser.user?.id ?? null,
+  });
+
+  return json({ ok: true, ...page });
+};
+
+const publishGalleryItemResponse = async (request: Request, env: Env) => {
+  const authenticatedUser = await getAuthenticatedUser(request, env);
+  if (!authenticatedUser.ok) return authenticatedUser.response;
+  if (!authenticatedUser.user) return json(withErrorCode("AUTH_REQUIRED", "Authentication required."), { status: 401 });
+  if (!env.SPARKPOST_DB) return json({ error: "Gallery is temporarily unavailable." }, { status: 503 });
+
+  const bodyResult = await parseJsonBody(request);
+  if (!bodyResult.ok) return json({ error: bodyResult.error }, { status: 400 });
+  const input = validatePublishGalleryInput(bodyResult.body);
+  if (!input.ok) return json({ error: input.error }, { status: 400 });
+
+  const task = await getGenerationTaskDetail(env, input.taskId);
+  if (!task || task.userId !== authenticatedUser.user.id) {
+    return json({ error: "Task not found." }, { status: 404 });
+  }
+  if (task.status !== "succeeded") {
+    return json({ error: "Only completed generations can be published." }, { status: 400 });
+  }
+
+  const assets = await getTaskAssets(env, task.id);
+  if (assets.length === 0) {
+    return json({ error: "Generation has no image asset to publish." }, { status: 400 });
+  }
+
+  await ensureGalleryTables(env);
+  const now = new Date().toISOString();
+  await env.SPARKPOST_DB.prepare(
+    `INSERT INTO gallery_items (
+       id, task_id, user_id, title, description, visibility, like_count, remix_count, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
+     ON CONFLICT(task_id) DO UPDATE SET
+       title = excluded.title,
+       description = excluded.description,
+       visibility = excluded.visibility,
+       updated_at = excluded.updated_at`,
+  ).bind(
+    crypto.randomUUID(),
+    input.taskId,
+    authenticatedUser.user.id,
+    input.title,
+    input.description,
+    input.visibility,
+    now,
+    now,
+  ).run();
+
+  const item = await getGalleryItemByTaskId(env, input.taskId, authenticatedUser.user.id);
+  return json({ ok: true, item: item ?? null });
+};
+
+const unpublishGalleryItemResponse = async (request: Request, env: Env) => {
+  const authenticatedUser = await getAuthenticatedUser(request, env);
+  if (!authenticatedUser.ok) return authenticatedUser.response;
+  if (!authenticatedUser.user) return json(withErrorCode("AUTH_REQUIRED", "Authentication required."), { status: 401 });
+  if (!env.SPARKPOST_DB) return json({ error: "Gallery is temporarily unavailable." }, { status: 503 });
+
+  const bodyResult = await parseJsonBody(request);
+  if (!bodyResult.ok) return json({ error: bodyResult.error }, { status: 400 });
+  const input = validateGalleryTaskInput(bodyResult.body);
+  if (!input.ok) return json({ error: input.error }, { status: 400 });
+
+  await ensureGalleryTables(env);
+  const result = await env.SPARKPOST_DB.prepare(
+    `DELETE FROM gallery_items WHERE task_id = ? AND user_id = ?`,
+  ).bind(input.taskId, authenticatedUser.user.id).run();
+
+  return json({ ok: true, taskId: input.taskId, unpublished: (result.meta?.changes ?? 0) > 0 });
+};
+
+const updateGalleryLikeResponse = async (request: Request, env: Env) => {
+  const authenticatedUser = await getAuthenticatedUser(request, env);
+  if (!authenticatedUser.ok) return authenticatedUser.response;
+  if (!authenticatedUser.user) return json(withErrorCode("AUTH_REQUIRED", "Authentication required."), { status: 401 });
+  if (!env.SPARKPOST_DB) return json({ error: "Gallery is temporarily unavailable." }, { status: 503 });
+
+  const bodyResult = await parseJsonBody(request);
+  if (!bodyResult.ok) return json({ error: bodyResult.error }, { status: 400 });
+  const input = validateGalleryLikeInput(bodyResult.body);
+  if (!input.ok) return json({ error: input.error }, { status: 400 });
+
+  await ensureGalleryTables(env);
+  const item = await env.SPARKPOST_DB.prepare(
+    `SELECT id FROM gallery_items WHERE id = ? AND visibility = 'public' LIMIT 1`,
+  ).bind(input.galleryItemId).first<{ id: string }>();
+  if (!item) return json({ error: "Gallery item not found." }, { status: 404 });
+
+  if (input.liked) {
+    await env.SPARKPOST_DB.prepare(
+      `INSERT OR IGNORE INTO gallery_likes (gallery_item_id, user_id, created_at) VALUES (?, ?, ?)`,
+    ).bind(input.galleryItemId, authenticatedUser.user.id, new Date().toISOString()).run();
+  } else {
+    await env.SPARKPOST_DB.prepare(
+      `DELETE FROM gallery_likes WHERE gallery_item_id = ? AND user_id = ?`,
+    ).bind(input.galleryItemId, authenticatedUser.user.id).run();
+  }
+
+  await env.SPARKPOST_DB.prepare(
+    `UPDATE gallery_items
+     SET like_count = (SELECT COUNT(*) FROM gallery_likes WHERE gallery_item_id = ?),
+         updated_at = ?
+     WHERE id = ?`,
+  ).bind(input.galleryItemId, new Date().toISOString(), input.galleryItemId).run();
+
+  const count = await env.SPARKPOST_DB.prepare(
+    `SELECT like_count AS likeCount FROM gallery_items WHERE id = ? LIMIT 1`,
+  ).bind(input.galleryItemId).first<{ likeCount: number }>();
+
+  return json({
+    ok: true,
+    galleryItemId: input.galleryItemId,
+    liked: input.liked,
+    likeCount: count?.likeCount ?? 0,
+  });
 };
 
 const routes: Array<{ method: string; pathname: string; handler: RouteHandler }> = [
@@ -3254,6 +3695,31 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
     method: "POST",
     pathname: "/api/generations/favorite",
     handler: async (request, env) => updateGenerationFavoriteResponse(request, env),
+  },
+  {
+    method: "GET",
+    pathname: "/api/gallery",
+    handler: async (request, env, url) => getGalleryResponse(request, env, url, "public"),
+  },
+  {
+    method: "GET",
+    pathname: "/api/gallery/mine",
+    handler: async (request, env, url) => getGalleryResponse(request, env, url, "mine"),
+  },
+  {
+    method: "POST",
+    pathname: "/api/gallery/publish",
+    handler: async (request, env) => publishGalleryItemResponse(request, env),
+  },
+  {
+    method: "POST",
+    pathname: "/api/gallery/unpublish",
+    handler: async (request, env) => unpublishGalleryItemResponse(request, env),
+  },
+  {
+    method: "POST",
+    pathname: "/api/gallery/like",
+    handler: async (request, env) => updateGalleryLikeResponse(request, env),
   },
   {
     method: "POST",

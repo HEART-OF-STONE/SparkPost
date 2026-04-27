@@ -41,6 +41,19 @@ type FakeCreditTransaction = {
   createdAt: string;
 };
 
+type FakeGalleryItem = {
+  id: string;
+  taskId: string;
+  userId: string;
+  title: string | null;
+  description: string | null;
+  visibility: string;
+  likeCount: number;
+  remixCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type FakeState = {
   user: {
     id: string;
@@ -83,6 +96,8 @@ type FakeState = {
       createdAt: string;
     }>;
   }>;
+  galleryItems?: FakeGalleryItem[];
+  galleryLikes?: Array<{ galleryItemId: string; userId: string; createdAt: string }>;
 };
 
 function createSessionToken(userId: string, email: string, secret: string) {
@@ -144,6 +159,51 @@ function createFakeDb(state: FakeState) {
                   costCredits: state.generatedTask.costCredits,
                   errorMessage: state.generatedTask.errorMessage ?? null,
                   isFavorite: state.generatedTask.isFavorite ? 1 : 0,
+                } as T;
+              }
+
+              if (sql.includes("SELECT id FROM gallery_items WHERE id = ?")) {
+                const galleryItemId = String(values[0]);
+                const item = (state.galleryItems ?? []).find((entry) => entry.id === galleryItemId && entry.visibility === "public");
+                return item ? ({ id: item.id } as T) : null;
+              }
+
+              if (sql.includes("SELECT like_count AS likeCount FROM gallery_items")) {
+                const galleryItemId = String(values[0]);
+                const item = (state.galleryItems ?? []).find((entry) => entry.id === galleryItemId);
+                return item ? ({ likeCount: item.likeCount } as T) : null;
+              }
+
+              if (sql.includes("FROM gallery_items gi") && sql.includes("WHERE gi.task_id = ?")) {
+                const viewerId = String(values[0] ?? "");
+                const taskId = String(values[1]);
+                const item = (state.galleryItems ?? []).find((entry) => entry.taskId === taskId);
+                const task = state.generatedTask?.id === taskId ? state.generatedTask : null;
+                const asset = (state.generatedAssets ?? []).find((entry) => entry.taskId === taskId);
+                if (!item || !task) return null;
+                return {
+                  id: item.id,
+                  taskId: item.taskId,
+                  userId: item.userId,
+                  title: item.title,
+                  description: item.description,
+                  visibility: item.visibility,
+                  likeCount: item.likeCount,
+                  remixCount: item.remixCount,
+                  createdAt: item.createdAt,
+                  updatedAt: item.updatedAt,
+                  taskType: task.taskType ?? "text_to_image",
+                  prompt: task.prompt,
+                  requestedSize: task.requestedSize ?? null,
+                  model: task.model,
+                  completedAt: task.completedAt,
+                  authorName: null,
+                  authorEmail: state.user.email,
+                  assetId: asset?.id ?? null,
+                  fileUrl: asset?.fileUrl ?? null,
+                  width: asset?.width ?? null,
+                  height: asset?.height ?? null,
+                  likedByMe: (state.galleryLikes ?? []).some((like) => like.galleryItemId === item.id && like.userId === viewerId) ? 1 : 0,
                 } as T;
               }
 
@@ -288,10 +348,70 @@ function createFakeDb(state: FakeState) {
                 };
               }
 
+              if (sql.includes("FROM gallery_items gi")) {
+                const limit = Number(values[values.length - 2]);
+                const offset = Number(values[values.length - 1]);
+                const viewerId = String(values[0] ?? "");
+                const scopedUserId = sql.includes("gi.user_id = ?") ? String(values[1] ?? viewerId) : null;
+                let items = [...(state.galleryItems ?? [])];
+                if (scopedUserId) {
+                  items = items.filter((item) => item.userId === scopedUserId);
+                } else {
+                  items = items.filter((item) => item.visibility === "public");
+                }
+                if (sql.includes("like_count DESC")) {
+                  items.sort((a, b) => b.likeCount - a.likeCount || b.createdAt.localeCompare(a.createdAt));
+                } else {
+                  items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+                }
+
+                const rows = items
+                  .slice(Number.isFinite(offset) ? offset : 0, (Number.isFinite(offset) ? offset : 0) + (Number.isFinite(limit) ? limit : 24))
+                  .map((item) => {
+                    const task = state.generatedTask?.id === item.taskId ? state.generatedTask : null;
+                    const asset = (state.generatedAssets ?? []).find((entry) => entry.taskId === item.taskId);
+                    return {
+                      id: item.id,
+                      taskId: item.taskId,
+                      userId: item.userId,
+                      title: item.title,
+                      description: item.description,
+                      visibility: item.visibility,
+                      likeCount: item.likeCount,
+                      remixCount: item.remixCount,
+                      createdAt: item.createdAt,
+                      updatedAt: item.updatedAt,
+                      taskType: task?.taskType ?? "text_to_image",
+                      prompt: task?.prompt ?? "",
+                      requestedSize: task?.requestedSize ?? null,
+                      model: task?.model ?? null,
+                      completedAt: task?.completedAt ?? null,
+                      authorName: null,
+                      authorEmail: state.user.email,
+                      assetId: asset?.id ?? null,
+                      fileUrl: asset?.fileUrl ?? null,
+                      width: asset?.width ?? null,
+                      height: asset?.height ?? null,
+                      likedByMe: (state.galleryLikes ?? []).some((like) => like.galleryItemId === item.id && like.userId === viewerId) ? 1 : 0,
+                    };
+                  });
+
+                return { results: rows as T[] };
+              }
+
               return { results: [] as T[] };
             },
               async run(): Promise<D1RunResult> {
                 if (sql.includes("ALTER TABLE generation_tasks ADD COLUMN is_favorite")) {
+                  return { meta: { changes: 0 } };
+                }
+
+                if (
+                  sql.includes("CREATE TABLE IF NOT EXISTS gallery_items") ||
+                  sql.includes("CREATE INDEX IF NOT EXISTS idx_gallery_items") ||
+                  sql.includes("CREATE TABLE IF NOT EXISTS gallery_likes") ||
+                  sql.includes("CREATE INDEX IF NOT EXISTS idx_gallery_likes")
+                ) {
                   return { meta: { changes: 0 } };
                 }
 
@@ -420,6 +540,73 @@ function createFakeDb(state: FakeState) {
                 }
                 state.generationHistory = (state.generationHistory ?? []).map((item) =>
                   item.id === String(values[1]) ? { ...item, isFavorite: Number(values[0]) === 1 } : item,
+                );
+                return { meta: { changes: 1 } };
+              }
+
+              if (sql.includes("INSERT INTO gallery_items")) {
+                const taskId = String(values[1]);
+                const now = String(values[6]);
+                const existing = (state.galleryItems ?? []).find((item) => item.taskId === taskId);
+                if (existing) {
+                  existing.title = values[3] == null ? null : String(values[3]);
+                  existing.description = values[4] == null ? null : String(values[4]);
+                  existing.visibility = String(values[5]);
+                  existing.updatedAt = String(values[7]);
+                } else {
+                  state.galleryItems = [
+                    ...(state.galleryItems ?? []),
+                    {
+                      id: String(values[0]),
+                      taskId,
+                      userId: String(values[2]),
+                      title: values[3] == null ? null : String(values[3]),
+                      description: values[4] == null ? null : String(values[4]),
+                      visibility: String(values[5]),
+                      likeCount: 0,
+                      remixCount: 0,
+                      createdAt: now,
+                      updatedAt: String(values[7]),
+                    },
+                  ];
+                }
+                return { meta: { changes: 1 } };
+              }
+
+              if (sql.includes("DELETE FROM gallery_items")) {
+                const taskId = String(values[0]);
+                const userId = String(values[1]);
+                const before = state.galleryItems?.length ?? 0;
+                state.galleryItems = (state.galleryItems ?? []).filter((item) => item.taskId !== taskId || item.userId !== userId);
+                return { meta: { changes: before - (state.galleryItems?.length ?? 0) } };
+              }
+
+              if (sql.includes("INSERT OR IGNORE INTO gallery_likes")) {
+                const galleryItemId = String(values[0]);
+                const userId = String(values[1]);
+                const exists = (state.galleryLikes ?? []).some((like) => like.galleryItemId === galleryItemId && like.userId === userId);
+                if (!exists) {
+                  state.galleryLikes = [
+                    ...(state.galleryLikes ?? []),
+                    { galleryItemId, userId, createdAt: String(values[2]) },
+                  ];
+                }
+                return { meta: { changes: exists ? 0 : 1 } };
+              }
+
+              if (sql.includes("DELETE FROM gallery_likes")) {
+                const galleryItemId = String(values[0]);
+                const userId = String(values[1]);
+                const before = state.galleryLikes?.length ?? 0;
+                state.galleryLikes = (state.galleryLikes ?? []).filter((like) => like.galleryItemId !== galleryItemId || like.userId !== userId);
+                return { meta: { changes: before - (state.galleryLikes?.length ?? 0) } };
+              }
+
+              if (sql.includes("UPDATE gallery_items") && sql.includes("like_count")) {
+                const galleryItemId = String(values[0]);
+                const nextLikeCount = (state.galleryLikes ?? []).filter((like) => like.galleryItemId === galleryItemId).length;
+                state.galleryItems = (state.galleryItems ?? []).map((item) =>
+                  item.id === galleryItemId ? { ...item, likeCount: nextLikeCount, updatedAt: String(values[1]) } : item,
                 );
                 return { meta: { changes: 1 } };
               }
@@ -1039,6 +1226,114 @@ test("POST /api/generations/favorite updates owned generation favorite state", a
   assert.equal(result.body.taskId, "task-fav");
   assert.equal(result.body.isFavorite, true);
   assert.equal(state.generatedTask?.isFavorite, true);
+});
+
+test("POST /api/gallery/publish exposes completed generations in gallery", async () => {
+  const worker = await loadWorker();
+  const createdAt = new Date().toISOString();
+  const state: FakeState = {
+    user: {
+      id: "user-1",
+      email: "demo@example.com",
+      createdAt,
+      emailVerifiedAt: createdAt,
+      lastLoginAt: createdAt,
+      creditBalance: 20,
+    },
+    creditBalance: 20,
+    generatedTask: {
+      id: "task-gallery",
+      userId: "user-1",
+      taskType: "text_to_image",
+      status: "succeeded",
+      prompt: "a collectible crystal spaceship",
+      requestedSize: "1024x1024",
+      createdAt,
+      completedAt: createdAt,
+      model: "gpt-image-2",
+      costCredits: 10,
+      errorMessage: null,
+      isFavorite: false,
+    },
+    generatedAssetUrl: null,
+    generatedAssets: [
+      {
+        id: "asset-gallery",
+        taskId: "task-gallery",
+        fileUrl: "api/assets/generated/user-1/task-gallery/asset.png",
+        width: 1024,
+        height: 1024,
+        createdAt,
+      },
+    ],
+    hasCheckedInToday: false,
+    creditTransactions: [],
+    galleryItems: [],
+    galleryLikes: [],
+  };
+  const secret = "workers-smoke-secret";
+  const session = createSessionToken(state.user.id, state.user.email, secret);
+
+  const publishResponse = await worker.fetch(
+    new Request("https://sparkpost.test/api/gallery/publish", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `sparkpost_session=${session}`,
+      },
+      body: JSON.stringify({
+        taskId: "task-gallery",
+        title: "Crystal spaceship",
+        description: "A public test share.",
+      }),
+    }),
+    {
+      SPARKPOST_DB: createFakeDb(state),
+      SESSION_SECRET: secret,
+    },
+  );
+
+  const publishResult = await readJsonResponse<{ ok: boolean; item: { id: string; taskId: string; asset: { width: number | null } | null } }>(publishResponse);
+  assert.equal(publishResult.status, 200);
+  assert.equal(publishResult.body.ok, true);
+  assert.equal(publishResult.body.item.taskId, "task-gallery");
+  assert.equal(publishResult.body.item.asset?.width, 1024);
+
+  const galleryResponse = await worker.fetch(
+    new Request("https://sparkpost.test/api/gallery?limit=10"),
+    {
+      SPARKPOST_DB: createFakeDb(state),
+      SESSION_SECRET: secret,
+    },
+  );
+
+  const galleryResult = await readJsonResponse<{ ok: boolean; items: Array<{ id: string; task: { prompt: string }; likedByMe: boolean }> }>(galleryResponse);
+  assert.equal(galleryResult.status, 200);
+  assert.equal(galleryResult.body.ok, true);
+  assert.equal(galleryResult.body.items.length, 1);
+  assert.equal(galleryResult.body.items[0]?.task.prompt, "a collectible crystal spaceship");
+  assert.equal(galleryResult.body.items[0]?.likedByMe, false);
+
+  const likeResponse = await worker.fetch(
+    new Request("https://sparkpost.test/api/gallery/like", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `sparkpost_session=${session}`,
+      },
+      body: JSON.stringify({ galleryItemId: publishResult.body.item.id, liked: true }),
+    }),
+    {
+      SPARKPOST_DB: createFakeDb(state),
+      SESSION_SECRET: secret,
+    },
+  );
+
+  const likeResult = await readJsonResponse<{ ok: boolean; liked: boolean; likeCount: number }>(likeResponse);
+  assert.equal(likeResult.status, 200);
+  assert.equal(likeResult.body.ok, true);
+  assert.equal(likeResult.body.liked, true);
+  assert.equal(likeResult.body.likeCount, 1);
 });
 
 test("POST /api/generate/image supports image-to-image requests", async () => {
