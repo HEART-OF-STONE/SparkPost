@@ -159,6 +159,7 @@ type ResolvedImageConfig = {
   supportedSizes: ImageSize[];
   defaultSize: ImageSize;
   defaultQuality?: ImageQuality;
+  relayConfigKey: "default" | "micu";
   status: "available" | "unavailable";
   statusCode?: string;
   statusMessage?: string;
@@ -438,6 +439,12 @@ const GPT_RELAY_IMAGE_SIZES: ImageSize[] = [
   "3840x2160",
   "2160x3840",
 ];
+const GPT_IMAGE_2_MICU_PRO_SIZES = new Set<ImageSize>([
+  "2048x2048",
+  "2048x1152",
+  "3840x2160",
+  "2160x3840",
+]);
 const DALLE_IMAGE_SIZES: ImageSize[] = ["1024x1024", "1792x1024", "1024x1792"];
 const DEFAULT_IMAGE_SIZE: ImageSize = "auto";
 const DAILY_CHECK_IN_EXPIRY_DAYS = 7;
@@ -487,6 +494,7 @@ const IMAGE_MODEL_ALIAS_MAP: Record<string, string> = {
   "gemini-3.1-flash-image-openai": "nano-banana-2",
   "gemini-3.1-image-openai": "nano-banana-2",
   "gpt-image-2": "gpt-image-2",
+  "gpt-image-2-pro": "gpt-image-2",
   "gpt-image2": "gpt-image-2",
   "dall-e-3": "dall-e-3",
 };
@@ -624,6 +632,7 @@ const getImageConfig = (env: Env, requestedModelId?: string): ResolvedImageConfi
     supportedSizes: registryModel?.supportedSizes ?? GPT_IMAGE_SIZES,
     defaultSize: registryModel?.defaultSize ?? DEFAULT_IMAGE_SIZE,
     defaultQuality: registryModel?.defaultQuality,
+    relayConfigKey,
     status:
       (
         (effectiveBackend === "official" && providerConfig.apiKey.length > 0) ||
@@ -2426,6 +2435,18 @@ const getProviderErrorMessage = (status: number, body: unknown) => {
   return `Image generation provider request failed. Upstream status ${status}.${detail}`;
 };
 
+const resolveProviderImageModel = (imageConfig: ResolvedImageConfig, size: ImageSize) => {
+  if (
+    imageConfig.modelId === "gpt-image-2" &&
+    imageConfig.relayConfigKey === "micu" &&
+    GPT_IMAGE_2_MICU_PRO_SIZES.has(size)
+  ) {
+    return "gpt-image-2-pro";
+  }
+
+  return imageConfig.model;
+};
+
 const callOfficialImageProvider = async (
   prompt: string,
   imageConfig: ResolvedImageConfig,
@@ -2434,6 +2455,7 @@ const callOfficialImageProvider = async (
   if (imageConfig.status !== "available") {
     throw new ImageGenerationConfigError("Image generation provider is not configured.");
   }
+  const providerModel = resolveProviderImageModel(imageConfig, size);
 
   const response = await fetch(getImageGenerationEndpoint(imageConfig), {
     method: "POST",
@@ -2442,7 +2464,7 @@ const callOfficialImageProvider = async (
       Authorization: `Bearer ${imageConfig.apiKey}`,
     },
     body: JSON.stringify({
-      model: imageConfig.model,
+      model: providerModel,
       prompt,
       size,
       ...(imageConfig.defaultQuality ? { quality: imageConfig.defaultQuality } : {}),
@@ -2463,13 +2485,13 @@ const callOfficialImageProvider = async (
     return {
       bytes: decodeBase64Image(imageData.b64_json),
       mimeType: "image/png",
-      model: imageConfig.model,
+      model: providerModel,
     };
   }
 
   if (imageData?.url) {
     const remoteImage = await fetchRemoteImageBytes(imageData.url);
-    return { bytes: remoteImage.bytes, mimeType: remoteImage.mimeType, model: imageConfig.model };
+    return { bytes: remoteImage.bytes, mimeType: remoteImage.mimeType, model: providerModel };
   }
 
   throw new ImageGenerationProviderError("Image provider returned no image data.");
@@ -2484,11 +2506,12 @@ const callOfficialImageEditProvider = async (
   if (imageConfig.status !== "available") {
     throw new ImageGenerationConfigError("Image generation provider is not configured.");
   }
+  const providerModel = resolveProviderImageModel(imageConfig, size);
 
   const endpoint = getImageEditEndpoint(imageConfig);
   const buildMultipartPayload = (fieldName: "image" | "image[]") => {
     const formData = new FormData();
-    formData.set("model", imageConfig.model);
+    formData.set("model", providerModel);
     formData.set("prompt", prompt);
     formData.set("size", size);
 
@@ -2538,13 +2561,13 @@ const callOfficialImageEditProvider = async (
     return {
       bytes: decodeBase64Image(imageData.b64_json),
       mimeType: "image/png",
-      model: imageConfig.model,
+      model: providerModel,
     };
   }
 
   if (imageData?.url) {
     const remoteImage = await fetchRemoteImageBytes(imageData.url);
-    return { bytes: remoteImage.bytes, mimeType: remoteImage.mimeType, model: imageConfig.model };
+    return { bytes: remoteImage.bytes, mimeType: remoteImage.mimeType, model: providerModel };
   }
 
   throw new ImageGenerationProviderError("Image provider returned no image data.");

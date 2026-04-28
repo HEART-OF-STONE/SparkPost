@@ -463,6 +463,7 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   "gemini-3.1-image-openai": "Nano Banana 2",
   "gemini-3.1-image": "Nano Banana 2",
   "gpt-image-2": "GPT-Image 2",
+  "gpt-image-2-pro": "GPT-Image 2",
   "gpt-image2": "GPT-Image 2",
   "gpt-image-1": "GPT-Image 2",
   "dall-e-3": "DALL-E 3",

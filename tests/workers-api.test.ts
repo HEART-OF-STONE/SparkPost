@@ -1095,7 +1095,7 @@ test("POST /api/generate/image can route GPT-Image2 through the micu relay provi
     const request = input instanceof Request ? input : new Request(url, init);
     const payload = await request.json() as { model?: string; size?: string };
     assert.equal(request.headers.get("authorization"), "Bearer micu-test-key");
-    assert.equal(payload.model, "gpt-image-2");
+    assert.equal(payload.model, "gpt-image-2-pro");
     assert.equal(payload.size, "3840x2160");
     return new Response(
       JSON.stringify({
@@ -1146,6 +1146,7 @@ test("POST /api/generate/image can route GPT-Image2 through the micu relay provi
     assert.equal(result.status, 200);
     assert.equal(result.body.ok, true);
     await drainImageQueue(worker, fakeQueue.messages, env);
+    assert.equal(state.generatedTask?.model, "gpt-image-2-pro");
   } finally {
     globalThis.fetch = originalFetch;
   }
