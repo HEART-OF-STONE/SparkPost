@@ -43,6 +43,7 @@ export interface Env {
     RELAY_IMAGE_BASE_URL_MICU?: string;
     IMAGE_RELAY_BASE_URL_MICU?: string;
     GPT_IMAGE_RELAY_BASE_URL?: string;
+    GPT_IMAGE_2_RELAY_PROVIDER?: string;
     RELAY_IMAGE_BASE_URL?: string;
     OPENAI_API_KEY?: string;
     DEEPSEEK_API_KEY?: string;
@@ -526,8 +527,19 @@ const getDefaultImageModelId = (env: Env) => {
   return DEFAULT_IMAGE_MODEL_ID;
 };
 
+const getRelayConfigKey = (env: Env, registryModel?: ImageModelDefinition) => {
+  if (registryModel?.id === "gpt-image-2") {
+    const configuredProvider = env.GPT_IMAGE_2_RELAY_PROVIDER?.trim().toLowerCase();
+    if (configuredProvider === "micu") return "micu";
+    if (configuredProvider === "default") return "default";
+  }
+
+  return registryModel?.relayConfigKey ?? "default";
+};
+
 const getRelayProviderConfig = (env: Env, registryModel?: ImageModelDefinition) => {
-  if (registryModel?.relayConfigKey === "micu") {
+  const relayConfigKey = getRelayConfigKey(env, registryModel);
+  if (relayConfigKey === "micu") {
     return {
       apiKey: env.RELAY_IMAGE_API_KEY_MICU?.trim() || "",
       baseUrl: (
@@ -558,6 +570,7 @@ const getImageConfig = (env: Env, requestedModelId?: string): ResolvedImageConfi
   const imageToImageCost = getNumberEnv(env.IMAGE_TO_IMAGE_COST, DEFAULT_IMAGE_TO_IMAGE_COST);
   const openAiApiKey = env.OPENAI_IMAGE_API_KEY?.trim() || env.IMAGE_API_KEY?.trim() || "";
   const registryModel = IMAGE_MODEL_REGISTRY[resolvedModelId];
+  const relayConfigKey = getRelayConfigKey(env, registryModel);
   const relayProviderConfig = getRelayProviderConfig(env, registryModel);
 
   const effectiveBackend = registryModel?.provider ?? (backend === "relay" ? "relay" : "official");
@@ -584,7 +597,7 @@ const getImageConfig = (env: Env, requestedModelId?: string): ResolvedImageConfi
             providerConfig.baseUrl.length === 0
               ? "RELAY_BASE_URL_MISSING"
               : providerConfig.apiKey.length === 0
-                ? registryModel?.relayConfigKey === "micu"
+                ? relayConfigKey === "micu"
                   ? "RELAY_IMAGE_API_KEY_MICU_MISSING"
                   : "RELAY_IMAGE_API_KEY_MISSING"
                 : undefined,
@@ -592,7 +605,7 @@ const getImageConfig = (env: Env, requestedModelId?: string): ResolvedImageConfi
             providerConfig.baseUrl.length === 0
               ? "Relay base URL is not configured."
               : providerConfig.apiKey.length === 0
-                ? registryModel?.relayConfigKey === "micu"
+                ? relayConfigKey === "micu"
                   ? "Relay image API key for the micu provider is not configured."
                   : "Relay image API key is not configured."
                 : undefined,

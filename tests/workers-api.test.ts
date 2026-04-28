@@ -1056,6 +1056,101 @@ test("POST /api/generate/image can target the default duojie GPT-Image relay mod
   }
 });
 
+test("POST /api/generate/image can route GPT-Image2 through the micu relay provider", async () => {
+  const worker = await loadWorker();
+  const state: FakeState = {
+    user: {
+      id: "user-1",
+      email: "demo@example.com",
+      createdAt: new Date().toISOString(),
+      emailVerifiedAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+      creditBalance: 20,
+    },
+    creditBalance: 20,
+    generatedTask: null,
+    generatedAssetUrl: null,
+    hasCheckedInToday: false,
+    creditTransactions: [
+      {
+        id: "tx-signup",
+        type: "signup_bonus",
+        sourceType: "signup",
+        amount: 20,
+        balanceAfter: 20,
+        remainingAmount: 20,
+        remark: "Signup bonus",
+        createdAt: new Date().toISOString(),
+      },
+    ],
+  };
+  const fakeR2 = createFakeR2();
+  const fakeQueue = createFakeQueue();
+  const secret = "workers-smoke-secret";
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    assert.equal(url, "https://micu.example.com/v1/images/generations");
+    const request = input instanceof Request ? input : new Request(url, init);
+    const payload = await request.json() as { model?: string; size?: string };
+    assert.equal(request.headers.get("authorization"), "Bearer micu-test-key");
+    assert.equal(payload.model, "gpt-image-2");
+    assert.equal(payload.size, "3840x2160");
+    return new Response(
+      JSON.stringify({
+        data: [
+          {
+            b64_json: createPngBytes(3840, 2160).toString("base64"),
+          },
+        ],
+      }),
+      {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      },
+    );
+  };
+
+  try {
+    const session = createSessionToken(state.user.id, state.user.email, secret);
+    const env = {
+      SPARKPOST_DB: createFakeDb(state),
+      SPARKPOST_R2: fakeR2.bucket,
+      IMAGE_GENERATION_QUEUE: fakeQueue.queue,
+      SESSION_SECRET: secret,
+      GPT_IMAGE_2_RELAY_PROVIDER: "micu",
+      RELAY_IMAGE_API_KEY: "duojie-test-key",
+      RELAY_IMAGE_BASE_URL: "https://duojie.example.com/v1",
+      RELAY_IMAGE_API_KEY_MICU: "micu-test-key",
+      RELAY_IMAGE_BASE_URL_MICU: "https://micu.example.com/v1",
+      TEXT_TO_IMAGE_COST: "10",
+    };
+    const response = await worker.fetch(
+      new Request("https://sparkpost.test/api/generate/image", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `sparkpost_session=${session}`,
+        },
+        body: JSON.stringify({
+          modelId: "gpt-image-2",
+          prompt: "a detailed 4k sci-fi poster",
+          size: "3840x2160",
+        }),
+      }),
+      env,
+    );
+
+    const result = await readJsonResponse<{ ok: boolean; task: { id: string } }>(response);
+    assert.equal(result.status, 200);
+    assert.equal(result.body.ok, true);
+    await drainImageQueue(worker, fakeQueue.messages, env);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("GET /api/generations/history returns private generation records", async () => {
   const worker = await loadWorker();
   const createdAt = new Date().toISOString();
