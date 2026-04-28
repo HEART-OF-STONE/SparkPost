@@ -117,6 +117,27 @@ type ProviderResult = {
   model: string;
 };
 
+type ImageProviderDiagnosticContext = {
+  taskId?: string;
+  userId?: string;
+  mode?: ImageMode;
+  modelId?: string;
+};
+
+type ImageProviderDiagnosticPayload = {
+  taskId?: string;
+  userId?: string;
+  mode?: ImageMode;
+  modelId: string;
+  providerModel: string;
+  configuredModel: string;
+  size: ImageSize;
+  relayConfigKey: "default" | "micu";
+  backend: ImageProviderKey;
+  endpointHost: string;
+  requestKind: "generation" | "edit";
+};
+
 type PromptAssistAction = "inspire" | "enhance";
 
 type ImageMode = "t2i" | "i2i";
@@ -2447,38 +2468,96 @@ const resolveProviderImageModel = (imageConfig: ResolvedImageConfig, size: Image
   return imageConfig.model;
 };
 
+const createProviderDiagnosticPayload = (
+  imageConfig: ResolvedImageConfig,
+  providerModel: string,
+  size: ImageSize,
+  endpoint: string,
+  requestKind: "generation" | "edit",
+  diagnosticContext?: ImageProviderDiagnosticContext,
+): ImageProviderDiagnosticPayload => ({
+  taskId: diagnosticContext?.taskId,
+  userId: diagnosticContext?.userId,
+  mode: diagnosticContext?.mode,
+  modelId: diagnosticContext?.modelId ?? imageConfig.modelId,
+  providerModel,
+  configuredModel: imageConfig.model,
+  size,
+  relayConfigKey: imageConfig.relayConfigKey,
+  backend: imageConfig.backend,
+  endpointHost: new URL(endpoint).host,
+  requestKind,
+});
+
+const getErrorName = (error: unknown) => (error instanceof Error ? error.name : typeof error);
+
+const getErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
 const callOfficialImageProvider = async (
   prompt: string,
   imageConfig: ResolvedImageConfig,
   size: ImageSize,
+  diagnosticContext?: ImageProviderDiagnosticContext,
 ): Promise<ProviderResult> => {
   if (imageConfig.status !== "available") {
     throw new ImageGenerationConfigError("Image generation provider is not configured.");
   }
   const providerModel = resolveProviderImageModel(imageConfig, size);
+  const endpoint = getImageGenerationEndpoint(imageConfig);
+  const diagnosticPayload = createProviderDiagnosticPayload(
+    imageConfig,
+    providerModel,
+    size,
+    endpoint,
+    "generation",
+    diagnosticContext,
+  );
+  const startedAt = Date.now();
+  console.log("image_provider_request_started", diagnosticPayload);
 
-  const response = await fetch(getImageGenerationEndpoint(imageConfig), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${imageConfig.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: providerModel,
-      prompt,
-      size,
-      ...(imageConfig.defaultQuality ? { quality: imageConfig.defaultQuality } : {}),
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${imageConfig.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: providerModel,
+        prompt,
+        size,
+        ...(imageConfig.defaultQuality ? { quality: imageConfig.defaultQuality } : {}),
+      }),
+    });
+  } catch (error) {
+    console.error("image_provider_request_failed", {
+      ...diagnosticPayload,
+      elapsedMs: Date.now() - startedAt,
+      errorName: getErrorName(error),
+      errorMessage: getErrorMessage(error),
+    });
+    throw error;
+  }
 
   const body = (await response.json().catch(() => null)) as
     | { error?: { message?: string }; data?: Array<{ b64_json?: string; url?: string }> }
     | null;
 
   if (!response.ok) {
-    console.error("Image provider request failed.", { status: response.status, body });
+    console.error("image_provider_request_failed", {
+      ...diagnosticPayload,
+      status: response.status,
+      elapsedMs: Date.now() - startedAt,
+      body,
+    });
     throw new ImageGenerationProviderError(getProviderErrorMessage(response.status, body));
   }
+  console.log("image_provider_request_succeeded", {
+    ...diagnosticPayload,
+    status: response.status,
+    elapsedMs: Date.now() - startedAt,
+  });
 
   const imageData = body?.data?.[0];
   if (imageData?.b64_json) {
@@ -2502,6 +2581,7 @@ const callOfficialImageEditProvider = async (
   referenceImages: string[],
   imageConfig: ResolvedImageConfig,
   size: ImageSize,
+  diagnosticContext?: ImageProviderDiagnosticContext,
 ): Promise<ProviderResult> => {
   if (imageConfig.status !== "available") {
     throw new ImageGenerationConfigError("Image generation provider is not configured.");
@@ -2509,6 +2589,19 @@ const callOfficialImageEditProvider = async (
   const providerModel = resolveProviderImageModel(imageConfig, size);
 
   const endpoint = getImageEditEndpoint(imageConfig);
+  const diagnosticPayload = createProviderDiagnosticPayload(
+    imageConfig,
+    providerModel,
+    size,
+    endpoint,
+    "edit",
+    diagnosticContext,
+  );
+  const startedAt = Date.now();
+  console.log("image_provider_request_started", {
+    ...diagnosticPayload,
+    referenceImageCount: referenceImages.length,
+  });
   const buildMultipartPayload = (fieldName: "image" | "image[]") => {
     const formData = new FormData();
     formData.set("model", providerModel);
@@ -2544,17 +2637,44 @@ const callOfficialImageEditProvider = async (
     return { response, body };
   };
 
-  let { response, body } = await executeRequest(buildMultipartPayload("image"));
-  if (!response.ok && referenceImages.length > 1) {
-    const fallbackResult = await executeRequest(buildMultipartPayload("image[]"));
-    response = fallbackResult.response;
-    body = fallbackResult.body;
+  let response: Response;
+  let body: { error?: { message?: string }; data?: Array<{ b64_json?: string; url?: string }> } | null;
+  try {
+    const primaryResult = await executeRequest(buildMultipartPayload("image"));
+    response = primaryResult.response;
+    body = primaryResult.body;
+    if (!response.ok && referenceImages.length > 1) {
+      const fallbackResult = await executeRequest(buildMultipartPayload("image[]"));
+      response = fallbackResult.response;
+      body = fallbackResult.body;
+    }
+  } catch (error) {
+    console.error("image_provider_request_failed", {
+      ...diagnosticPayload,
+      referenceImageCount: referenceImages.length,
+      elapsedMs: Date.now() - startedAt,
+      errorName: getErrorName(error),
+      errorMessage: getErrorMessage(error),
+    });
+    throw error;
   }
 
   if (!response.ok) {
-    console.error("Image edit provider request failed.", { status: response.status, body });
+    console.error("image_provider_request_failed", {
+      ...diagnosticPayload,
+      referenceImageCount: referenceImages.length,
+      status: response.status,
+      elapsedMs: Date.now() - startedAt,
+      body,
+    });
     throw new ImageGenerationProviderError(getProviderErrorMessage(response.status, body));
   }
+  console.log("image_provider_request_succeeded", {
+    ...diagnosticPayload,
+    referenceImageCount: referenceImages.length,
+    status: response.status,
+    elapsedMs: Date.now() - startedAt,
+  });
 
   const imageData = body?.data?.[0];
   if (imageData?.b64_json) {
@@ -2576,7 +2696,13 @@ const callOfficialImageEditProvider = async (
 const generateProviderImage = async (
   prompt: string,
   env: Env,
-  options?: { mode?: ImageMode; modelId?: string; referenceImages?: string[]; size?: ImageSize },
+  options?: {
+    mode?: ImageMode;
+    modelId?: string;
+    referenceImages?: string[];
+    size?: ImageSize;
+    diagnostics?: ImageProviderDiagnosticContext;
+  },
 ) => {
   const imageConfig = getImageConfig(env, options?.modelId);
   const size = options?.size ?? imageConfig.defaultSize;
@@ -2588,9 +2714,17 @@ const generateProviderImage = async (
   }
   if (["official", "relay"].includes(imageConfig.backend)) {
     if (options?.mode === "i2i") {
-      return callOfficialImageEditProvider(prompt, options.referenceImages ?? [], imageConfig, size);
+      return callOfficialImageEditProvider(prompt, options.referenceImages ?? [], imageConfig, size, {
+        ...options.diagnostics,
+        mode: options.mode,
+        modelId: options.modelId ?? imageConfig.modelId,
+      });
     }
-    return callOfficialImageProvider(prompt, imageConfig, size);
+    return callOfficialImageProvider(prompt, imageConfig, size, {
+      ...options?.diagnostics,
+      mode: options?.mode ?? "t2i",
+      modelId: options?.modelId ?? imageConfig.modelId,
+    });
   }
   throw new ImageGenerationConfigError(`Unsupported IMAGE_BACKEND: ${imageConfig.backend}`);
 };
@@ -3209,6 +3343,10 @@ const processQueuedImageGenerationTask = async (taskId: string, userId: string, 
       modelId,
       size: requestedSize,
       referenceImages,
+      diagnostics: {
+        taskId,
+        userId,
+      },
     });
     const storedAsset = await persistGeneratedAsset(new Request("https://sparkpost.local"), env, userId, taskId, providerResult, {
       useRelativeUrl: true,
