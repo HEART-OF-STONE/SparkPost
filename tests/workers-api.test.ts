@@ -1161,6 +1161,240 @@ test("POST /api/generate/image can route GPT-Image2 through the micu relay provi
   }
 });
 
+test("POST /api/generate/image submits MICU GPT-Image2 large renders to the long image worker", async () => {
+  const worker = await loadWorker();
+  const state: FakeState = {
+    user: {
+      id: "user-1",
+      email: "demo@example.com",
+      createdAt: new Date().toISOString(),
+      emailVerifiedAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+      creditBalance: 20,
+    },
+    creditBalance: 20,
+    generatedTask: null,
+    generatedAssetUrl: null,
+    generatedAssets: [],
+    hasCheckedInToday: false,
+    creditTransactions: [
+      {
+        id: "tx-signup",
+        type: "signup_bonus",
+        sourceType: "signup",
+        amount: 20,
+        balanceAfter: 20,
+        remainingAmount: 20,
+        remark: "Signup bonus",
+        createdAt: new Date().toISOString(),
+      },
+    ],
+  };
+  const fakeR2 = createFakeR2();
+  const fakeQueue = createFakeQueue();
+  const secret = "workers-smoke-secret";
+  const longWorkerSecret = "long-worker-secret";
+  const submittedJobs: Array<Record<string, unknown>> = [];
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    assert.equal(url, "https://image-job.example.com/jobs/image");
+    const request = input instanceof Request ? input : new Request(url, init);
+    assert.equal(request.headers.get("authorization"), `Bearer ${longWorkerSecret}`);
+    const payload = await request.json() as Record<string, unknown>;
+    submittedJobs.push(payload);
+    assert.equal(payload.model, "gpt-image-2-pro");
+    assert.equal(payload.size, "3840x2160");
+    assert.equal(payload.responseFormat, "b64_json");
+    assert.equal(payload.callbackUrl, "https://api.776607.xyz/api/internal/image-jobs/callback");
+    assert.equal(typeof payload.prompt, "string");
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 202,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    const session = createSessionToken(state.user.id, state.user.email, secret);
+    const env = {
+      SPARKPOST_DB: createFakeDb(state),
+      SPARKPOST_R2: fakeR2.bucket,
+      IMAGE_GENERATION_QUEUE: fakeQueue.queue,
+      SESSION_SECRET: secret,
+      GPT_IMAGE_2_RELAY_PROVIDER: "micu",
+      RELAY_IMAGE_API_KEY: "duojie-test-key",
+      RELAY_IMAGE_BASE_URL: "https://duojie.example.com/v1",
+      RELAY_IMAGE_API_KEY_MICU: "micu-test-key",
+      RELAY_IMAGE_BASE_URL_MICU: "https://micu.example.com/v1",
+      LONG_IMAGE_WORKER_URL: "https://image-job.example.com",
+      LONG_IMAGE_WORKER_SECRET: longWorkerSecret,
+      TEXT_TO_IMAGE_COST: "10",
+    };
+    const response = await worker.fetch(
+      new Request("https://sparkpost.test/api/generate/image", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `sparkpost_session=${session}`,
+        },
+        body: JSON.stringify({
+          modelId: "gpt-image-2",
+          prompt: "a detailed 4k sci-fi poster",
+          size: "3840x2160",
+        }),
+      }),
+      env,
+    );
+
+    const result = await readJsonResponse<{ ok: boolean; task: { id: string } }>(response);
+    assert.equal(result.status, 200);
+    assert.equal(result.body.ok, true);
+    await drainImageQueue(worker, fakeQueue.messages, env);
+    assert.equal(submittedJobs.length, 1);
+    assert.equal(state.generatedTask?.status, "running");
+    assert.equal(state.generatedAssets?.length, 0);
+    assert.equal(state.creditBalance, 20);
+
+    const unauthorizedCallback = await worker.fetch(
+      new Request("https://sparkpost.test/api/internal/image-jobs/callback", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer wrong-secret",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ taskId: result.body.task.id, status: "succeeded" }),
+      }),
+      env,
+    );
+    assert.equal(unauthorizedCallback.status, 401);
+
+    const callbackPayload = {
+      taskId: result.body.task.id,
+      status: "succeeded",
+      model: "gpt-image-2-pro",
+      mimeType: "image/png",
+      imageBase64: createPngBytes(3840, 2160).toString("base64"),
+    };
+    const callbackResponse = await worker.fetch(
+      new Request("https://sparkpost.test/api/internal/image-jobs/callback", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${longWorkerSecret}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(callbackPayload),
+      }),
+      env,
+    );
+    const callbackResult = await readJsonResponse<{ ok: boolean; status: string; remainingCredits: number }>(callbackResponse);
+    assert.equal(callbackResult.status, 200);
+    assert.equal(callbackResult.body.ok, true);
+    assert.equal(callbackResult.body.status, "succeeded");
+    assert.equal(callbackResult.body.remainingCredits, 10);
+    assert.equal(state.generatedTask?.status, "succeeded");
+    assert.equal(state.generatedTask?.model, "gpt-image-2-pro");
+    assert.equal(state.generatedAssets?.length, 1);
+    assert.equal(state.generatedAssets?.[0]?.width, 3840);
+    assert.equal(state.generatedAssets?.[0]?.height, 2160);
+    assert.equal(state.creditBalance, 10);
+
+    const duplicateCallbackResponse = await worker.fetch(
+      new Request("https://sparkpost.test/api/internal/image-jobs/callback", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${longWorkerSecret}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(callbackPayload),
+      }),
+      env,
+    );
+    const duplicateCallbackResult = await readJsonResponse<{ ok: boolean; status: string }>(duplicateCallbackResponse);
+    assert.equal(duplicateCallbackResult.status, 200);
+    assert.equal(duplicateCallbackResult.body.ok, true);
+    assert.equal(duplicateCallbackResult.body.status, "succeeded");
+    assert.equal(state.generatedAssets?.length, 1);
+    assert.equal(state.creditBalance, 10);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("POST /api/internal/image-jobs/callback marks long image jobs failed without spending credits", async () => {
+  const worker = await loadWorker();
+  const createdAt = new Date().toISOString();
+  const state: FakeState = {
+    user: {
+      id: "user-1",
+      email: "demo@example.com",
+      createdAt,
+      emailVerifiedAt: createdAt,
+      lastLoginAt: createdAt,
+      creditBalance: 20,
+    },
+    creditBalance: 20,
+    generatedTask: {
+      id: "task-long-fail",
+      userId: "user-1",
+      taskType: "text_to_image",
+      status: "running",
+      prompt: "a detailed 4k poster",
+      compiledPrompt: "a detailed 4k poster",
+      requestedSize: "3840x2160",
+      createdAt,
+      completedAt: null,
+      model: "gpt-image-2",
+      costCredits: 10,
+      errorMessage: null,
+    },
+    generatedAssetUrl: null,
+    generatedAssets: [],
+    creditTransactions: [
+      {
+        id: "tx-signup",
+        type: "signup_bonus",
+        sourceType: "signup",
+        amount: 20,
+        balanceAfter: 20,
+        remainingAmount: 20,
+        remark: "Signup bonus",
+        createdAt,
+      },
+    ],
+  };
+  const env = {
+    SPARKPOST_DB: createFakeDb(state),
+    SPARKPOST_R2: createFakeR2().bucket,
+    LONG_IMAGE_WORKER_SECRET: "long-worker-secret",
+  };
+
+  const response = await worker.fetch(
+    new Request("https://sparkpost.test/api/internal/image-jobs/callback", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer long-worker-secret",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        taskId: "task-long-fail",
+        status: "failed",
+        errorMessage: "Upstream render timed out.",
+      }),
+    }),
+    env,
+  );
+
+  const result = await readJsonResponse<{ ok: boolean; status: string }>(response);
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, true);
+  assert.equal(result.body.status, "failed");
+  assert.equal(state.generatedTask?.status, "failed");
+  assert.equal(state.generatedTask?.errorMessage, "Upstream render timed out.");
+  assert.equal(state.generatedAssets?.length, 0);
+  assert.equal(state.creditBalance, 20);
+});
+
 test("GET /api/generations/history returns private generation records", async () => {
   const worker = await loadWorker();
   const createdAt = new Date().toISOString();

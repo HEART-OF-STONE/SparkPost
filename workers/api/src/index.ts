@@ -59,6 +59,8 @@ export interface Env {
     OPENAI_BASE_URL?: string;
     TEXT_TO_IMAGE_COST?: string;
     IMAGE_TO_IMAGE_COST?: string;
+    LONG_IMAGE_WORKER_URL?: string;
+    LONG_IMAGE_WORKER_SECRET?: string;
   DEV_AUTH_DEBUG_CODE?: string;
   AUTH_CODE_TTL_MINUTES?: string;
   AUTH_CODE_COOLDOWN_SECONDS?: string;
@@ -471,6 +473,7 @@ const DEFAULT_IMAGE_SIZE: ImageSize = "auto";
 const DAILY_CHECK_IN_EXPIRY_DAYS = 7;
 const SESSION_COOKIE_NAME = "sparkpost_session";
 const SESSION_COOKIE_PATH = "/";
+const LONG_IMAGE_CALLBACK_URL = "https://api.776607.xyz/api/internal/image-jobs/callback";
 const GENERATED_ASSET_PREFIX = "generated";
 const CREDIT_PACKAGE_DEFINITIONS: CreditPackageDefinition[] = [
   { code: "starter_pack", title: "Starter Pack", credits: 500, priceUsd: "4.99" },
@@ -2468,6 +2471,25 @@ const resolveProviderImageModel = (imageConfig: ResolvedImageConfig, size: Image
   return imageConfig.model;
 };
 
+const shouldUseLongImageWorker = (imageConfig: ResolvedImageConfig, mode: ImageMode, size: ImageSize, env: Env) =>
+  Boolean(env.LONG_IMAGE_WORKER_URL?.trim()) &&
+  imageConfig.modelId === "gpt-image-2" &&
+  imageConfig.relayConfigKey === "micu" &&
+  mode === "t2i" &&
+  GPT_IMAGE_2_MICU_PRO_SIZES.has(size);
+
+const timingSafeStringEqual = (left: string, right: string) => {
+  const encoder = new TextEncoder();
+  const leftBytes = encoder.encode(left);
+  const rightBytes = encoder.encode(right);
+  let diff = leftBytes.length ^ rightBytes.length;
+  const length = Math.max(leftBytes.length, rightBytes.length);
+  for (let index = 0; index < length; index += 1) {
+    diff |= (leftBytes[index] ?? 0) ^ (rightBytes[index] ?? 0);
+  }
+  return diff === 0;
+};
+
 const createProviderDiagnosticPayload = (
   imageConfig: ResolvedImageConfig,
   providerModel: string,
@@ -2734,6 +2756,65 @@ const generateProviderImage = async (
   throw new ImageGenerationConfigError(`Unsupported IMAGE_BACKEND: ${imageConfig.backend}`);
 };
 
+const submitLongImageGenerationJob = async (
+  task: GenerationTaskDetailRow,
+  env: Env,
+  options: { modelId?: string; size: ImageSize },
+) => {
+  const workerUrl = env.LONG_IMAGE_WORKER_URL?.trim().replace(/\/$/, "");
+  const secret = env.LONG_IMAGE_WORKER_SECRET?.trim();
+  if (!workerUrl || !secret) {
+    throw new ImageGenerationConfigError("Long image worker is not configured.");
+  }
+
+  const imageConfig = getImageConfig(env, options.modelId);
+  const providerModel = resolveProviderImageModel(imageConfig, options.size);
+  const endpoint = `${workerUrl}/jobs/image`;
+  const startedAt = Date.now();
+  console.log("long_image_worker_job_submitted", {
+    taskId: task.id,
+    userId: task.userId,
+    modelId: imageConfig.modelId,
+    providerModel,
+    size: options.size,
+    endpointHost: new URL(endpoint).host,
+  });
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${secret}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      taskId: task.id,
+      model: providerModel,
+      prompt: task.compiledPrompt ?? task.prompt,
+      size: options.size,
+      responseFormat: "b64_json",
+      callbackUrl: LONG_IMAGE_CALLBACK_URL,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    console.error("long_image_worker_job_submit_failed", {
+      taskId: task.id,
+      status: response.status,
+      elapsedMs: Date.now() - startedAt,
+      body: body.slice(0, 300),
+    });
+    throw new ImageGenerationProviderError(`Long image worker request failed. Upstream status ${response.status}.`);
+  }
+
+  console.log("long_image_worker_job_submit_succeeded", {
+    taskId: task.id,
+    status: response.status,
+    elapsedMs: Date.now() - startedAt,
+  });
+};
+
 const getFileExtensionFromMimeType = (mimeType: string) => {
   const normalizedMimeType = mimeType.toLowerCase();
   if (normalizedMimeType === "image/jpeg") return "jpg";
@@ -2883,6 +2964,45 @@ const persistGeneratedAsset = async (
     width: dimensions?.width ?? null,
     height: dimensions?.height ?? null,
   };
+};
+
+const completeGenerationTaskWithAsset = async (
+  env: Env,
+  task: GenerationTaskDetailRow,
+  providerResult: ProviderResult,
+) => {
+  if (!env.SPARKPOST_DB) {
+    throw new ImageGenerationConfigError("D1 binding SPARKPOST_DB is not configured.");
+  }
+
+  const storedAsset = await persistGeneratedAsset(
+    new Request("https://sparkpost.local"),
+    env,
+    task.userId,
+    task.id,
+    providerResult,
+    { useRelativeUrl: true },
+  );
+  const completedAt = new Date();
+  const remainingCredits = await spendCreditsForUser(task.userId, env, {
+    amount: task.costCredits,
+    type: task.taskType,
+    relatedTaskId: task.id,
+    remark: task.prompt.slice(0, 120),
+    now: completedAt,
+  });
+
+  await env.SPARKPOST_DB.prepare(
+    `INSERT INTO generated_assets (
+       id, task_id, asset_type, file_url, width, height, created_at
+     ) VALUES (?, ?, 'image', ?, ?, ?, ?)`,
+  ).bind(storedAsset.assetId, task.id, storedAsset.fileUrl, storedAsset.width, storedAsset.height, completedAt.toISOString()).run();
+
+  await env.SPARKPOST_DB.prepare(
+    `UPDATE generation_tasks SET status = 'succeeded', model = ?, completed_at = ? WHERE id = ?`,
+  ).bind(providerResult.model, completedAt.toISOString(), task.id).run();
+
+  return remainingCredits;
 };
 
 const persistReferenceImages = async (
@@ -3343,6 +3463,12 @@ const processQueuedImageGenerationTask = async (taskId: string, userId: string, 
     const modelId = resolveModelIdFromTask(task);
     const requestedSize = task.requestedSize ? (task.requestedSize as ImageSize) : undefined;
     const referenceImages = mode === "i2i" ? await loadReferenceImages(env, getReferenceKeysFromTask(task)) : [];
+    const imageConfig = getImageConfig(env, modelId);
+    const effectiveSize = requestedSize ?? imageConfig.defaultSize;
+    if (shouldUseLongImageWorker(imageConfig, mode, effectiveSize, env)) {
+      await submitLongImageGenerationJob(task, env, { modelId, size: effectiveSize });
+      return undefined;
+    }
     const providerResult = await generateProviderImage(task.compiledPrompt ?? task.prompt, env, {
       mode,
       modelId,
@@ -3353,34 +3479,92 @@ const processQueuedImageGenerationTask = async (taskId: string, userId: string, 
         userId,
       },
     });
-    const storedAsset = await persistGeneratedAsset(new Request("https://sparkpost.local"), env, userId, taskId, providerResult, {
-      useRelativeUrl: true,
-    });
-    const completedAt = new Date();
-    const remainingCredits = await spendCreditsForUser(userId, env, {
-      amount: task.costCredits,
-      type: task.taskType,
-      relatedTaskId: taskId,
-      remark: task.prompt.slice(0, 120),
-      now: completedAt,
-    });
-
-    await env.SPARKPOST_DB.prepare(
-      `INSERT INTO generated_assets (
-         id, task_id, asset_type, file_url, width, height, created_at
-       ) VALUES (?, ?, 'image', ?, ?, ?, ?)`,
-    ).bind(storedAsset.assetId, taskId, storedAsset.fileUrl, storedAsset.width, storedAsset.height, completedAt.toISOString()).run();
-
-    await env.SPARKPOST_DB.prepare(
-      `UPDATE generation_tasks SET status = 'succeeded', model = ?, completed_at = ? WHERE id = ?`,
-    ).bind(providerResult.model, completedAt.toISOString(), taskId).run();
-
-    return remainingCredits;
+    return await completeGenerationTaskWithAsset(env, task, providerResult);
   } catch (error) {
     await env.SPARKPOST_DB.prepare(
       `UPDATE generation_tasks SET status = 'failed', error_message = ?, completed_at = ? WHERE id = ?`,
     ).bind(error instanceof Error ? error.message : "Image generation failed.", new Date().toISOString(), taskId).run();
     throw error;
+  }
+};
+
+const getBearerToken = (request: Request) => {
+  const authorization = request.headers.get("authorization") ?? "";
+  const match = /^Bearer\s+(.+)$/i.exec(authorization);
+  return match?.[1]?.trim() ?? "";
+};
+
+const isAuthorizedLongImageCallback = (request: Request, env: Env) => {
+  const secret = env.LONG_IMAGE_WORKER_SECRET?.trim();
+  if (!secret) return false;
+  return timingSafeStringEqual(getBearerToken(request), secret);
+};
+
+const decodeCallbackImageBase64 = (value: string) => {
+  const base64 = value.startsWith("data:") ? getBase64PayloadFromDataUrl(value) : value;
+  return decodeBase64Image(base64);
+};
+
+const handleLongImageJobCallback = async (request: Request, env: Env) => {
+  if (!env.LONG_IMAGE_WORKER_SECRET?.trim()) {
+    return json(withErrorCode("LONG_IMAGE_WORKER_SECRET_MISSING", "Long image worker callback is not configured."), {
+      status: 503,
+    });
+  }
+  if (!isAuthorizedLongImageCallback(request, env)) {
+    return json(withErrorCode("UNAUTHORIZED", "Unauthorized callback."), { status: 401 });
+  }
+  if (!env.SPARKPOST_DB) {
+    return json(withErrorCode("D1_NOT_CONFIGURED", "D1 binding SPARKPOST_DB is not configured."), { status: 503 });
+  }
+
+  const bodyResult = await parseJsonBody(request);
+  if (!bodyResult.ok) return json({ error: bodyResult.error }, { status: 400 });
+  const body = bodyResult.body;
+  if (!isRecord(body)) return json({ error: "Invalid callback payload." }, { status: 400 });
+
+  const taskId = typeof body.taskId === "string" ? body.taskId.trim() : "";
+  const status = typeof body.status === "string" ? body.status.trim() : "";
+  if (!taskId || !["succeeded", "failed"].includes(status)) {
+    return json({ error: "Invalid callback payload." }, { status: 400 });
+  }
+
+  const task = await getGenerationTaskDetail(env, taskId);
+  if (!task) return json({ error: "Task not found." }, { status: 404 });
+  if (task.status === "succeeded" || task.status === "failed") {
+    return json({ ok: true, taskId, status: task.status });
+  }
+
+  if (status === "failed") {
+    const errorMessage =
+      typeof body.errorMessage === "string" && body.errorMessage.trim()
+        ? body.errorMessage.trim().slice(0, 500)
+        : "Long image worker failed.";
+    await env.SPARKPOST_DB.prepare(
+      `UPDATE generation_tasks SET status = 'failed', error_message = ?, completed_at = ? WHERE id = ?`,
+    ).bind(errorMessage, new Date().toISOString(), taskId).run();
+    return json({ ok: true, taskId, status: "failed" });
+  }
+
+  const imageBase64 = typeof body.imageBase64 === "string" ? body.imageBase64 : "";
+  const model = typeof body.model === "string" && body.model.trim() ? body.model.trim() : task.model ?? "gpt-image-2";
+  const mimeType = typeof body.mimeType === "string" && body.mimeType.trim() ? body.mimeType.trim() : "image/png";
+  if (!imageBase64) return json({ error: "Callback payload is missing imageBase64." }, { status: 400 });
+
+  try {
+    const remainingCredits = await completeGenerationTaskWithAsset(env, task, {
+      bytes: decodeCallbackImageBase64(imageBase64),
+      mimeType,
+      model,
+    });
+    return json({ ok: true, taskId, status: "succeeded", remainingCredits });
+  } catch (error) {
+    console.error("Long image worker callback failed.", {
+      taskId,
+      errorName: getErrorName(error),
+      errorMessage: getErrorMessage(error),
+    });
+    return json(withErrorCode("LONG_IMAGE_CALLBACK_FAILED", "Long image callback failed."), { status: 503 });
   }
 };
 
@@ -4090,6 +4274,11 @@ const routes: Array<{ method: string; pathname: string; handler: RouteHandler }>
         throw error;
       }
       },
+    },
+    {
+      method: "POST",
+      pathname: "/api/internal/image-jobs/callback",
+      handler: async (request, env) => handleLongImageJobCallback(request, env),
     },
     {
       method: "POST",
