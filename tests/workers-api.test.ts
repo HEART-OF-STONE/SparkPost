@@ -1093,10 +1093,19 @@ test("POST /api/generate/image can route GPT-Image2 through the micu relay provi
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     assert.equal(url, "https://micu.example.com/v1/images/generations");
     const request = input instanceof Request ? input : new Request(url, init);
-    const payload = await request.json() as { model?: string; size?: string };
+    const payload = await request.json() as {
+      model?: string;
+      n?: number;
+      quality?: string;
+      response_format?: string;
+      size?: string;
+    };
     assert.equal(request.headers.get("authorization"), "Bearer micu-test-key");
     assert.equal(payload.model, "gpt-image-2-pro");
+    assert.equal(payload.n, 1);
+    assert.equal(payload.response_format, "b64_json");
     assert.equal(payload.size, "3840x2160");
+    assert.equal(payload.quality, undefined);
     return new Response(
       JSON.stringify({
         data: [

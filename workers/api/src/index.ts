@@ -2514,6 +2514,8 @@ const callOfficialImageProvider = async (
   );
   const startedAt = Date.now();
   console.log("image_provider_request_started", diagnosticPayload);
+  const shouldUseMicuGptImageRequestShape =
+    imageConfig.modelId === "gpt-image-2" && imageConfig.relayConfigKey === "micu";
 
   let response: Response;
   try {
@@ -2526,8 +2528,11 @@ const callOfficialImageProvider = async (
       body: JSON.stringify({
         model: providerModel,
         prompt,
+        ...(shouldUseMicuGptImageRequestShape ? { n: 1, response_format: "b64_json" } : {}),
         size,
-        ...(imageConfig.defaultQuality ? { quality: imageConfig.defaultQuality } : {}),
+        ...(!shouldUseMicuGptImageRequestShape && imageConfig.defaultQuality
+          ? { quality: imageConfig.defaultQuality }
+          : {}),
       }),
     });
   } catch (error) {
